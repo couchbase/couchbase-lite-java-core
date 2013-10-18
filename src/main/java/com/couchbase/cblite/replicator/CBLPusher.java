@@ -242,6 +242,7 @@ public class CBLPusher extends CBLReplicator implements Observer {
                                 error = e;
                             } else {
                                 Log.v(CBLDatabase.TAG, String.format("%s: Sent %s", this, inbox));
+                                Log.d(CBLDatabase.TAG, this + " processInbox() calling setLastSequence() with " + lastInboxSequence);
                                 setLastSequence(String.format("%d", lastInboxSequence));
                             }
                             setChangesProcessed(getChangesProcessed() + numDocsToSend);
@@ -251,6 +252,7 @@ public class CBLPusher extends CBLReplicator implements Observer {
 
                 } else {
                     // If none of the revisions are new to the remote, just bump the lastSequence:
+                    Log.d(CBLDatabase.TAG, this + " processInbox() calling setLastSequence() with " + lastInboxSequence + " and none of the revisions are new to the remote");
                     setLastSequence(String.format("%d", lastInboxSequence));
                 }
                 asyncTaskFinished(1);

@@ -189,6 +189,7 @@ public class CBLPuller extends CBLReplicator implements CBLChangeTrackerClient {
             Log.w(CBLDatabase.TAG, String.format("%s no new remote revisions to fetch", this));
             long seq = pendingSequences.addValue(lastInboxSequence);
             pendingSequences.removeSequence(seq);
+            Log.d(CBLDatabase.TAG, this + " processInbox() calling setLastSequence() with " + pendingSequences.getCheckpointedValue());
             setLastSequence(pendingSequences.getCheckpointedValue());
             return;
         }
@@ -347,6 +348,7 @@ public class CBLPuller extends CBLReplicator implements CBLChangeTrackerClient {
 
             Log.w(CBLDatabase.TAG, this + " finished inserting " + revs.size() + " revisions");
 
+            Log.d(CBLDatabase.TAG, this + " insertRevisions() calling setLastSequence() with " + pendingSequences.getCheckpointedValue());
             setLastSequence(pendingSequences.getCheckpointedValue());
 
             success = true;

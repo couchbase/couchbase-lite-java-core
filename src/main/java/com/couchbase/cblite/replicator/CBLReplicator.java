@@ -168,6 +168,7 @@ public abstract class CBLReplicator extends Observable {
     }
 
     public void databaseClosing() {
+        Log.v(CBLDatabase.TAG, this + "databaseClosing() calling saveLastSequence");
         saveLastSequence();
         stop();
         db = null;
@@ -189,19 +190,27 @@ public abstract class CBLReplicator extends Observable {
     }
 
     public void setLastSequence(String lastSequenceIn) {
+        Log.d(CBLDatabase.TAG, this + " setLastSequence() called with lastSequenceIn: " + lastSequenceIn + " lastSequence is: " + lastSequence);
         if (lastSequenceIn != null && !lastSequenceIn.equals(lastSequence)) {
             Log.v(CBLDatabase.TAG, toString() + ": Setting lastSequence to " + lastSequenceIn + " from( " + lastSequence + ")");
             lastSequence = lastSequenceIn;
             if (!lastSequenceChanged) {
+                Log.d(CBLDatabase.TAG, this + " lastSequenceChanged == false, calling saveLastSequence() in scheduled runnable");
                 lastSequenceChanged = true;
                 workExecutor.schedule(new Runnable() {
-
                     @Override
                     public void run() {
+                        Log.d(CBLDatabase.TAG, this + " setLastSequence() calling saveLastSequence() in scheduled runnable");
                         saveLastSequence();
                     }
                 }, 2 * 1000, TimeUnit.MILLISECONDS);
             }
+            else {
+                Log.d(CBLDatabase.TAG, this + " lastSequenceChanged == true, doing nothing further");
+            }
+        }
+        else {
+            Log.d(CBLDatabase.TAG, this + " setLastSequence() not doing anything");
         }
     }
 
@@ -301,7 +310,7 @@ public abstract class CBLReplicator extends Observable {
         Log.v(CBLDatabase.TAG, toString() + " STOPPED");
         running = false;
         this.changesProcessed = this.changesTotal = 0;
-
+        Log.d(CBLDatabase.TAG, this + " stopped() calling saveLastSequence()");
         saveLastSequence();
         setChanged();
         notifyObservers();
@@ -443,10 +452,15 @@ public abstract class CBLReplicator extends Observable {
     public void fetchRemoteCheckpointDoc() {
         lastSequenceChanged = false;
         final String localLastSequence = db.lastSequenceWithRemoteURL(remote, isPush());
+        Log.d(CBLDatabase.TAG, this + " fetchRemoteCheckpointDoc() called.  db.lastSequenceWithRemoteURL() returned  localLastSequence: " + localLastSequence + " lastSequence is: " + lastSequence);
         if (localLastSequence == null) {
+            Log.d(CBLDatabase.TAG, this + " localLastSequence is null, calling beginReplicating()");
             maybeCreateRemoteDB();
             beginReplicating();
             return;
+        }
+        else {
+            Log.d(CBLDatabase.TAG, this + " localLastSequence is non-null, getting remote checkpoint");
         }
 
         asyncTaskStarted();
@@ -455,9 +469,12 @@ public abstract class CBLReplicator extends Observable {
             @Override
             public void onCompletion(Object result, Throwable e) {
                 if (e != null && e instanceof HttpResponseException && ((HttpResponseException) e).getStatusCode() != 404) {
+                    Log.d(CBLDatabase.TAG, this + " error getting remote checkpoint: " + e);
+
                     error = e;
                 } else {
                     if (e instanceof HttpResponseException && ((HttpResponseException) e).getStatusCode() == 404) {
+                        Log.d(CBLDatabase.TAG, this + " 404 error getting remote checkpoint, maybeCreateRemoteDB");
                         maybeCreateRemoteDB();
                     }
                     Map<String, Object> response = (Map<String, Object>) result;
@@ -468,6 +485,7 @@ public abstract class CBLReplicator extends Observable {
                     }
                     if (remoteLastSequence != null && remoteLastSequence.equals(localLastSequence)) {
                         lastSequence = localLastSequence;
+                        Log.d(CBLDatabase.TAG, this + " set lastSequence = localLastSequence: " + lastSequence);
                         Log.v(CBLDatabase.TAG, this + ": Replicating from lastSequence=" + lastSequence);
                     } else {
                         Log.v(CBLDatabase.TAG, this + ": lastSequence mismatch: I had " + localLastSequence + ", remote had " + remoteLastSequence);
@@ -481,12 +499,15 @@ public abstract class CBLReplicator extends Observable {
     }
 
     public void saveLastSequence() {
+        Log.d(CBLDatabase.TAG, this + " saveLastSequence() called");
         if (!lastSequenceChanged) {
+            Log.d(CBLDatabase.TAG, this + "!lastSequenceChanged, returning");
             return;
         }
         if (savingCheckpoint) {
             // If a save is already in progress, don't do anything. (The completion block will trigger
             // another save after the first one finishes.)
+            Log.d(CBLDatabase.TAG, this + "save already in progress, returning");
             overdueForSave = true;
             return;
         }
@@ -506,10 +527,12 @@ public abstract class CBLReplicator extends Observable {
             return;
         }
         savingCheckpoint = true;
+        Log.v(CBLDatabase.TAG, this + " send request to PUT to /_local/" + remoteCheckpointDocID);
         sendAsyncRequest("PUT", "/_local/" + remoteCheckpointDocID, body, new CBLRemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
+                Log.v(CBLDatabase.TAG, this + " got response to PUT to /_local/..");
                 savingCheckpoint = false;
                 if (e != null) {
                     Log.v(CBLDatabase.TAG, this + ": Unable to save remote checkpoint", e);
@@ -520,11 +543,16 @@ public abstract class CBLReplicator extends Observable {
                     remoteCheckpoint = body;
                 }
                 if (overdueForSave) {
+                    Log.v(CBLDatabase.TAG, this + "overDueForSave, so saveLastSequence() recursively calling saveLastSequence()");
                     saveLastSequence();
+                }
+                else {
+                    Log.v(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence()");
                 }
             }
 
         });
+        Log.v(CBLDatabase.TAG, this + "calling dbSetLastSequence() with lastSequence: " + lastSequence);
         db.setLastSequence(lastSequence, remote, isPush());
     }
 
