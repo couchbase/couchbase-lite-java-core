@@ -30,6 +30,7 @@ import com.couchbase.cblite.CBLDatabase.TDContentOptions;
 import com.couchbase.cblite.internal.CBLAttachmentInternal;
 import com.couchbase.cblite.internal.CBLBody;
 import com.couchbase.cblite.internal.CBLRevisionInternal;
+import com.couchbase.cblite.internal.InterfaceAudience;
 import com.couchbase.cblite.replicator.CBLPuller;
 import com.couchbase.cblite.replicator.CBLPusher;
 import com.couchbase.cblite.replicator.CBLReplicator;
@@ -2758,7 +2759,8 @@ public class CBLDatabase {
      * @param remote
      * @return
      */
-    public CBLReplicator push(URL remote) {
+    @InterfaceAudience.Public
+    public CBLReplicator getPushReplication(URL remote) {
         return getActiveReplicator(remote, true);
     }
 
@@ -2769,7 +2771,8 @@ public class CBLDatabase {
      * @param remote
      * @return
      */
-    public CBLReplicator pull(URL remote) {
+    @InterfaceAudience.Public
+    public CBLReplicator getPullReplication(URL remote) {
         return getActiveReplicator(remote, false);
     }
 
@@ -2785,8 +2788,8 @@ public class CBLDatabase {
         CBLReplicator pull;
         CBLReplicator push;
         if (remote != null) {
-            pull = pull(remote);
-            push = push(remote);
+            pull = getPullReplication(remote);
+            push = getPushReplication(remote);
             ArrayList<CBLReplicator> result = new ArrayList<CBLReplicator>();
             result.add(pull);
             result.add(push);
@@ -2822,8 +2825,6 @@ public class CBLDatabase {
         }
         return null;
     }
-
-
 
     public CBLReplicator getReplicator(URL remote, HttpClientFactory httpClientFactory, boolean push, boolean continuous, ScheduledExecutorService workExecutor) {
         CBLReplicator result = getActiveReplicator(remote, push);
