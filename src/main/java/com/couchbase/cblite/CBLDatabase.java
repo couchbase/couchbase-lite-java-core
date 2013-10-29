@@ -1462,7 +1462,7 @@ public class CBLDatabase {
                 return result;
             }
             String commaSeperatedIds = joinQuotedObjects(options.getKeys());
-            sql.append(String.format(" revs.doc_id IN (SELECT doc_id FROM docs WHERE docid IN (%@)) AND", commaSeperatedIds));
+            sql.append(String.format(" revs.doc_id IN (SELECT doc_id FROM docs WHERE docid IN (%s)) AND", commaSeperatedIds));
         }
         sql.append(" docs.doc_id = revs.doc_id AND current=1");
         if (!options.isIncludeDeletedDocs()) {
@@ -1530,7 +1530,9 @@ public class CBLDatabase {
                 }
                 Map<String, Object> value = new HashMap<String, Object>();
                 value.put("rev", revId);
-                value.put("deleted", (deleted ? true : null));
+                if (options.isIncludeDeletedDocs()){
+                    value.put("deleted", (deleted ? true : null));
+                }
                 CBLQueryRow change = new CBLQueryRow(docId, sequenceNumber, docId, value, docContents);
                 change.setDatabase(this);
                 if (options.getKeys() != null) {
@@ -1847,6 +1849,10 @@ public class CBLDatabase {
                     if (contentOptions.contains(TDContentOptions.TDBigAttachmentsFollow) &&
                             length >= CBLDatabase.kBigAttachmentLength) {
                         dataSuppressed = true;
+                        byte[] data = attachments.blobForKey(key);
+                        if(data != null) {
+                            dataBase64 = Base64.encodeBytes(data);  // <-- very expensive
+                        }
                     }
                     else {
                         byte[] data = attachments.blobForKey(key);

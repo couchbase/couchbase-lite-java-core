@@ -17,17 +17,18 @@
 
 package com.couchbase.cblite;
 
+import android.util.Log;
+
+import com.couchbase.cblite.CBLView.TDViewCollation;
+import com.couchbase.cblite.internal.CBLRevisionInternal;
+import com.couchbase.cblite.testapp.tests.CBLiteTestCase;
+
+import junit.framework.Assert;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import junit.framework.Assert;
-import android.util.Log;
-
-import com.couchbase.cblite.internal.CBLRevisionInternal;
-import com.couchbase.cblite.CBLView.TDViewCollation;
-import com.couchbase.cblite.testapp.tests.CBLiteTestCase;
 
 public class Views extends CBLiteTestCase {
 
@@ -449,12 +450,18 @@ public class Views extends CBLiteTestCase {
         expectedQueryResult = createExpectedQueryResult(expectedRows, 0);
         Assert.assertEquals(expectedQueryResult, allDocs);
 
-        // Get specific documents:
+        // Get all documents: with default CBLQueryOptions
         options = new CBLQueryOptions();
         allDocs = database.getAllDocs(options);
 
+        expectedRows = new ArrayList<CBLQueryRow>();
+        expectedRows.add(expectedRow.get(2));
+        expectedRows.add(expectedRow.get(0));
+        expectedRows.add(expectedRow.get(3));
+        expectedRows.add(expectedRow.get(1));
+        expectedRows.add(expectedRow.get(4));
+        expectedQueryResult = createExpectedQueryResult(expectedRows, 0);
 
-        expectedQueryResult = createExpectedQueryResult(new ArrayList<CBLQueryRow>(), 0);
         Assert.assertEquals(expectedQueryResult, allDocs);
 
         // Get specific documents:

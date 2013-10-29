@@ -48,7 +48,8 @@ public class CBLQueryRow {
         if (database == other.database
                 && key.equals(other.getKey())
                 && sourceDocumentId.equals(other.getSourceDocumentId())
-                && documentProperties.equals(other.getDocumentProperties())) {
+                && ((documentProperties==null && other.getDocumentProperties()==null)
+                    || documentProperties.equals(other.getDocumentProperties()))) {
             // If values were emitted, compare them. Otherwise we have nothing to go on so check
             // if _anything_ about the doc has changed (i.e. the sequences are different.)
             if (value != null || other.getValue() != null) {
