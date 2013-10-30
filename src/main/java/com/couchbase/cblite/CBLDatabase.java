@@ -2761,7 +2761,7 @@ public class CBLDatabase {
      */
     @InterfaceAudience.Public
     public CBLReplicator getPushReplication(URL remote) {
-        return getActiveReplicator(remote, true);
+        return manager.replicationWithDatabase(this, remote, true, true, false);
     }
 
     /**
@@ -2773,7 +2773,7 @@ public class CBLDatabase {
      */
     @InterfaceAudience.Public
     public CBLReplicator getPullReplication(URL remote) {
-        return getActiveReplicator(remote, false);
+        return manager.replicationWithDatabase(this, remote, false, true, false);
     }
 
     /**
@@ -2781,10 +2781,10 @@ public class CBLDatabase {
      * returns existing replications if there are any.
      *
      * @param remote
-     * @param exclusively - this param is ignored!  TODO: fix this
      * @return An array whose first element is the "pull" replication and second is the "push".
      */
-    public List<CBLReplicator> replicate(URL remote, boolean exclusively) {
+    @InterfaceAudience.Public
+    public List<CBLReplicator> getReplications(URL remote) {
         CBLReplicator pull;
         CBLReplicator push;
         if (remote != null) {
@@ -2826,6 +2826,7 @@ public class CBLDatabase {
         return null;
     }
 
+    @InterfaceAudience.Private
     public CBLReplicator getReplicator(URL remote, HttpClientFactory httpClientFactory, boolean push, boolean continuous, ScheduledExecutorService workExecutor) {
         CBLReplicator result = getActiveReplicator(remote, push);
         if(result != null) {
