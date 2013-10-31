@@ -70,15 +70,15 @@ public class CBLPusher extends CBLReplicator implements Observer {
         if(!createTarget) {
             return;
         }
-        Log.v(CBLDatabase.TAG, "Remote db might not exist; creating it...");
+        Log.d(CBLDatabase.TAG, "Remote db might not exist; creating it...");
         sendAsyncRequest("PUT", "", null, new CBLRemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
                 if(e != null && e instanceof HttpResponseException && ((HttpResponseException)e).getStatusCode() != 412) {
-                    Log.v(CBLDatabase.TAG, "Unable to create remote db (normal if using sync gateway)");
+                    Log.d(CBLDatabase.TAG, "Unable to create remote db (normal if using sync gateway)");
                 } else {
-                    Log.v(CBLDatabase.TAG, "Created remote db");
+                    Log.d(CBLDatabase.TAG, "Created remote db");
 
                 }
                 createTarget = false;
@@ -231,7 +231,7 @@ public class CBLPusher extends CBLReplicator implements Observer {
                     bulkDocsBody.put("docs", docsToSend);
                     bulkDocsBody.put("new_edits", false);
                     Log.i(CBLDatabase.TAG, String.format("%s: Sending %d revisions", this, numDocsToSend));
-                    Log.v(CBLDatabase.TAG, String.format("%s: Sending %s", this, inbox));
+                    Log.d(CBLDatabase.TAG, String.format("%s: Sending %s", this, inbox));
                     setChangesTotal(getChangesTotal() + numDocsToSend);
                     asyncTaskStarted();
                     sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new CBLRemoteRequestCompletionBlock() {
@@ -241,7 +241,7 @@ public class CBLPusher extends CBLReplicator implements Observer {
                             if(e != null) {
                                 error = e;
                             } else {
-                                Log.v(CBLDatabase.TAG, String.format("%s: Sent %s", this, inbox));
+                                Log.d(CBLDatabase.TAG, String.format("%s: Sent %s", this, inbox));
                                 Log.d(CBLDatabase.TAG, this + " processInbox() calling setLastSequence() with " + lastInboxSequence);
                                 setLastSequence(String.format("%d", lastInboxSequence));
                             }

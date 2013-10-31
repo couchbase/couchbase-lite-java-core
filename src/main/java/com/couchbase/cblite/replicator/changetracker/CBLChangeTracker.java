@@ -72,6 +72,9 @@ public class CBLChangeTracker implements Runnable {
         this.mode = mode;
         this.lastSequenceID = lastSequenceID;
         this.client = client;
+        Log.d(CBLDatabase.TAG, this + " constructor called ");
+        
+
     }
 
     public void setFilterName(String filterName) {
@@ -159,7 +162,7 @@ public class CBLChangeTracker implements Runnable {
             // if the URL contains user info AND if this a DefaultHttpClient
             // then preemptively set the auth credentials
             if (url.getUserInfo() != null) {
-                Log.v(CBLDatabase.TAG, "url.getUserInfo(): " + url.getUserInfo());
+                Log.d(CBLDatabase.TAG, "url.getUserInfo(): " + url.getUserInfo());
                 if (url.getUserInfo().contains(":") && !url.getUserInfo().trim().equals(":")) {
                     String[] userInfoSplit = url.getUserInfo().split(":");
                     final Credentials creds = new UsernamePasswordCredentials(userInfoSplit[0], userInfoSplit[1]);
@@ -195,7 +198,7 @@ public class CBLChangeTracker implements Runnable {
             try {
                 String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
                 maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-                Log.v(CBLDatabase.TAG, "Making request to " + maskedRemoteWithoutCredentials);
+                Log.d(CBLDatabase.TAG, "Making request to " + maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
                 if (status.getStatusCode() >= 300) {
@@ -211,7 +214,7 @@ public class CBLChangeTracker implements Runnable {
                         Map<String, Object> fullBody = CBLServer.getObjectMapper().readValue(input, Map.class);
                         boolean responseOK = receivedPollResponse(fullBody);
                         if (mode == TDChangeTrackerMode.LongPoll && responseOK) {
-                            Log.v(CBLDatabase.TAG, "Starting new longpoll");
+                            Log.d(CBLDatabase.TAG, "Starting new longpoll");
                             continue;
                         } else {
                             Log.w(CBLDatabase.TAG, "Change tracker calling stop");
@@ -256,7 +259,7 @@ public class CBLChangeTracker implements Runnable {
 
             }
         }
-        Log.v(CBLDatabase.TAG, "Change tracker run loop exiting");
+        Log.d(CBLDatabase.TAG, "Change tracker run loop exiting");
     }
 
     public boolean receivedChange(final Map<String,Object> change) {
