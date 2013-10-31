@@ -462,7 +462,6 @@ public class CBLView {
         }
 
         if (minKey != null) {
-            assert (minKey instanceof String);
             if (inclusiveMin) {
                 sql += " AND key >= ?";
             } else {
@@ -473,7 +472,6 @@ public class CBLView {
         }
 
         if (maxKey != null) {
-            assert (maxKey instanceof String);
             if (inclusiveMax) {
                 sql += " AND key <= ?";
             } else {
