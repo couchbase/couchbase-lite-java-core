@@ -402,6 +402,8 @@ public class Views extends CBLiteTestCase {
         for (CBLRevisionInternal rev : docs) {
             Map<String,Object> value = new HashMap<String, Object>();
             value.put("rev", rev.getRevId());
+            //getAllDocs adds 'deleted' value for CBLQueryRow objects
+            value.put("deleted", null);
             CBLQueryRow queryRow = new CBLQueryRow(rev.getDocId(), 0, rev.getDocId(), value, null);
             queryRow.setDatabase(database);
             expectedRow.add(queryRow);
@@ -419,8 +421,6 @@ public class Views extends CBLiteTestCase {
 
         Map<String,Object> expectedQueryResult = createExpectedQueryResult(expectedRows, 0);
 
-        // failing, I think its a real bug.  in one case "deleted" is null, in another, "deleted" is missing
-        // http://cl.ly/image/1X411c421u3V
         Assert.assertEquals(expectedQueryResult, allDocs);
 
         // Start/end key query:
