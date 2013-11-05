@@ -1856,6 +1856,10 @@ public class CBLDatabase {
                     if (contentOptions.contains(TDContentOptions.TDBigAttachmentsFollow) &&
                             length >= CBLDatabase.kBigAttachmentLength) {
                         dataSuppressed = true;
+                        byte[] data = attachments.blobForKey(key);
+                        if(data != null) {
+                            dataBase64 = Base64.encodeBytes(data);  // <-- very expensive
+                        }
                     }
                     else {
                         byte[] data = attachments.blobForKey(key);
