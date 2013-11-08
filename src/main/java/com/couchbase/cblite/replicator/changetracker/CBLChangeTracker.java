@@ -147,8 +147,16 @@ public class CBLChangeTracker implements Runnable {
 
     @Override
     public void run() {
+        // depending on thread scheduling, run() can execute after CBLPuller.stop(), which sets
+        // client to null. In that case, we shouldn't run.
+        CBLChangeTrackerClient clientHandle = client;
+        if (clientHandle == null) {
+            Log.w(CBLDatabase.TAG, "cancelling CBLChangeTracker run due to null client");
+            return;
+        }
+
         running = true;
-        HttpClient httpClient = client.getHttpClient();
+        HttpClient httpClient = clientHandle.getHttpClient();
         CBLChangeTrackerBackoff backoff = new CBLChangeTrackerBackoff();
 
         while (running) {
