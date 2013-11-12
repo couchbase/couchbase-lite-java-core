@@ -541,6 +541,8 @@ public abstract class CBLReplicator extends Observable {
         }
         savingCheckpoint = true;
         Log.d(CBLDatabase.TAG, this + " send request to PUT to /_local/" + remoteCheckpointDocID);
+
+        final String lastSequenceSnapshot = lastSequence;
         sendAsyncRequest("PUT", "/_local/" + remoteCheckpointDocID, body, new CBLRemoteRequestCompletionBlock() {
 
             @Override
@@ -548,7 +550,7 @@ public abstract class CBLReplicator extends Observable {
                 Log.d(CBLDatabase.TAG, this + " got response to PUT to /_local/..");
                 savingCheckpoint = false;
                 if (e != null) {
-                    Log.d(CBLDatabase.TAG, this + ": Unable to save remote checkpoint", e);
+                    Log.d(CBLDatabase.TAG, this + ": Unable to save remote checkpoint to " + lastSequenceSnapshot, e);
                     // TODO: If error is 401 or 403, and this is a pull, remember that remote is read-only and don't attempt to read its checkpoint next time.
                 } else {
                     Map<String, Object> response = (Map<String, Object>) result;
@@ -556,11 +558,11 @@ public abstract class CBLReplicator extends Observable {
                     remoteCheckpoint = body;
                 }
                 if (overdueForSave) {
-                    Log.d(CBLDatabase.TAG, this + "overDueForSave, so saveLastSequence() recursively calling saveLastSequence()");
+                    Log.d(CBLDatabase.TAG, this + "overDueForSave, so saveLastSequence() recursively calling saveLastSequence(). lastSequenceSnapshot: " + lastSequenceSnapshot);
                     saveLastSequence();
                 }
                 else {
-                    Log.d(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence()");
+                    Log.d(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence().  lastSequenceSnapshot: " + lastSequenceSnapshot);
                 }
             }
 
