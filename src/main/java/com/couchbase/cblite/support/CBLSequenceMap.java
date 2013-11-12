@@ -35,8 +35,8 @@ public class CBLSequenceMap {
 	public synchronized boolean isEmpty() {
 		return sequences.isEmpty();
 	}
-	
-	public synchronized long getCheckpointedSequence() {
+
+    public synchronized long getCheckpointedSequence() {
 		long sequence = lastSequence;
 		if(!sequences.isEmpty()) {
 			sequence = sequences.first() - 1;
@@ -58,4 +58,16 @@ public class CBLSequenceMap {
 		int index = (int)(getCheckpointedSequence() - firstValueSequence);
 		return (index >= 0) ? values.get(index) : null; 
 	}
+
+    public synchronized long getLastSequence() {
+        return lastSequence;
+    }
+
+    public synchronized long getFirstValueSequence() {
+        return firstValueSequence;
+    }
+
+    public synchronized int getNumSequences() {
+        return sequences.size();
+    }
 }

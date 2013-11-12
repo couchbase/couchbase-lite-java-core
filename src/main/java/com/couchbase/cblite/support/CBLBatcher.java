@@ -69,12 +69,18 @@ public class CBLBatcher<T> {
                 flush();
             }
             if(inbox == null) {
+                Log.d(CBLDatabase.TAG, this + " queueObject() called, creating new inbox");
                 inbox = new ArrayList<T>();
                 if(workExecutor != null) {
 					flushFuture = workExecutor.schedule(processNowRunnable, delay, TimeUnit.MILLISECONDS);
                 }
+            } else {
+                Log.d(CBLDatabase.TAG, this + " queueObject() called, not creating new inbox inbox");
             }
+
             inbox.add(object);
+            Log.d(CBLDatabase.TAG, this + " added new object to inbox, size is now: " + inbox.size());
+
         }
     }
 

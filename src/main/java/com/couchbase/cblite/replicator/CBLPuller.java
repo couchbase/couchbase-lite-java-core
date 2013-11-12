@@ -349,12 +349,16 @@ public class CBLPuller extends CBLReplicator implements CBLChangeTrackerClient {
                         error = new HttpResponseException(status.getCode(), null);
                         continue;
                     }
+                } else {
+                    Log.d(CBLDatabase.TAG, this + " inserted rev w/ docid: " + rev.getDocId() + " rev id: " + rev.getRevId() + " fake seq: " + fakeSequence + " local seq: " + rev.getSequence() + " remote seq: " + rev.getRemoteSequenceID());
                 }
 
                 pendingSequences.removeSequence(fakeSequence);
             }
 
             Log.w(CBLDatabase.TAG, this + " finished inserting " + revs.size() + " revisions");
+
+            Log.d(CBLDatabase.TAG, this + " pendingSequences stats: checkpointed seq: " + pendingSequences.getCheckpointedSequence() + " last seq: " + pendingSequences.getLastSequence() + " first val seq: " + pendingSequences.getFirstValueSequence() + " # of sequences: " + pendingSequences.getNumSequences());
 
             Log.d(CBLDatabase.TAG, this + " insertRevisions() calling setLastSequence() with " + pendingSequences.getCheckpointedValue());
             setLastSequence(pendingSequences.getCheckpointedValue());
