@@ -24,13 +24,20 @@ import android.util.Log;
 import com.couchbase.cblite.CBLBody;
 import com.couchbase.cblite.CBLDatabase;
 
+import org.apache.http.MethodNotSupportedException;
+
+import javax.net.ssl.SSLSession;
+
 public class CBLURLConnection extends HttpURLConnection {
+
+    private static final String unsupportedOperationMessage = "This method is not supported as this object just represents a request, it doesn't actually bind on the wire to anything.";
 
     private Header resHeader;
     private boolean sentRequest = false;
     private ByteArrayOutputStream os;
     private CBLBody responseBody;
     private boolean chunked = false;
+    private SSLSession sslSession = null;
 
     private HashMap<String, List<String>> requestProperties = new HashMap<String, List<String>>();
 
@@ -56,19 +63,17 @@ public class CBLURLConnection extends HttpURLConnection {
 
     @Override
     public void connect() throws IOException {
-
+        throw new UnsupportedOperationException(unsupportedOperationMessage);
     }
 
     @Override
     public void disconnect() {
-        // TODO Auto-generated method stub
-
+        throw new UnsupportedOperationException(unsupportedOperationMessage);
     }
 
     @Override
     public boolean usingProxy() {
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException(unsupportedOperationMessage);
     }
 
     @Override
@@ -212,7 +217,8 @@ public class CBLURLConnection extends HttpURLConnection {
 
         if (!connected) {
             // connect and see if there is cache available.
-            connect();
+            // TODO: This calls CBLURLConnection connect() which doesn't do anything
+            // connect();
         }
         return os = new ByteArrayOutputStream();
 
@@ -255,6 +261,25 @@ public class CBLURLConnection extends HttpURLConnection {
         this.requestInputStream = requestInputStream;
     }
 
+    /**
+     * Returns a SSLSession object, if any, for the underlying connection.
+     *
+     * Originally we were going to write this functionality based on HTTPSURLConnection but dealing with the
+     * consequences of double inheritance (since we would need to expose both the CBLURLConnection interfaces
+     * and the HTTPSURLConnection interfaces) was more trouble than it was worth.
+     * @return
+     */
+    public SSLSession getSSLSession() {
+        return this.sslSession;
+    }
+
+    public void setSSLSession(SSLSession sslSession) {
+        if (this.sslSession != null) {
+            throw new IllegalArgumentException("No double setting SSLSession to non-null values.");
+        }
+
+        this.sslSession = sslSession;
+    }
 }
 
 /**

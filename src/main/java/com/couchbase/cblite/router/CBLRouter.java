@@ -41,7 +41,6 @@ import com.couchbase.cblite.CBLDatabase.TDContentOptions;
 import com.couchbase.cblite.CBLView.TDViewCollation;
 import com.couchbase.cblite.auth.CBLFacebookAuthorizer;
 import com.couchbase.cblite.auth.CBLPersonaAuthorizer;
-import com.couchbase.cblite.replicator.CBLPusher;
 import com.couchbase.cblite.replicator.CBLReplicator;
 
 import org.apache.http.client.HttpResponseException;
@@ -59,14 +58,20 @@ public class CBLRouter implements Observer {
     private boolean waiting = false;
     private CBLFilterBlock changesFilter;
     private boolean longpoll = false;
+    private CBLRequestAuthorization cblRequestAuthorization = null;
 
     public static String getVersionString() {
         return CBLiteVersion.CBLiteVersionNumber;
     }
 
     public CBLRouter(CBLServer server, CBLURLConnection connection) {
+        this(server, connection, null);
+    }
+
+    public CBLRouter(CBLServer server, CBLURLConnection connection, CBLRequestAuthorization cblRequestAuthorization) {
         this.server = server;
         this.connection = connection;
+        this.cblRequestAuthorization = cblRequestAuthorization;
     }
 
     public void setCallbackBlock(CBLRouterCallbackBlock callbackBlock) {
@@ -247,7 +252,23 @@ public class CBLRouter implements Observer {
         }
     }
 
+    private void SendErrorResponseNoResponseBody(int statusCode) {
+        assert statusCode >= 400 && statusCode < 600;
+        connection.setResponseCode(statusCode);
+        try {
+            connection.getResponseOutputStream().close();
+        } catch (IOException e) {
+            Log.e(CBLDatabase.TAG, "Error closing empty output stream");
+        }
+        sendResponse();
+    }
+
     public void start() {
+        if (cblRequestAuthorization != null && cblRequestAuthorization.Authorize(server, connection) == false) {
+            sendResponse();
+            return;
+        }
+
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
 
         // We're going to map the request into a method call using reflection based on the method and path.
@@ -261,32 +282,20 @@ public class CBLRouter implements Observer {
         // First interpret the components of the request:
         List<String> path = splitPath(connection.getURL());
         if(path == null) {
-            connection.setResponseCode(CBLStatus.BAD_REQUEST);
-            try {
-                connection.getResponseOutputStream().close();
-            } catch (IOException e) {
-                Log.e(CBLDatabase.TAG, "Error closing empty output stream");
-            }
-            sendResponse();
+            SendErrorResponseNoResponseBody(CBLStatus.BAD_REQUEST);
             return;
         }
 
         int pathLen = path.size();
         if(pathLen > 0) {
             String dbName = path.get(0);
-            if(dbName.startsWith("_")) {
+            if(dbName.startsWith("_") || "favicon.ico".equals(dbName)) {
                 message += dbName;  // special root path, like /_all_dbs
             } else {
                 message += "_Database";
                 db = server.getDatabaseNamed(dbName);
                 if(db == null) {
-                    connection.setResponseCode(CBLStatus.BAD_REQUEST);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(CBLDatabase.TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    SendErrorResponseNoResponseBody(CBLStatus.BAD_REQUEST);
                     return;
                 }
             }
@@ -300,39 +309,21 @@ public class CBLRouter implements Observer {
             // Make sure database exists, then interpret doc name:
             CBLStatus status = openDB();
             if(!status.isSuccessful()) {
-                connection.setResponseCode(status.getCode());
-                try {
-                    connection.getResponseOutputStream().close();
-                } catch (IOException e) {
-                    Log.e(CBLDatabase.TAG, "Error closing empty output stream");
-                }
-                sendResponse();
+                SendErrorResponseNoResponseBody(status.getCode());
                 return;
             }
             String name = path.get(1);
             if(!name.startsWith("_")) {
                 // Regular document
                 if(!CBLDatabase.isValidDocumentId(name)) {
-                    connection.setResponseCode(CBLStatus.BAD_REQUEST);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(CBLDatabase.TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    SendErrorResponseNoResponseBody(CBLStatus.BAD_REQUEST);
                     return;
                 }
                 docID = name;
             } else if("_design".equals(name) || "_local".equals(name)) {
                 // "_design/____" and "_local/____" are document names
                 if(pathLen <= 2) {
-                    connection.setResponseCode(CBLStatus.NOT_FOUND);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(CBLDatabase.TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    SendErrorResponseNoResponseBody(CBLStatus.NOT_FOUND);
                     return;
                 }
                 docID = name + "/" + path.get(2);
@@ -406,7 +397,7 @@ public class CBLRouter implements Observer {
                 status = (CBLStatus)m.invoke(this, db, docID, attachmentName);
             } catch (Exception e) {
                 //default status is internal server error
-                Log.e(CBLDatabase.TAG, "CBLRouter attempted do_UNKNWON fallback, but that threw an exception", e);
+                Log.e(CBLDatabase.TAG, "CBLRouter attempted do_UNKNOWN fallback, but that threw an exception", e);
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("error", "not_found");
                 result.put("reason", "CBLRouter unable to route request");
@@ -739,8 +730,6 @@ public class CBLRouter implements Observer {
             result.put("ok", "registered");
             connection.setResponseBody(new CBLBody(result));
             return new CBLStatus(CBLStatus.OK);
-
-
         }
         else {
             Map<String, Object> result = new HashMap<String, Object>();
@@ -748,8 +737,6 @@ public class CBLRouter implements Observer {
             connection.setResponseBody(new CBLBody(result));
             return new CBLStatus(CBLStatus.BAD_REQUEST);
         }
-
-
     }
 
     public CBLStatus do_POST_persona_assertion(CBLDatabase _db, String _docID, String _attachmentName) {
@@ -784,9 +771,6 @@ public class CBLRouter implements Observer {
             connection.setResponseBody(new CBLBody(result));
             return new CBLStatus(CBLStatus.BAD_REQUEST);
         }
-
-
-
     }
 
     public CBLStatus do_POST_Document_bulk_docs(CBLDatabase _db, String _docID, String _attachmentName) {
