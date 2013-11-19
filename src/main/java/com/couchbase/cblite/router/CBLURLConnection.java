@@ -1,32 +1,16 @@
 package com.couchbase.cblite.router;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
-import java.net.HttpURLConnection;
-import java.net.ProtocolException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.SortedMap;
-import java.util.TreeMap;
-
 import android.util.Log;
-
 import com.couchbase.cblite.CBLBody;
 import com.couchbase.cblite.CBLDatabase;
 
-import org.apache.http.MethodNotSupportedException;
-
 import javax.net.ssl.SSLSession;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.ProtocolException;
+import java.net.URL;
+import java.util.*;
+import java.util.Map.Entry;
 
 public class CBLURLConnection extends HttpURLConnection {
 
@@ -154,7 +138,7 @@ public class CBLURLConnection extends HttpURLConnection {
         return resHeader.getFieldMap();
     }
 
-    Header getResHeader() {
+    public Header getResHeader() {
         if(resHeader == null) {
             resHeader = new Header();
         }
@@ -166,11 +150,11 @@ public class CBLURLConnection extends HttpURLConnection {
         return responseCode;
     }
 
-    void setResponseCode(int responseCode) {
+    public void setResponseCode(int responseCode) {
         this.responseCode = responseCode;
     }
 
-    void setResponseBody(CBLBody responseBody) {
+    public void setResponseBody(CBLBody responseBody) {
         this.responseBody = responseBody;
     }
 
