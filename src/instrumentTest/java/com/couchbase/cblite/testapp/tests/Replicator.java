@@ -44,16 +44,10 @@ public class Replicator extends CBLiteTestCase {
 
     public static final String TAG = "Replicator";
 
-    public String testPusher() throws Throwable {
-
-        CountDownLatch replicationDoneSignal = new CountDownLatch(1);
-
-        URL remote = getReplicationURL();
-        String docIdTimestamp = Long.toString(System.currentTimeMillis());
+    private void addDocsToPush(String doc1Id, String doc2Id) {
 
         // Create some documents:
         Map<String, Object> documentProperties = new HashMap<String, Object>();
-        final String doc1Id = String.format("doc1-%s", docIdTimestamp);
         documentProperties.put("_id", doc1Id);
         documentProperties.put("foo", 1);
         documentProperties.put("bar", false);
@@ -73,13 +67,25 @@ public class Replicator extends CBLiteTestCase {
         Assert.assertEquals(CBLStatus.CREATED, status.getCode());
 
         documentProperties = new HashMap<String, Object>();
-        String doc2Id = String.format("doc2-%s", docIdTimestamp);
         documentProperties.put("_id", doc2Id);
         documentProperties.put("baz", 666);
         documentProperties.put("fnord", true);
 
         database.putRevision(new CBLRevision(documentProperties, database), null, false, status);
         Assert.assertEquals(CBLStatus.CREATED, status.getCode());
+
+    }
+
+    public void testPusher() throws Throwable {
+
+        CountDownLatch replicationDoneSignal = new CountDownLatch(1);
+
+        URL remote = getReplicationURL();
+
+        String docIdTimestamp = Long.toString(System.currentTimeMillis());
+        final String doc1Id = String.format("doc1-%s", docIdTimestamp);
+        String doc2Id = String.format("doc2-%s", docIdTimestamp);
+        addDocsToPush(doc1Id, doc2Id);
 
         final CBLReplicator repl = database.getReplicator(remote, true, false, server.getWorkExecutor());
         ((CBLPusher)repl).setCreateTarget(true);
@@ -165,9 +171,6 @@ public class Replicator extends CBLiteTestCase {
             e.printStackTrace();
         }
 
-
-        Log.d(TAG, "testPusher() finished");
-        return docIdTimestamp;
 
     }
 
@@ -456,6 +459,55 @@ public class Replicator extends CBLiteTestCase {
 
     }
 
+    /**
+     * Test to make sure has desired behavior:
+     *
+     * - Attempt to save checkpoint on remote
+     * - Attempt fails due to error or timeout (to make it simple, just having the mock client return an error)
+     * - Local database is _not_ updated with that checkpoint
+     *
+     * @throws Exception
+     */
+    public void testSaveRemoteCheckpointNoResponse() throws Exception {
+
+        HttpClientFactory mockHttpClientFactory = new HttpClientFactory() {
+            @Override
+            public HttpClient getHttpClient() {
+                return new MockHttpClient2();
+            }
+        };
+
+        long lastSequenceBeforePush = database.getLastSequence();
+
+        // save a few fake docs that will be pushed
+        String docIdTimestamp = Long.toString(System.currentTimeMillis());
+        final String doc1Id = String.format("doc1-%s", docIdTimestamp);
+        String doc2Id = String.format("doc2-%s", docIdTimestamp);
+        addDocsToPush(doc1Id, doc2Id);
+
+        String dbUrlString = "http://fake.test-url.com:4984/fake/";
+        URL remote = new URL(dbUrlString);
+        CBLReplicator replicator = new CBLPusher(database, remote, false, mockHttpClientFactory, server.getWorkExecutor());
+
+        CountDownLatch doneSignal = new CountDownLatch(1);
+        ReplicationObserver replicationObserver = new ReplicationObserver(doneSignal);
+        replicator.addObserver(replicationObserver);
+
+        replicator.start();
+
+        try {
+            doneSignal.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // since the local document on the remote database could not be updated (because our mock
+        // http client is designed to fail on that request), the database sequence should _not_
+        // have been updated in our local database.
+        Assert.assertEquals(lastSequenceBeforePush, database.getLastSequence());
+
+
+    }
 
     public void testFetchRemoteCheckpointDoc() throws Exception {
 
