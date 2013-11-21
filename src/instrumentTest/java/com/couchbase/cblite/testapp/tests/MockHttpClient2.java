@@ -75,6 +75,11 @@ public class MockHttpClient2 implements org.apache.http.client.HttpClient {
 
      */
     public HttpResponse fakeLocalDocumentUpdate(HttpUriRequest httpUriRequest) throws IOException, ClientProtocolException {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         throw new IOException("Throw exception on purpose for purposes of testSaveRemoteCheckpointNoResponse()");
     }
 
