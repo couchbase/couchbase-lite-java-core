@@ -477,8 +477,6 @@ public class Replicator extends CBLiteTestCase {
             }
         };
 
-        long lastSequenceBeforePush = database.getLastSequence();
-
         // save a few fake docs that will be pushed
         String docIdTimestamp = Long.toString(System.currentTimeMillis());
         final String doc1Id = String.format("doc1-%s", docIdTimestamp);
@@ -487,6 +485,8 @@ public class Replicator extends CBLiteTestCase {
 
         String dbUrlString = "http://fake.test-url.com:4984/fake/";
         URL remote = new URL(dbUrlString);
+        String localLastSequenceBeforePush = database.lastSequenceWithRemoteURL(remote, true);
+
         CBLReplicator replicator = new CBLPusher(database, remote, false, mockHttpClientFactory, server.getWorkExecutor());
 
         CountDownLatch doneSignal = new CountDownLatch(1);
@@ -496,7 +496,9 @@ public class Replicator extends CBLiteTestCase {
         replicator.start();
 
         try {
+            Log.d(CBLDatabase.TAG, "call doneSignal.await()");
             doneSignal.await();
+            Log.d(CBLDatabase.TAG, "finished calling doneSignal.await()");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -504,7 +506,13 @@ public class Replicator extends CBLiteTestCase {
         // since the local document on the remote database could not be updated (because our mock
         // http client is designed to fail on that request), the database sequence should _not_
         // have been updated in our local database.
-        Assert.assertEquals(lastSequenceBeforePush, database.getLastSequence());
+        String localLastSequence = database.lastSequenceWithRemoteURL(remote, true);
+
+        Log.d(CBLDatabase.TAG, "lastSequenceBeforePush " + localLastSequenceBeforePush);
+
+        Log.d(CBLDatabase.TAG, "localLastSequence " + localLastSequence);
+
+        Assert.assertEquals(localLastSequenceBeforePush, localLastSequence);
 
 
     }
@@ -560,9 +568,11 @@ public class Replicator extends CBLiteTestCase {
             CBLReplicator replicator = (CBLReplicator) observable;
             if (!replicator.isRunning()) {
                 replicationFinished = true;
-                String msg = String.format("myobserver.update called, set replicationFinished to: %b", replicationFinished);
+                String msg = String.format("myobserver.update called, call doneSignal:%s set replicationFinished to: %b", doneSignal, replicationFinished);
                 Log.d(TAG, msg);
                 doneSignal.countDown();
+                msg = String.format("called doneSignal.countDown()");
+                Log.d(TAG, msg);
             }
             else {
                 String msg = String.format("myobserver.update called, but replicator still running, so ignore it");
