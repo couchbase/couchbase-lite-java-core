@@ -119,9 +119,13 @@ public class CBLRemoteRequest implements Runnable {
 
             HttpResponse response = httpClient.execute(request);
 
-            // add in cookies to global store
-            DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
-            CBLHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
+            try {
+                // add in cookies to global store
+                DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                CBLHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
+            } catch (Exception e) {
+                Log.w(CBLDatabase.TAG, "Got exception while adding cookies to global store.  Ignoring.", e);
+            }
 
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
