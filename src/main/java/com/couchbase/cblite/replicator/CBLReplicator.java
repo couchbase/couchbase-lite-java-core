@@ -7,6 +7,7 @@ import com.couchbase.cblite.CBLDatabase;
 import com.couchbase.cblite.CBLMisc;
 import com.couchbase.cblite.CBLRevision;
 import com.couchbase.cblite.CBLRevisionList;
+import com.couchbase.cblite.CBLStatus;
 import com.couchbase.cblite.auth.CBLAuthorizer;
 import com.couchbase.cblite.auth.CBLFacebookAuthorizer;
 import com.couchbase.cblite.auth.CBLPersonaAuthorizer;
@@ -511,6 +512,37 @@ public abstract class CBLReplicator extends Observable {
         });
     }
 
+    private void refreshRemoteCheckpointDoc() {
+        Log.d(CBLDatabase.TAG, this + " Refreshing remote checkpoint to get its _rev...");
+        savingCheckpoint = true;  // Disable any other save attempts till we finish reloading
+        asyncTaskStarted();
+
+        Log.d(CBLDatabase.TAG, this + "refreshRemoteCheckpointDoc() GET /_local/" + remoteCheckpointDocID());
+        asyncTaskStarted();
+        sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new CBLRemoteRequestCompletionBlock() {
+
+            @Override
+            public void onCompletion(Object result, Throwable e) {
+                if (db == null) {
+                    return;
+                }
+                savingCheckpoint = false;
+                if (e != null && !is404(e)) {
+                    Log.d(CBLDatabase.TAG, this + " error getting remote checkpoint: " + e);
+                } else {
+                    Log.d(CBLDatabase.TAG, this + "Got response to GET /_local/ " + remoteCheckpointDocID());
+
+                    Map<String, Object> response = (Map<String, Object>) result;
+                    remoteCheckpoint = response;
+                    lastSequenceChanged = true;
+                    saveLastSequence();  // try saving again
+                }
+                asyncTaskFinished(1);
+            }
+
+        });
+    }
+
     public void saveLastSequence() {
         Log.d(CBLDatabase.TAG, this + " saveLastSequence() called");
         if (!lastSequenceChanged) {
@@ -552,11 +584,46 @@ public abstract class CBLReplicator extends Observable {
                 if (e != null) {
                     Log.d(CBLDatabase.TAG, this + ": Unable to save remote checkpoint to " + lastSequenceSnapshot, e);
                     // TODO: If error is 401 or 403, and this is a pull, remember that remote is read-only and don't attempt to read its checkpoint next time.
-                } else {
+                }
+                if (db == null) {
+                    Log.d(CBLDatabase.TAG, this + " db is null, ignoring response to PUT to /_local/ ");
+                    return;
+                }
+                if (e != null) {
+                    Log.d(CBLDatabase.TAG, this + " got exception ", e);
+
+                    if (e instanceof HttpResponseException) {
+                        HttpResponseException responseException = (HttpResponseException) e;
+                        switch (responseException.getStatusCode()) {
+                            case CBLStatus.NOT_FOUND:
+                                Log.d(CBLDatabase.TAG, this + " CBLStatus.NOT_FOUND ", e);
+                                remoteCheckpoint = null;  // doc deleted or db reset
+                                overdueForSave = true;  // try saving again
+                                break;
+                            case CBLStatus.CONFLICT:
+                                Log.d(CBLDatabase.TAG, this + " CBLStatus.CONFLICT ", e);
+                                refreshRemoteCheckpointDoc();
+                                break;
+                            default:
+                                // TODO: On 401 or 403, and this is a pull, remember that remote
+                                // TODO: is read-only & don't attempt to read its checkpoint next time.
+                                break;
+
+                        }
+                    } else {
+                        Log.d(CBLDatabase.TAG, this + " unexpected exception type ", e);
+                    }
+
+                }
+                else {
+                    // Saved checkpoint
                     Map<String, Object> response = (Map<String, Object>) result;
                     body.put("_rev", response.get("rev"));
                     remoteCheckpoint = body;
+                    Log.d(CBLDatabase.TAG, this + " Calling dbSetLastSequence() with lastSequence:: " + lastSequence);
+                    db.setLastSequence(lastSequence, remote, isPush());
                 }
+
                 if (overdueForSave) {
                     Log.d(CBLDatabase.TAG, this + "overDueForSave, so saveLastSequence() recursively calling saveLastSequence(). lastSequenceSnapshot: " + lastSequenceSnapshot);
                     saveLastSequence();
@@ -564,11 +631,11 @@ public abstract class CBLReplicator extends Observable {
                 else {
                     Log.d(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence().  lastSequenceSnapshot: " + lastSequenceSnapshot);
                 }
+
             }
 
         });
-        Log.d(CBLDatabase.TAG, this + "calling dbSetLastSequence() with lastSequence: " + lastSequence);
-        db.setLastSequence(lastSequence, remote, isPush());
+
     }
 
     public Throwable getError() {
@@ -580,4 +647,5 @@ public abstract class CBLReplicator extends Observable {
         super.finalize();
         Log.d(CBLDatabase.TAG, this + " finalize() called");
     }
+
 }
