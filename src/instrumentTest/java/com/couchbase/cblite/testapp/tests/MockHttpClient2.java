@@ -75,12 +75,15 @@ public class MockHttpClient2 implements org.apache.http.client.HttpClient {
 
      */
     public HttpResponse fakeLocalDocumentUpdate(HttpUriRequest httpUriRequest) throws IOException, ClientProtocolException {
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        throw new IOException("Throw exception on purpose for purposes of testSaveRemoteCheckpointNoResponse()");
+
+        Map<String, Object> responseMap = new HashMap<String, Object>();
+        responseMap.put("id", "_local/49b8682aa71e34628ebd9b3a8764fdbcfc9b03a6");
+        responseMap.put("ok", true);
+        responseMap.put("rev", "0-1");
+
+        HttpResponse response = generateHttpResponseObject(responseMap);
+        return response;
+
     }
 
     /*

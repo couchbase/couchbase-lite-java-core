@@ -36,6 +36,7 @@ import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.message.BasicHeader;
@@ -466,9 +467,77 @@ public class Replicator extends CBLiteTestCase {
      * - Attempt fails due to error or timeout (to make it simple, just having the mock client return an error)
      * - Local database is _not_ updated with that checkpoint
      *
-     * @throws Exception
      */
     public void testSaveRemoteCheckpointNoResponse() throws Exception {
+
+        HttpClientFactory mockHttpClientFactory = new HttpClientFactory() {
+            @Override
+            public HttpClient getHttpClient() {
+                return new MockHttpClient2() {
+
+                    @Override
+                    public HttpResponse fakeLocalDocumentUpdate(HttpUriRequest httpUriRequest) throws IOException, ClientProtocolException {
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        throw new IOException("Throw exception on purpose for purposes of testSaveRemoteCheckpointNoResponse()");
+                    }
+                };
+            }
+        };
+
+        // save a few fake docs that will be pushed
+        String docIdTimestamp = Long.toString(System.currentTimeMillis());
+        final String doc1Id = String.format("doc1-%s", docIdTimestamp);
+        String doc2Id = String.format("doc2-%s", docIdTimestamp);
+        addDocsToPush(doc1Id, doc2Id);
+
+        String dbUrlString = "http://fake.test-url.com:4984/fake/";
+        URL remote = new URL(dbUrlString);
+        String localLastSequenceBeforePush = database.lastSequenceWithRemoteURL(remote, true);
+
+        CBLReplicator replicator = new CBLPusher(database, remote, false, mockHttpClientFactory, server.getWorkExecutor());
+
+        CountDownLatch doneSignal = new CountDownLatch(1);
+        ReplicationObserver replicationObserver = new ReplicationObserver(doneSignal);
+        replicator.addObserver(replicationObserver);
+
+        replicator.start();
+
+        try {
+            Log.d(CBLDatabase.TAG, "call doneSignal.await()");
+            doneSignal.await();
+            Thread.sleep(500);
+            Log.d(CBLDatabase.TAG, "finished calling doneSignal.await()");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // since the local document on the remote database could not be updated (because our mock
+        // http client is designed to fail on that request), the database sequence should _not_
+        // have been updated in our local database.
+        String localLastSequence = database.lastSequenceWithRemoteURL(remote, true);
+
+        Log.d(CBLDatabase.TAG, "lastSequenceBeforePush " + localLastSequenceBeforePush);
+
+        Log.d(CBLDatabase.TAG, "localLastSequence " + localLastSequence);
+
+        Assert.assertEquals(localLastSequenceBeforePush, localLastSequence);
+
+
+    }
+
+    /**
+     * Test to make sure has desired behavior:
+     *
+     * - Attempt to save checkpoint on remote
+     * - Attempt succeeds
+     * - Local database is updated with that checkpoint
+     *
+     */
+    public void testSaveRemoteCheckpoint() throws Exception {
 
         HttpClientFactory mockHttpClientFactory = new HttpClientFactory() {
             @Override
@@ -498,21 +567,18 @@ public class Replicator extends CBLiteTestCase {
         try {
             Log.d(CBLDatabase.TAG, "call doneSignal.await()");
             doneSignal.await();
+            Thread.sleep(1000);
             Log.d(CBLDatabase.TAG, "finished calling doneSignal.await()");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        // since the local document on the remote database could not be updated (because our mock
-        // http client is designed to fail on that request), the database sequence should _not_
-        // have been updated in our local database.
         String localLastSequence = database.lastSequenceWithRemoteURL(remote, true);
-
         Log.d(CBLDatabase.TAG, "lastSequenceBeforePush " + localLastSequenceBeforePush);
-
         Log.d(CBLDatabase.TAG, "localLastSequence " + localLastSequence);
 
-        Assert.assertEquals(localLastSequenceBeforePush, localLastSequence);
+        Assert.assertNotNull(localLastSequence);
+        Assert.assertNotSame(localLastSequenceBeforePush, localLastSequence);
 
 
     }
