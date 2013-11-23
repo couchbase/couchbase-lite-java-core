@@ -319,7 +319,9 @@ public abstract class CBLReplicator extends Observable {
         notifyObservers();
 
         batcher = null;
-        db = null;
+
+        // commented per issue #108 - https://github.com/couchbase/couchbase-lite-android/issues/108#issuecomment-29043658
+        // db = null;
     }
 
     protected void login() {
