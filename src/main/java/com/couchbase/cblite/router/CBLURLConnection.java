@@ -1,8 +1,8 @@
 package com.couchbase.cblite.router;
 
-import android.util.Log;
 import com.couchbase.cblite.CBLBody;
 import com.couchbase.cblite.CBLDatabase;
+import com.couchbase.cblite.util.Log;
 
 import javax.net.ssl.SSLSession;
 import java.io.*;

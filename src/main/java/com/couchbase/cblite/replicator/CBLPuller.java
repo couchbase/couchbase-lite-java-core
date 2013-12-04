@@ -12,9 +12,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 
-import android.database.SQLException;
-import android.util.Log;
-
 import com.couchbase.cblite.CBLBody;
 import com.couchbase.cblite.CBLDatabase;
 import com.couchbase.cblite.CBLMisc;
@@ -25,11 +22,13 @@ import com.couchbase.cblite.CBLStatus;
 import com.couchbase.cblite.replicator.changetracker.CBLChangeTracker;
 import com.couchbase.cblite.replicator.changetracker.CBLChangeTrackerClient;
 import com.couchbase.cblite.replicator.changetracker.CBLChangeTracker.TDChangeTrackerMode;
+import com.couchbase.cblite.storage.SQLException;
 import com.couchbase.cblite.support.HttpClientFactory;
 import com.couchbase.cblite.support.CBLBatchProcessor;
 import com.couchbase.cblite.support.CBLBatcher;
 import com.couchbase.cblite.support.CBLRemoteRequestCompletionBlock;
 import com.couchbase.cblite.support.CBLSequenceMap;
+import com.couchbase.cblite.util.Log;
 
 public class CBLPuller extends CBLReplicator implements CBLChangeTrackerClient {
 
@@ -307,8 +306,16 @@ public class CBLPuller extends CBLReplicator implements CBLChangeTrackerClient {
         Log.i(CBLDatabase.TAG, this + " inserting " + revs.size() + " revisions...");
         //Log.v(CBLDatabase.TAG, String.format("%s inserting %s", this, revs));
 
-        /* Updating self.lastSequence is tricky. It needs to be the received sequence ID of the revision for which we've successfully received and inserted (or rejected) it and all previous received revisions. That way, next time we can start tracking remote changes from that sequence ID and know we haven't missed anything. */
-        /* FIX: The current code below doesn't quite achieve that: it tracks the latest sequence ID we've successfully processed, but doesn't handle failures correctly across multiple calls to -insertRevisions. I think correct behavior will require keeping an NSMutableIndexSet to track the fake-sequences of all processed revisions; then we can find the first missing index in that set and not advance lastSequence past the revision with that fake-sequence. */
+        /* Updating self.lastSequence is tricky. It needs to be the received sequence ID of
+        the revision for which we've successfully received and inserted (or rejected) it and
+        all previous received revisions. That way, next time we can start tracking remote
+        changes from that sequence ID and know we haven't missed anything. */
+        /* FIX: The current code below doesn't quite achieve that: it tracks the latest
+        sequence ID we've successfully processed, but doesn't handle failures correctly
+        across multiple calls to -insertRevisions. I think correct behavior will require
+        keeping an NSMutableIndexSet to track the fake-sequences of all processed revisions;
+        then we can find the first missing index in that set and not advance lastSequence
+        past the revision with that fake-sequence. */
         Collections.sort(revs, new Comparator<List<Object>>() {
 
             public int compare(List<Object> list1, List<Object> list2) {
