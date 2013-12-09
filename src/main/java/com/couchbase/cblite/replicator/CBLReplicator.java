@@ -49,6 +49,7 @@ public abstract class CBLReplicator extends Observable {
     protected boolean overdueForSave;
     protected boolean running;
     protected boolean active;
+    protected boolean stopping;
     protected Throwable error;
     protected String sessionID;
     protected CBLBatcher<CBLRevision> batcher;
@@ -311,7 +312,7 @@ public abstract class CBLReplicator extends Observable {
 
     public void stopped() {
         Log.d(CBLDatabase.TAG, toString() + " STOPPED");
-        running = false;
+        stopping = true;
         this.changesProcessed = this.changesTotal = 0;
         Log.d(CBLDatabase.TAG, this + " stopped() calling saveLastSequence()");
         saveLastSequence();
@@ -632,6 +633,10 @@ public abstract class CBLReplicator extends Observable {
                 }
                 else {
                     Log.d(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence().  lastSequenceSnapshot: " + lastSequenceSnapshot);
+                    if (stopping) {
+                        stopping = false;
+                        running = false;
+                    }
                 }
 
             }
