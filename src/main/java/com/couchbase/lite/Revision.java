@@ -20,11 +20,6 @@ public abstract class Revision {
     protected long sequence;
 
     /**
-     * The revisions's owning database.
-     */
-    protected Database database;
-
-    /**
      * The document this is a revision of
      */
     protected Document document;
@@ -60,7 +55,7 @@ public abstract class Revision {
      */
     @InterfaceAudience.Public
     public Database getDatabase() {
-        return database;
+        return document.getDatabase();
     }
 
     /**
@@ -131,7 +126,9 @@ public abstract class Revision {
     public List<String> getAttachmentNames() {
         Map<String, Object> attachmentMetadata = getAttachmentMetadata();
         ArrayList<String> result = new ArrayList<String>();
-        result.addAll(attachmentMetadata.keySet());
+        if (attachmentMetadata != null) {
+            result.addAll(attachmentMetadata.keySet());
+        }
         return result;
     }
 
@@ -161,10 +158,11 @@ public abstract class Revision {
      */
     @InterfaceAudience.Public
     public Attachment getAttachment(String name) {
-        Map<String, Object> attachmentMetadata = getAttachmentMetadata();
-        if (attachmentMetadata == null) {
+        Map<String, Object> attachmentsMetadata = getAttachmentMetadata();
+        if (attachmentsMetadata == null) {
             return null;
         }
+        Map<String, Object> attachmentMetadata = (Map<String, Object>) attachmentsMetadata.get(name);
         return new Attachment(this, name, attachmentMetadata);
     }
 

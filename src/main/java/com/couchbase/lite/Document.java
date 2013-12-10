@@ -83,7 +83,11 @@ public class Document {
      */
     @InterfaceAudience.Public
     public String getCurrentRevisionId() {
-        return getCurrentRevision().getId();
+        SavedRevision rev = getCurrentRevision();
+        if(rev == null){
+            return null;
+        }
+        return rev.getId();
     }
 
     /**
@@ -350,7 +354,7 @@ public class Document {
 
         // Process _attachments dict, converting CBLAttachments to dicts:
         Map<String, Object> attachments = null;
-        if (properties != null && properties.containsKey("__attachments")) {
+        if (properties != null && properties.containsKey("_attachments")) {
             attachments = (Map<String, Object>) properties.get("_attachments");
         }
         if (attachments != null && attachments.size() > 0) {

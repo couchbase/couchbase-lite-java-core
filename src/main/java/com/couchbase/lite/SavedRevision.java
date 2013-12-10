@@ -17,14 +17,13 @@
 
 package com.couchbase.lite;
 
-import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -75,7 +74,7 @@ public class SavedRevision extends Revision {
     @InterfaceAudience.Public
     public List<SavedRevision> getRevisionHistory() throws CouchbaseLiteException {
         List<SavedRevision> revisions = new ArrayList<SavedRevision>();
-        List<RevisionInternal> internalRevisions = database.getRevisionHistory(revisionInternal);
+        List<RevisionInternal> internalRevisions = getDatabase().getRevisionHistory(revisionInternal);
         for (RevisionInternal internalRevision : internalRevisions) {
             if (internalRevision.getRevId().equals(getId())) {
                 revisions.add(this);
@@ -162,14 +161,26 @@ public class SavedRevision extends Revision {
     @Override
     @InterfaceAudience.Public
     public String getParentRevisionId() {
-        return getDocument().getDatabase().getParentRevision(revisionInternal).getRevId();
+        RevisionInternal parRev= getDocument().getDatabase().getParentRevision(revisionInternal);
+        if ( parRev == null){
+            return null;
+        }
+        return parRev.getRevId();
+    }
+
+    @Override
+    @InterfaceAudience.Public
+    public long getSequence() {
+        long sequence = revisionInternal.getSequence();
+        if (sequence == 0 && loadProperties()) {
+            sequence = revisionInternal.getSequence();
+        }
+        return sequence;
     }
 
     boolean loadProperties() {
         try {
-            HashMap<String, Object> emptyProperties = new HashMap<String, Object>();
-            RevisionInternal loadRevision = new RevisionInternal(emptyProperties, database);
-            database.loadRevisionBody(loadRevision, EnumSet.noneOf(Database.TDContentOptions.class));
+            RevisionInternal loadRevision = getDatabase().loadRevisionBody(revisionInternal, EnumSet.noneOf(Database.TDContentOptions.class));
             if (loadRevision == null) {
                 Log.w(Database.TAG, "Couldn't load body/sequence of %s" + this);
                 return false;

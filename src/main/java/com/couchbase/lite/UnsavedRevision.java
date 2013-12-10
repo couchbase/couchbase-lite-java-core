@@ -23,14 +23,26 @@ public class UnsavedRevision extends Revision {
 
         super(document);
 
-        parentRevID = parentRevision.getId();
+        if (parentRevision == null) {
+            parentRevID = null;
+        } else {
+            parentRevID = parentRevision.getId();
+        }
 
-        Map<String, Object> parentRevisionProperties = parentRevision.getProperties();
+        Map<String, Object> parentRevisionProperties;
+
+        if (parentRevision == null) {
+            parentRevisionProperties = null;
+        } else {
+            parentRevisionProperties = parentRevision.getProperties();
+        }
 
         if (parentRevisionProperties == null) {
             properties = new HashMap<String, Object>();
             properties.put("_id", document.getId());
-            properties.put("_rev", parentRevID);
+            if (parentRevID != null) {
+                properties.put("_rev", parentRevID);
+            }
         }
         else {
             properties = new HashMap<String, Object>(parentRevisionProperties);
@@ -58,9 +70,6 @@ public class UnsavedRevision extends Revision {
     @Override
     @InterfaceAudience.Public
     public String getId() {
-        if (properties != null) {
-            return (String) properties.get("_id");
-        }
         return null;
     }
 
@@ -97,6 +106,9 @@ public class UnsavedRevision extends Revision {
     @InterfaceAudience.Public
     public void addAttachment(Attachment attachment, String name) {
         Map<String, Object> attachments =  (Map<String, Object>) properties.get("_attachments");
+        if (attachments == null) {
+            attachments = new HashMap<String, Object>();
+        }
         attachments.put(name, attachment);
         properties.put("_attachments", attachments);
         attachment.setName(name);

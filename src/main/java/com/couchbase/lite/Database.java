@@ -17,10 +17,6 @@
 
 package com.couchbase.lite;
 
-
-import android.text.TextUtils;
-import android.util.LruCache;
-
 import com.couchbase.lite.Database.TDContentOptions;
 import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
@@ -38,6 +34,8 @@ import com.couchbase.lite.support.Base64;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.LruCache;
+import com.couchbase.lite.util.TextUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -371,7 +369,11 @@ public class Database {
      */
     @InterfaceAudience.Public
     public Map<String, Object> getExistingLocalDocument(String documentId) {
-        return getLocalDocument(makeLocalDocumentId(documentId), null).getProperties();
+        RevisionInternal revInt = getLocalDocument(makeLocalDocumentId(documentId), null);
+        if (revInt == null) {
+            return null;
+        }
+        return revInt.getProperties();
     }
 
     /**
@@ -381,12 +383,27 @@ public class Database {
      */
     @InterfaceAudience.Public
     public boolean putLocalDocument(Map<String, Object> properties, String id) throws CouchbaseLiteException {
-        // TODO: there was some code in the iOS implementation equivalent that I did not know if needed
+        // TODO: the iOS implementation wraps this in a transaction, this should do the same.
+        id = makeLocalDocumentId(id);
         RevisionInternal prevRev = getLocalDocument(id, null);
         if (prevRev == null && properties == null) {
             return false;
         }
-        return putLocalRevision(prevRev, prevRev.getRevId()) != null;
+        boolean deleted = false;
+        if (properties == null) {
+            deleted = true;
+        }
+        RevisionInternal rev = new RevisionInternal(id, null, deleted, this);
+
+        if (properties != null) {
+            rev.setProperties(properties);
+        }
+
+        if (prevRev == null) {
+            return putLocalRevision(rev, null) != null;
+        } else {
+            return putLocalRevision(rev, prevRev.getRevId()) != null;
+        }
     }
 
     /**
@@ -394,6 +411,7 @@ public class Database {
      */
     @InterfaceAudience.Public
     public boolean deleteLocalDocument(String id) throws CouchbaseLiteException {
+        id = makeLocalDocumentId(id);
         RevisionInternal prevRev = getLocalDocument(id, null);
         if (prevRev == null) {
             return false;
@@ -1131,9 +1149,9 @@ public class Database {
         return getDocumentWithIDAndRev(docId, revId, EnumSet.of(TDContentOptions.TDNoBody)) != null;
     }
 
-    public void loadRevisionBody(RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) throws CouchbaseLiteException {
+    public RevisionInternal loadRevisionBody(RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) throws CouchbaseLiteException {
         if(rev.getBody() != null) {
-            return;
+            return rev;
         }
         assert((rev.getDocId() != null) && (rev.getRevId() != null));
 
@@ -1156,6 +1174,7 @@ public class Database {
                 cursor.close();
             }
         }
+        return rev;
     }
 
     public long getDocNumericID(String docId) {
@@ -3242,6 +3261,7 @@ public class Database {
                             Log.e(Database.TAG, "Error deleting revisions", e);
                             return false;
                         }
+                        revsPurged = new ArrayList<String>();
                         revsPurged.add("*");
                     } else {
                         // Iterate over all the revisions of the doc, in reverse sequence order.
@@ -3341,7 +3361,7 @@ public class Database {
 
     @InterfaceAudience.Private
     public RevisionInternal getLocalDocument(String docID, String revID) {
-
+        // docID already should contain "_local/" prefix
         RevisionInternal result = null;
         Cursor cursor = null;
         try {
