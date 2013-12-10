@@ -1502,7 +1502,8 @@ public class Database {
                 if(includeDocs) {
                     expandStoredJSONIntoRevisionWithAttachments(cursor.getBlob(5), rev, options.getContentOptions());
                 }
-                if((filter == null) || (filter.filter(rev, null))) {
+                Map<String, Object> paramsFixMe = null;  // TODO: these should not be null
+                if (runFilter(filter, paramsFixMe, rev)) {
                     changes.add(rev);
                 }
                 cursor.moveToNext();
@@ -1522,6 +1523,14 @@ public class Database {
         return changes;
     }
 
+    @InterfaceAudience.Private
+    public boolean runFilter(ReplicationFilter filter, Map<String, Object> paramsIgnored, RevisionInternal rev) {
+        if (filter == null) {
+            return true;
+        }
+        SavedRevision publicRev = new SavedRevision(this, rev);
+        return filter.filter(publicRev, null);
+    }
 
     public String getDesignDocFunction(String fnName, String key, List<String>outLanguageList) {
         String[] path = fnName.split("/");
@@ -1918,7 +1927,8 @@ public class Database {
             }
             args.put("type", contentType);
             args.put("revpos", revpos);
-            database.insert("attachments", null, args);
+            database.insert("attachments", null, args);  // TODO: this needs to look at the result code
+
         } catch (SQLException e) {
             Log.e(Database.TAG, "Error inserting attachment", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
@@ -2293,7 +2303,11 @@ public class Database {
                     }
                 }
 
-                Map<String,Object> attachments = (Map<String, Object>) oldRev.getProperties().get("_attachments");
+                Map<String, Object> oldRevProps = oldRev.getProperties();
+                Map<String,Object> attachments = null;
+                if (oldRevProps != null) {
+                    attachments = (Map<String, Object>) oldRevProps.get("_attachments");
+                }
                 if(contentStream == null && attachments != null && !attachments.containsKey(filename)) {
                     throw new CouchbaseLiteException(Status.NOT_FOUND);
                 }
