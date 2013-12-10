@@ -70,8 +70,8 @@ uploadArchives {
             }
 
             pom.version = System.properties['UPLOAD_VERSION_CBLITE']
-            pom.groupId = 'com.couchbase.cblite'
-            pom.artifactId = 'CBLite'
+            pom.groupId = 'com.couchbase.lite'
+            pom.artifactId = 'Manager'
             pom.project {
                 licenses {
                     license {
