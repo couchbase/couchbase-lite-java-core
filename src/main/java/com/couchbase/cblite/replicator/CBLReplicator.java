@@ -317,12 +317,8 @@ public abstract class CBLReplicator extends Observable {
         Log.d(CBLDatabase.TAG, this + " stopped() calling saveLastSequence()");
         saveLastSequence();
         setChanged();
-        notifyObservers();
 
         batcher = null;
-
-        // commented per issue #108 - https://github.com/couchbase/couchbase-lite-android/issues/108#issuecomment-29043658
-        // db = null;
     }
 
     protected void login() {
@@ -550,6 +546,7 @@ public abstract class CBLReplicator extends Observable {
         Log.d(CBLDatabase.TAG, this + " saveLastSequence() called");
         if (!lastSequenceChanged) {
             Log.d(CBLDatabase.TAG, this + " !lastSequenceChanged, returning");
+            setStopped();
             return;
         }
         if (savingCheckpoint) {
@@ -633,16 +630,23 @@ public abstract class CBLReplicator extends Observable {
                 }
                 else {
                     Log.d(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence().  lastSequenceSnapshot: " + lastSequenceSnapshot);
-                    if (stopping) {
-                        stopping = false;
-                        running = false;
-                    }
+                    setStopped();
                 }
 
             }
 
         });
 
+    }
+    
+    public void setStopped() {
+        if (stopping) {
+            Log.d(CBLDatabase.TAG, this + " stopping was set and checkpoint was saved. Setting running as false");    
+            stopping = false;
+            running = false;
+            notifyObservers();
+            db = null;
+        }
     }
 
     public Throwable getError() {
