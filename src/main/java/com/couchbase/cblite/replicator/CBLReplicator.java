@@ -300,6 +300,7 @@ public abstract class CBLReplicator extends Observable {
 
     public void stop() {
         if (!running) {
+            Log.d(CBLDatabase.TAG, toString() + " Not running...");
             return;
         }
         Log.d(CBLDatabase.TAG, toString() + " STOPPING...");
@@ -316,9 +317,6 @@ public abstract class CBLReplicator extends Observable {
         this.changesProcessed = this.changesTotal = 0;
         Log.d(CBLDatabase.TAG, this + " stopped() calling saveLastSequence()");
         saveLastSequence();
-        setChanged();
-
-        batcher = null;
     }
 
     protected void login() {
@@ -642,6 +640,8 @@ public abstract class CBLReplicator extends Observable {
     public void setStopped() {
         if (stopping) {
             Log.d(CBLDatabase.TAG, this + " stopping was set and checkpoint was saved. Setting running as false");    
+            setChanged();
+            batcher = null;
             stopping = false;
             running = false;
             notifyObservers();
