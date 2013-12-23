@@ -15,6 +15,10 @@ public class Query {
         NEVER, BEFORE, AFTER
     }
 
+    public enum AllDocsMode {
+        ALL_DOCS, INCLUDE_DELETED, SHOW_CONFLICTS, ONLY_CONFLICTS
+    }
+
     /**
      * The database that contains this view.
      */
@@ -70,6 +74,19 @@ public class Query {
     private IndexUpdateMode indexUpdateMode;
 
     /**
+     * Changes the behavior of a query created by -queryAllDocuments.
+     *
+     * - In mode kCBLAllDocs (the default), the query simply returns all non-deleted documents.
+     * - In mode kCBLIncludeDeleted, it also returns deleted documents.
+     * - In mode kCBLShowConflicts, the .conflictingRevisions property of each row will return the
+     *   conflicting revisions, if any, of that document.
+     * - In mode kCBLOnlyConflicts, _only_ documents in conflict will be returned.
+     *   (This mode is especially useful for use with a CBLLiveQuery, so you can be notified of
+     *   conflicts as they happen, i.e. when they're pulled in by a replication.)
+     */
+    private AllDocsMode allDocsMode;
+
+    /**
      * Should the rows be returned in descending key order? Default value is NO.
      */
     private boolean descending;
@@ -122,6 +139,7 @@ public class Query {
         limit = Integer.MAX_VALUE;
         mapOnly = (view != null && view.getReduce() == null);
         indexUpdateMode = IndexUpdateMode.NEVER;
+        allDocsMode = AllDocsMode.ALL_DOCS;
     }
 
     /**
@@ -152,6 +170,7 @@ public class Query {
         startKeyDocId = query.startKeyDocId;
         endKeyDocId = query.endKeyDocId;
         indexUpdateMode = query.indexUpdateMode;
+        allDocsMode = query.allDocsMode;
     }
 
     /**
@@ -244,6 +263,16 @@ public class Query {
     }
 
     @InterfaceAudience.Public
+    public AllDocsMode getAllDocsMode() {
+        return allDocsMode;
+    }
+
+    @InterfaceAudience.Public
+    public void setAllDocsMode(AllDocsMode allDocsMode) {
+        this.allDocsMode = allDocsMode;
+    }
+
+    @InterfaceAudience.Public
     public List<Object> getKeys() {
         return keys;
     }
@@ -285,12 +314,12 @@ public class Query {
 
     @InterfaceAudience.Public
     public boolean shouldIncludeDeleted() {
-        return includeDeleted;
+        return allDocsMode == AllDocsMode.INCLUDE_DELETED;
     }
 
     @InterfaceAudience.Public
-    public void setIncludeDeleted(boolean includeDeleted) {
-        this.includeDeleted = includeDeleted;
+    public void setIncludeDeleted(boolean includeDeletedParam) {
+        allDocsMode = (includeDeletedParam == true) ? AllDocsMode.INCLUDE_DELETED : AllDocsMode.ALL_DOCS;
     }
 
     /**
@@ -370,8 +399,8 @@ public class Query {
         queryOptions.setIncludeDocs(shouldPrefetch());
         queryOptions.setUpdateSeq(true);
         queryOptions.setInclusiveEnd(true);
-        queryOptions.setIncludeDeletedDocs(shouldIncludeDeleted());
         queryOptions.setStale(getIndexUpdateMode());
+        queryOptions.setAllDocsMode(getAllDocsMode());
         return queryOptions;
     }
 

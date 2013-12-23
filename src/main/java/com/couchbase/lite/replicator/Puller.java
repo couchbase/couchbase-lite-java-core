@@ -9,9 +9,6 @@ import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.replicator.changetracker.ChangeTracker;
-import com.couchbase.lite.replicator.changetracker.ChangeTracker.TDChangeTrackerMode;
-import com.couchbase.lite.replicator.changetracker.ChangeTrackerClient;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
@@ -90,13 +87,15 @@ public class Puller extends Replication implements ChangeTrackerClient {
         }
         pendingSequences = new SequenceMap();
         Log.w(Database.TAG, this + " starting ChangeTracker with since=" + lastSequence);
-        changeTracker = new ChangeTracker(remote, continuous ? TDChangeTrackerMode.LongPoll : TDChangeTrackerMode.OneShot, lastSequence, this);
+        changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, lastSequence, this);
         if(filterName != null) {
             changeTracker.setFilterName(filterName);
             if(filterParams != null) {
                 changeTracker.setFilterParams(filterParams);
             }
         }
+        changeTracker.setDocIDs(documentIDs);
+        changeTracker.setRequestHeaders(requestHeaders);
         if(!continuous) {
             asyncTaskStarted();
         }
@@ -172,16 +171,17 @@ public class Puller extends Replication implements ChangeTrackerClient {
     @Override
     public void changeTrackerStopped(ChangeTracker tracker) {
         Log.w(Database.TAG, this + ": ChangeTracker stopped");
-        //FIXME tracker doesnt have error right now
-//        if(error == null && tracker.getLastError() != null) {
-//            error = tracker.getLastError();
-//        }
+        if (error == null && tracker.getLastError() != null) {
+            error = tracker.getLastError();
+        }
         changeTracker = null;
         if(batcher != null) {
             batcher.flush();
         }
+        if (!isContinuous()) {
+            asyncTaskFinished(1);  // balances -asyncTaskStarted in -startChangeTracker
+        }
 
-        asyncTaskFinished(1);
     }
 
     @Override
@@ -417,6 +417,15 @@ public class Puller extends Replication implements ChangeTrackerClient {
             Log.w(Database.TAG, "Unable to serialize json", e);
         }
         return URLEncoder.encode(new String(json));
+    }
+
+    @InterfaceAudience.Private
+    boolean goOffline() {
+        if (!super.goOffline()) {
+            return false;
+        }
+        changeTracker.stop();
+        return true;
     }
 
 }

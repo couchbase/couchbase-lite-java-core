@@ -2,8 +2,10 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -175,6 +177,30 @@ public class QueryRow {
     }
 
     /**
+     * Returns all conflicting revisions of the document, or nil if the
+     * document is not in conflict.
+     *
+     * The first object in the array will be the default "winning" revision that shadows the others.
+     * This is only valid in an allDocuments query whose allDocsMode is set to Query.AllDocsMode.SHOW_CONFLICTS
+     * or Query.AllDocsMode.ONLY_CONFLICTS; otherwise it returns an empty list.
+     */
+    @InterfaceAudience.Public
+    public List<SavedRevision> getConflictingRevisions() {
+        Document doc = database.getDocument(sourceDocumentId);
+        Map<String, Object> valueTmp = (Map<String, Object>) value;
+        List<String> conflicts = (List<String>) valueTmp.get("_conflicts");
+        if (conflicts == null) {
+            conflicts = new ArrayList<String>();
+        }
+        List<SavedRevision> conflictingRevisions = new ArrayList<SavedRevision>();
+        for (String conflictRevisionId : conflicts) {
+            SavedRevision revision = doc.getRevision(conflictRevisionId);
+            conflictingRevisions.add(revision);
+        }
+        return conflictingRevisions;
+    }
+
+    /**
      * This is used implicitly by -[LiveQuery update] to decide whether the query result has changed
      * enough to notify the client. So it's important that it not give false positives, else the app
      * won't get notified of changes.
@@ -239,6 +265,8 @@ public class QueryRow {
         return result;
     }
 
-
-
+    @Override
+    public String toString() {
+        return asJSONDictionary().toString();
+    }
 }

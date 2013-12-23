@@ -17,7 +17,6 @@
 
 package com.couchbase.lite;
 
-import com.couchbase.lite.Database.TDContentOptions;
 import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
@@ -71,7 +70,7 @@ public class Database {
 
     private Map<String, View> views;
     private Map<String, ReplicationFilter> filters;
-    private Map<String, ValidationBlock> validations;
+    private Map<String, Validator> validations;
 
     private Map<String, BlobStoreWriter> pendingAttachmentsByDigest;
     private List<Replication> activeReplicators;
@@ -471,8 +470,8 @@ public class Database {
      * Note that validations are not persistent -- you have to re-register them on every launch.
      */
     @InterfaceAudience.Public
-    public ValidationBlock getValidation(String name) {
-        ValidationBlock result = null;
+    public Validator getValidation(String name) {
+        Validator result = null;
         if(validations != null) {
             result = validations.get(name);
         }
@@ -485,12 +484,12 @@ public class Database {
      * chance to reject it. (This includes incoming changes from a pull replication.)
      */
     @InterfaceAudience.Public
-    public void setValidation(String name, ValidationBlock validationBlock) {
+    public void setValidation(String name, Validator validator) {
         if(validations == null) {
-            validations = new HashMap<String, ValidationBlock>();
+            validations = new HashMap<String, Validator>();
         }
-        if (validationBlock != null) {
-            validations.put(name, validationBlock);
+        if (validator != null) {
+            validations.put(name, validator);
         }
         else {
             validations.remove(name);
@@ -599,7 +598,8 @@ public class Database {
      */
     @InterfaceAudience.Public
     public Replication getPushReplication(URL remote) {
-        return manager.replicationWithDatabase(this, remote, true, true, false);
+        final boolean continuous = false;
+        return new Pusher(this, remote, continuous, manager.getWorkExecutor());
     }
 
     /**
@@ -611,7 +611,8 @@ public class Database {
      */
     @InterfaceAudience.Public
     public Replication getPullReplication(URL remote) {
-        return manager.replicationWithDatabase(this, remote, false, true, false);
+        final boolean continuous = false;
+        return new Puller(this, remote, continuous, manager.getWorkExecutor());
     }
 
 
@@ -1150,7 +1151,7 @@ public class Database {
     }
 
     public RevisionInternal loadRevisionBody(RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) throws CouchbaseLiteException {
-        if(rev.getBody() != null) {
+        if(rev.getBody() != null && contentOptions == EnumSet.noneOf(Database.TDContentOptions.class) && rev.getSequence() != 0) {
             return rev;
         }
         assert((rev.getDocId() != null) && (rev.getRevId() != null));
@@ -1158,6 +1159,8 @@ public class Database {
         Cursor cursor = null;
         Status result = new Status(Status.NOT_FOUND);
         try {
+            // TODO: on ios this query is:
+            // TODO: "SELECT sequence, json FROM revs WHERE doc_id=? AND revid=? LIMIT 1"
             String sql = "SELECT sequence, json FROM revs, docs WHERE revid=? AND docs.docid=? AND revs.doc_id=docs.doc_id LIMIT 1";
             String[] args = { rev.getRevId(), rev.getDocId()};
             cursor = database.rawQuery(sql, args);
@@ -1568,7 +1571,6 @@ public class Database {
     }
 
 
-
     public List<QueryRow> queryViewNamed(String viewName, QueryOptions options, List<Long> outLastSequence) throws CouchbaseLiteException {
 
         long before = System.currentTimeMillis();
@@ -1618,9 +1620,6 @@ public class Database {
         return rows;
 
     }
-
-
-
 
     View makeAnonymousView() {
         for (int i=0; true; ++i) {
@@ -1696,6 +1695,7 @@ public class Database {
         if(options == null) {
             options = new QueryOptions();
         }
+        boolean includeDeletedDocs = (options.getAllDocsMode() == Query.AllDocsMode.INCLUDE_DELETED);
 
         long updateSeq = 0;
         if(options.isUpdateSeq()) {
@@ -1706,7 +1706,7 @@ public class Database {
         if (options.isIncludeDocs()) {
             sql.append(", json");
         }
-        if (options.isIncludeDeletedDocs()) {
+        if (includeDeletedDocs) {
             sql.append(", deleted");
         }
         sql.append(" FROM revs, docs WHERE");
@@ -1718,7 +1718,7 @@ public class Database {
             sql.append(String.format(" revs.doc_id IN (SELECT doc_id FROM docs WHERE docid IN (%s)) AND", commaSeperatedIds));
         }
         sql.append(" docs.doc_id = revs.doc_id AND current=1");
-        if (!options.isIncludeDeletedDocs()) {
+        if (!includeDeletedDocs) {
             sql.append(" AND deleted=0");
         }
         List<String> args = new ArrayList<String>();
@@ -1747,7 +1747,7 @@ public class Database {
                 String.format(
                         " ORDER BY docid %s, %s revid DESC LIMIT ? OFFSET ?",
                         (options.isDescending() ? "DESC" : "ASC"),
-                        (options.isIncludeDeletedDocs() ? "deleted ASC," : "")
+                        (includeDeletedDocs ? "deleted ASC," : "")
                 )
         );
 
@@ -1755,38 +1755,47 @@ public class Database {
         args.add(Integer.toString(options.getSkip()));
 
         Cursor cursor = null;
-        long lastDocID = 0;
-        int totalRows = 0;
         Map<String, QueryRow> docs = new HashMap<String, QueryRow>();
 
 
         try {
             cursor = database.rawQuery(sql.toString(), args.toArray(new String[args.size()]));
 
-            cursor.moveToNext();
+            boolean keepGoing = cursor.moveToNext();
 
-            while(!cursor.isAfterLast()) {
+            while(keepGoing) {
 
-                totalRows++;
                 long docNumericID = cursor.getLong(0);
-                if(docNumericID == lastDocID) {
-                    cursor.moveToNext();
-                    continue;
-                }
-                lastDocID = docNumericID;
-
                 String docId = cursor.getString(1);
                 String revId = cursor.getString(2);
                 long sequenceNumber = cursor.getLong(3);
-                boolean deleted = options.isIncludeDeletedDocs() && cursor.getInt(getDeletedColumnIndex(options))>0;
+                boolean deleted = includeDeletedDocs && cursor.getInt(getDeletedColumnIndex(options))>0;
                 Map<String, Object> docContents = null;
                 if (options.isIncludeDocs()) {
                     byte[] json = cursor.getBlob(4);
                     docContents = documentPropertiesFromJSON(json, docId, revId, deleted, sequenceNumber, options.getContentOptions());
                 }
+
+                // Iterate over following rows with the same doc_id -- these are conflicts.
+                // Skip them, but collect their revIDs if the 'conflicts' option is set:
+                List<String> conflicts = new ArrayList<String>();
+                while (((keepGoing = cursor.moveToNext()) == true) && cursor.getLong(0) == docNumericID) {
+                    if (options.getAllDocsMode() == Query.AllDocsMode.SHOW_CONFLICTS || options.getAllDocsMode() == Query.AllDocsMode.ONLY_CONFLICTS) {
+                        if (conflicts.isEmpty()) {
+                            conflicts.add(revId);
+                        }
+                        conflicts.add(cursor.getString(2));
+                    }
+                }
+
+                if (options.getAllDocsMode() == Query.AllDocsMode.ONLY_CONFLICTS && conflicts.isEmpty()) {
+                    continue;
+                }
+
                 Map<String, Object> value = new HashMap<String, Object>();
                 value.put("rev", revId);
-                if (options.isIncludeDeletedDocs()){
+                value.put("_conflicts", conflicts);
+                if (includeDeletedDocs){
                     value.put("deleted", (deleted ? true : null));
                 }
                 QueryRow change = new QueryRow(docId, sequenceNumber, docId, value, docContents);
@@ -1797,7 +1806,6 @@ public class Database {
                     rows.add(change);
                 }
 
-                cursor.moveToNext();
 
             }
 
@@ -1842,7 +1850,7 @@ public class Database {
         }
 
         result.put("rows", rows);
-        result.put("total_rows", totalRows);
+        result.put("total_rows", rows.size());
         result.put("offset", options.getSkip());
         if(updateSeq != 0) {
             result.put("update_seq", updateSeq);
@@ -1877,10 +1885,12 @@ public class Database {
                 }
                 // The document is in conflict if there are two+ result rows that are not deletions.
                 boolean hasNextResult = cursor.moveToNext();
-                boolean isNextDeleted = cursor.getInt(1)>0;
-                boolean isInConflict = !deleted && hasNextResult && isNextDeleted;
-                if (isInConflict) {
-                    outIsConflict.add(true);
+                if (hasNextResult) {
+                    boolean isNextDeleted = cursor.getInt(1)>0;
+                    boolean isInConflict = !deleted && hasNextResult && isNextDeleted;
+                    if (isInConflict) {
+                        outIsConflict.add(true);
+                    }
                 }
             }
 
@@ -2220,7 +2230,7 @@ public class Database {
                             attachmentFromProps.put("digest", attachmentObject.getBlobKey().base64Digest());
                         }
                     }
-                    attachmentFromProps.put(attachmentKey, attachmentFromProps);
+                    attachmentsFromProps.put(attachmentKey, attachmentFromProps);
                 }
             }
         }
@@ -2520,13 +2530,18 @@ public class Database {
         return json;
     }
 
-    public void notifyChange(RevisionInternal rev, URL source) {
+    public void notifyChange(RevisionInternal rev, RevisionInternal winningRev, URL source, boolean inConflict) {
 
         // TODO: it is currently sending one change at a time rather than batching them up
 
         boolean isExternalFixMe = false; // TODO: fix this to have a real value
 
-        DocumentChange change = DocumentChange.tempFactory(rev, source);
+        DocumentChange change = new DocumentChange(
+                rev,
+                winningRev,
+                inConflict,
+                source);
+
         List<DocumentChange> changes = new ArrayList<DocumentChange>();
         changes.add(change);
         ChangeEvent changeEvent = new ChangeEvent(this, isExternalFixMe, changes);
@@ -2588,34 +2603,61 @@ public class Database {
      *
      * This is what's invoked by a PUT or POST. As with those, the previous revision ID must be supplied when necessary and the call will fail if it doesn't match.
      *
-     * @param rev The revision to add. If the docID is null, a new UUID will be assigned. Its revID must be null. It must have a JSON body.
+     * @param oldRev The revision to add. If the docID is null, a new UUID will be assigned. Its revID must be null. It must have a JSON body.
      * @param prevRevId The ID of the revision to replace (same as the "?rev=" parameter to a PUT), or null if this is a new document.
      * @param allowConflict If false, an error status 409 will be returned if the insertion would create a conflict, i.e. if the previous revision already has a child.
      * @param resultStatus On return, an HTTP status code indicating success or failure.
      * @return A new RevisionInternal with the docID, revID and sequence filled in (but no body).
      */
     @SuppressWarnings("unchecked")
-    public RevisionInternal putRevision(RevisionInternal rev, String prevRevId, boolean allowConflict, Status resultStatus) throws CouchbaseLiteException {
+    public RevisionInternal putRevision(RevisionInternal oldRev, String prevRevId, boolean allowConflict, Status resultStatus) throws CouchbaseLiteException {
         // prevRevId is the rev ID being replaced, or nil if an insert
-        String docId = rev.getDocId();
-        boolean deleted = rev.isDeleted();
-        if((rev == null) || ((prevRevId != null) && (docId == null)) || (deleted && (docId == null))
+        String docId = oldRev.getDocId();
+        boolean deleted = oldRev.isDeleted();
+        if((oldRev == null) || ((prevRevId != null) && (docId == null)) || (deleted && (docId == null))
                 || ((docId != null) && !isValidDocumentId(docId))) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
         beginTransaction();
         Cursor cursor = null;
+        boolean inConflict = false;
+        RevisionInternal winningRev = null;
+        RevisionInternal newRev = null;
 
         //// PART I: In which are performed lookups and validations prior to the insert...
 
         long docNumericID = (docId != null) ? getDocNumericID(docId) : 0;
         long parentSequence = 0;
+        String oldWinningRevID = null;
+
         try {
+
+            boolean oldWinnerWasDeletion = false;
+            boolean wasConflicted = false;
+            if (docNumericID > 0) {
+                List<Boolean> outIsDeleted = new ArrayList<Boolean>();
+                List<Boolean> outIsConflict = new ArrayList<Boolean>();
+                try {
+                    oldWinningRevID = winningRevIDOfDoc(docNumericID, outIsDeleted, outIsConflict);
+                    if (outIsDeleted.size() > 0) {
+                        oldWinnerWasDeletion = true;
+                    }
+                    if (outIsConflict.size() > 0) {
+                        wasConflicted = true;
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            }
+
             if(prevRevId != null) {
                 // Replacing: make sure given prevRevID is current & find its sequence number:
                 if(docNumericID <= 0) {
-                    throw new CouchbaseLiteException(Status.NOT_FOUND);
+                    String msg = String.format("No existing revision found with doc id: %s", docId);
+                    throw new CouchbaseLiteException(msg ,Status.NOT_FOUND);
                 }
 
                 String[] args = {Long.toString(docNumericID), prevRevId};
@@ -2633,17 +2675,19 @@ public class Database {
                 if(parentSequence == 0) {
                     // Not found: either a 404 or a 409, depending on whether there is any current revision
                     if(!allowConflict && existsDocumentWithIDAndRev(docId, null)) {
-                        throw new CouchbaseLiteException(Status.CONFLICT);
+                        String msg = String.format("Conflicts not allowed and there is already an existing doc with id: %s", docId);
+                        throw new CouchbaseLiteException(msg, Status.CONFLICT);
                     }
                     else {
-                        throw new CouchbaseLiteException(Status.NOT_FOUND);
+                        String msg = String.format("No existing revision found with doc id: %s", docId);
+                        throw new CouchbaseLiteException(msg, Status.NOT_FOUND);
                     }
                 }
 
                 if(validations != null && validations.size() > 0) {
                     // Fetch the previous revision and validate the new one against it:
                     RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false, this);
-                    validateRevision(rev, prevRev);
+                    validateRevision(oldRev, prevRev);
                 }
 
                 // Make replaced rev non-current:
@@ -2664,7 +2708,7 @@ public class Database {
                 }
 
                 // Validate:
-                validateRevision(rev, null);
+                validateRevision(oldRev, null);
 
                 if(docId != null) {
                     // Inserting first revision, with docID given (PUT):
@@ -2706,35 +2750,47 @@ public class Database {
                 }
             }
 
+            // There may be a conflict if (a) the document was already in conflict, or
+            // (b) a conflict is created by adding a non-deletion child of a non-winning rev.
+            inConflict = wasConflicted ||
+                    (!deleted &&
+                            prevRevId != null &&
+                            oldWinningRevID != null &&
+                            !prevRevId.equals(oldWinningRevID));
+
+
             //// PART II: In which insertion occurs...
 
             // Get the attachments:
-            Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(rev);
+            Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(oldRev);
 
             // Bump the revID and update the JSON:
             String newRevId = generateNextRevisionID(prevRevId);
             byte[] data = null;
-            if(!rev.isDeleted()) {
-                data = encodeDocumentJSON(rev);
+            if(!oldRev.isDeleted()) {
+                data = encodeDocumentJSON(oldRev);
                 if(data == null) {
                     // bad or missing json
                     throw new CouchbaseLiteException(Status.BAD_REQUEST);
                 }
             }
 
-            rev = rev.copyWithDocID(docId, newRevId);
-            stubOutAttachmentsInRevision(attachments, rev);
+            newRev = oldRev.copyWithDocID(docId, newRevId);
+            stubOutAttachmentsInRevision(attachments, newRev);
 
             // Now insert the rev itself:
-            long newSequence = insertRevision(rev, docNumericID, parentSequence, true, data);
+            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, data);
             if(newSequence == 0) {
                 return null;
             }
 
             // Store any attachments:
             if(attachments != null) {
-                processAttachmentsForRevision(attachments, rev, parentSequence);
+                processAttachmentsForRevision(attachments, newRev, parentSequence);
             }
+
+            // Figure out what the new winning rev ID is:
+            winningRev = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion, newRev);
 
             // Success!
             if(deleted) {
@@ -2755,8 +2811,46 @@ public class Database {
         }
 
         //// EPILOGUE: A change notification is sent...
-        notifyChange(rev, null);
-        return rev;
+        notifyChange(newRev, winningRev, null, inConflict);
+        return newRev;
+    }
+
+    RevisionInternal winner(long docNumericID,
+                            String oldWinningRevID,
+                            boolean oldWinnerWasDeletion,
+                            RevisionInternal newRev) throws CouchbaseLiteException {
+
+
+        if (oldWinningRevID == null) {
+            return newRev;
+        }
+        String newRevID = newRev.getRevId();
+        if (!newRev.isDeleted()) {
+            if (oldWinnerWasDeletion ||
+                    RevisionInternal.CBLCompareRevIDs(newRevID, oldWinningRevID) > 0) {
+                return newRev; // this is now the winning live revision
+            }
+        } else if (oldWinnerWasDeletion) {
+            if (RevisionInternal.CBLCompareRevIDs(newRevID, oldWinningRevID) > 0) {
+                return newRev;  // doc still deleted, but this beats previous deletion rev
+            }
+        } else {
+            // Doc was alive. How does this deletion affect the winning rev ID?
+            List<Boolean> outIsDeleted = new ArrayList<Boolean>();
+            List<Boolean> outIsConflict = new ArrayList<Boolean>();
+            String winningRevID = winningRevIDOfDoc(docNumericID, outIsDeleted, outIsConflict);
+            if (!winningRevID.equals(oldWinningRevID)) {
+                if (winningRevID.equals(newRev.getRevId())) {
+                    return newRev;
+                } else {
+                    boolean deleted = false;
+                    RevisionInternal winningRev = new RevisionInternal(newRev.getDocId(), winningRevID, deleted, this);
+                    return winningRev;
+                }
+            }
+        }
+        return null; // no change
+
     }
 
     /**
@@ -2946,22 +3040,23 @@ public class Database {
         }
 
         // Notify and return:
-        notifyChange(rev, source);
+        boolean inConflict = false;  // TODO: can we be in conflict here?
+        RevisionInternal winningRev = null;  // TODO: what should we do here?
+        notifyChange(rev, winningRev, source, inConflict);
     }
 
     /** VALIDATION **/
-
-
 
     public void validateRevision(RevisionInternal newRev, RevisionInternal oldRev) throws CouchbaseLiteException {
         if(validations == null || validations.size() == 0) {
             return;
         }
-        TDValidationContextImpl context = new TDValidationContextImpl(this, oldRev);
+        ValidationContextImpl context = new ValidationContextImpl(this, oldRev, newRev);
+        SavedRevision publicRev = new SavedRevision(this, newRev);
         for (String validationName : validations.keySet()) {
-            ValidationBlock validation = getValidation(validationName);
-            if(!validation.validate(newRev, context)) {
-                throw new CouchbaseLiteException(context.getErrorType().getCode());
+            Validator validation = getValidation(validationName);
+            if(!validation.validate(publicRev, context)) {
+                throw new CouchbaseLiteException(context.getRejectMessage(), Status.FORBIDDEN);
             }
         }
     }
@@ -3482,48 +3577,85 @@ public class Database {
 
 }
 
-class TDValidationContextImpl implements ValidationContext {
+class ValidationContextImpl implements ValidationContext {
 
     private Database database;
     private RevisionInternal currentRevision;
-    private Status errorType;
-    private String errorMessage;
+    private RevisionInternal newRev;
+    private String rejectMessage;
+    private List<String> changedKeys;
 
-    public TDValidationContextImpl(Database database, RevisionInternal currentRevision) {
+    ValidationContextImpl(Database database, RevisionInternal currentRevision, RevisionInternal newRev) {
         this.database = database;
         this.currentRevision = currentRevision;
-        this.errorType = new Status(Status.FORBIDDEN);
-        this.errorMessage = "invalid document";
+        this.newRev = newRev;
     }
 
-    @Override
-    public RevisionInternal getCurrentRevision() throws CouchbaseLiteException {
-        if(currentRevision != null) {
-            database.loadRevisionBody(currentRevision, EnumSet.noneOf(TDContentOptions.class));
+    RevisionInternal getCurrentRevisionInternal() {
+        if (currentRevision != null) {
+            try {
+                currentRevision = database.loadRevisionBody(currentRevision, EnumSet.noneOf(Database.TDContentOptions.class));
+            } catch (CouchbaseLiteException e) {
+                throw new RuntimeException(e);
+            }
         }
         return currentRevision;
     }
 
     @Override
-    public Status getErrorType() {
-        return errorType;
+    public SavedRevision getCurrentRevision() {
+        final RevisionInternal cur = getCurrentRevisionInternal();
+        return cur != null ? new SavedRevision(database, cur) : null;
     }
 
     @Override
-    public void setErrorType(Status status) {
-        this.errorType = status;
+    public List<String> getChangedKeys() {
+        if (changedKeys == null) {
+            changedKeys = new ArrayList<String>();
+            Map<String, Object> cur = getCurrentRevision().getProperties();
+            Map<String, Object> nuu = newRev.getProperties();
+            for (String key : cur.keySet()) {
+                if (!cur.get(key).equals(nuu.get(key)) && !key.equals("_rev")) {
+                    changedKeys.add(key);
+                }
+            }
+            for (String key : nuu.keySet()) {
+                if (cur.get(key) == null && !key.equals("_rev") && !key.equals("_id")) {
+                    changedKeys.add(key);
+                }
+            }
+        }
+        return changedKeys;
     }
 
     @Override
-    public String getErrorMessage() {
-        return errorMessage;
+    public void reject() {
+        if (rejectMessage == null) {
+            rejectMessage = "invalid document";
+        }
     }
 
     @Override
-    public void setErrorMessage(String message) {
-        this.errorMessage = message;
+    public void reject(String message) {
+        if (rejectMessage == null) {
+            rejectMessage = message;
+        }
     }
 
+    @Override
+    public boolean validateChanges(ChangeValidator changeValidator) {
+        Map<String, Object> cur = getCurrentRevision().getProperties();
+        Map<String, Object> nuu = newRev.getProperties();
+        for (String key : getChangedKeys()) {
+            if (!changeValidator.validateChange(key, cur.get(key), nuu.get(key))) {
+                reject(String.format("Illegal change to '%s' property", key));
+                return false;
+            }
+        }
+        return true;
+    }
 
-
+    String getRejectMessage() {
+        return rejectMessage;
+    }
 }

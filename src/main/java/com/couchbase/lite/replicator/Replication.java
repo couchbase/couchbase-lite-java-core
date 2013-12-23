@@ -16,6 +16,7 @@ import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Log;
 
@@ -26,6 +27,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,21 +58,28 @@ public abstract class Replication {
     protected int asyncTaskCount;
     private int completedChangesCount;
     private int changesCount;
+    protected boolean online;
     protected final HttpClientFactory clientFactory;
     private List<ChangeListener> changeListeners;
+    protected List<String> documentIDs;
 
     protected Map<String, Object> filterParams;
     protected ExecutorService remoteRequestExecutor;
     protected Authorizer authorizer;
+    private ReplicationStatus status = ReplicationStatus.REPLICATION_STOPPED;
+    protected Map<String, Object> requestHeaders;
 
     protected static final int PROCESSOR_DELAY = 500;
     protected static final int INBOX_CAPACITY = 100;
+
+    public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
+    public static final String CHANNELS_QUERY_PARAM = "channels";
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
 
     /**
      * Options for what metadata to include in document bodies
      */
-    public enum ReplicationMode {
+    public enum ReplicationStatus {
         REPLICATION_STOPPED,  /**< The replication is finished or hit a fatal error. */
         REPLICATION_OFFLINE,  /**< The remote host is currently unreachable. */
         REPLICATION_IDLE,     /**< Continuous replication is caught up and waiting for more changes.*/
@@ -98,6 +107,8 @@ public abstract class Replication {
         this.remote = remote;
         this.remoteRequestExecutor = Executors.newCachedThreadPool();
         this.changeListeners = new ArrayList<ChangeListener>();
+        this.online = true;
+        this.requestHeaders = new HashMap<String, Object>();
 
         if (remote.getQuery() != null && !remote.getQuery().isEmpty()) {
 
@@ -246,7 +257,15 @@ public abstract class Replication {
      */
     @InterfaceAudience.Public
     public List<String> getChannels() {
-        throw new UnsupportedOperationException();
+        if (filterParams == null || filterParams.isEmpty()) {
+            return new ArrayList<String>();
+        }
+        String params = (String) filterParams.get(CHANNELS_QUERY_PARAM);
+        if (!isPull() || getFilter() == null || !getFilter().equals(BY_CHANNEL_FILTER_NAME) || params == null || params.isEmpty()) {
+            return new ArrayList<String>();
+        }
+        String[] paramsArray = params.split(",");
+        return new ArrayList<String>(Arrays.asList(paramsArray));
     }
 
     /**
@@ -254,7 +273,19 @@ public abstract class Replication {
      */
     @InterfaceAudience.Public
     public void setChannels(List<String> channels) {
-        throw new UnsupportedOperationException();
+        if (channels != null && !channels.isEmpty()) {
+            if (!isPull()) {
+                Log.w(Database.TAG, "filterChannels can only be set in pull replications");
+                return;
+            }
+            setFilter(BY_CHANNEL_FILTER_NAME);
+            Map<String, Object> filterParams = new HashMap<String, Object>();
+            filterParams.put(CHANNELS_QUERY_PARAM, TextUtils.join(",", channels));
+            setFilterParams(filterParams);
+        } else if (getFilter().equals(BY_CHANNEL_FILTER_NAME)) {
+            setFilter(null);
+            setFilterParams(null);
+        }
     }
 
     /**
@@ -262,16 +293,18 @@ public abstract class Replication {
      * Should map strings (header names) to strings.
      */
     @InterfaceAudience.Public
-    public Map<String, String> getHeaders() {
-        throw new UnsupportedOperationException();
+    public Map<String, Object> getHeaders() {
+        return requestHeaders;
     }
 
     /**
      * Set Extra HTTP headers to be sent in all requests to the remote server.
      */
     @InterfaceAudience.Public
-    public void setHeaders(Map<String, String> headers) {
-        throw new UnsupportedOperationException();
+    public void setHeaders(Map<String, Object> requestHeadersParam) {
+        if (requestHeadersParam != null && !requestHeaders.equals(requestHeadersParam)) {
+            requestHeaders = requestHeadersParam;
+        }
     }
 
     /**
@@ -279,7 +312,7 @@ public abstract class Replication {
      */
     @InterfaceAudience.Public
     public List<String> getDocsIds() {
-        throw new UnsupportedOperationException();
+        return documentIDs;
     }
 
     /**
@@ -287,15 +320,15 @@ public abstract class Replication {
      */
     @InterfaceAudience.Public
     public void setDocIds(List<String> docIds) {
-        throw new UnsupportedOperationException();
+        documentIDs = docIds;
     }
 
     /**
      * The replication's current state, one of {stopped, offline, idle, active}.
      */
     @InterfaceAudience.Public
-    public ReplicationMode getMode() {
-        throw new UnsupportedOperationException();
+    public ReplicationStatus getStatus() {
+        return status;
     }
 
     /**
@@ -338,6 +371,7 @@ public abstract class Replication {
      */
     @InterfaceAudience.Public
     public void start() {
+
         if (running) {
             return;
         }
@@ -347,6 +381,7 @@ public abstract class Replication {
         lastSequence = null;
 
         checkSession();
+
     }
 
     /**
@@ -370,7 +405,9 @@ public abstract class Replication {
      */
     @InterfaceAudience.Public
     public void restart() {
-        throw new UnsupportedOperationException();
+        // TODO: add the "started" flag and check it here
+        stop();
+        start();
     }
 
     /**
@@ -503,6 +540,7 @@ public abstract class Replication {
     }
 
     private void notifyChangeListeners() {
+        updateProgress();
         for (ChangeListener listener : changeListeners) {
             ChangeEvent changeEvent = new ChangeEvent(this);
             listener.changed(changeEvent);
@@ -546,6 +584,7 @@ public abstract class Replication {
 
     public synchronized void asyncTaskFinished(int numTasks) {
         this.asyncTaskCount -= numTasks;
+        assert(asyncTaskCount >= 0);
         if (asyncTaskCount == 0) {
             if (!continuous) {
                 stopped();
@@ -589,7 +628,7 @@ public abstract class Replication {
     }
 
     public void sendAsyncRequest(String method, URL url, Object body, RemoteRequestCompletionBlock onCompletion) {
-        RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, onCompletion);
+        RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
         remoteRequestExecutor.execute(request);
     }
 
@@ -599,7 +638,15 @@ public abstract class Replication {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
 
-            RemoteMultipartDownloaderRequest request = new RemoteMultipartDownloaderRequest(workExecutor, clientFactory, method, url, body, db, onCompletion);
+            RemoteMultipartDownloaderRequest request = new RemoteMultipartDownloaderRequest(
+                    workExecutor,
+                    clientFactory,
+                    method,
+                    url,
+                    body,
+                    db,
+                    getHeaders(),
+                    onCompletion);
             remoteRequestExecutor.execute(request);
         } catch (MalformedURLException e) {
             Log.e(Database.TAG, "Malformed URL for async request", e);
@@ -614,7 +661,14 @@ public abstract class Replication {
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException(e);
         }
-        RemoteMultipartRequest request = new RemoteMultipartRequest(workExecutor, clientFactory, method, url, multiPartEntity, onCompletion);
+        RemoteMultipartRequest request = new RemoteMultipartRequest(
+                workExecutor,
+                clientFactory,
+                method,
+                url,
+                multiPartEntity,
+                getHeaders(),
+                onCompletion);
         remoteRequestExecutor.execute(request);
     }
 
@@ -734,6 +788,32 @@ public abstract class Replication {
 
         });
         db.setLastSequence(lastSequence, remote, !isPull());
+    }
+
+    @InterfaceAudience.Private
+    boolean goOffline() {
+        if (!online) {
+            return false;
+        }
+        online = false;
+        // TODO: [self stopRemoteRequests]; - remoteRequestExecutor.shutdown(); or remoteRequestExecutor.shutdownNow();
+        updateProgress();
+        return true;
+    }
+
+    @InterfaceAudience.Private
+    void updateProgress() {
+        if (!isRunning()) {
+            status = ReplicationStatus.REPLICATION_STOPPED;
+        } else if (!online) {
+            status = ReplicationStatus.REPLICATION_OFFLINE;
+        } else {
+            if (active) {
+                status = ReplicationStatus.REPLICATION_ACTIVE;
+            } else {
+                status = ReplicationStatus.REPLICATION_IDLE;
+            }
+        }
     }
 
     /**

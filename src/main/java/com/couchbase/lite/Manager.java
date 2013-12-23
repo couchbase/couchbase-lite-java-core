@@ -69,20 +69,19 @@ public class Manager {
 
     /**
      * Constructor
+     *
+     * @throws java.lang.SecurityException - Runtime exception that can be thrown by File.mkdirs()
      */
     @InterfaceAudience.Public
-    public Manager(File directoryFile, ManagerOptions options) {
+    public Manager(File directoryFile, ManagerOptions options) throws IOException {
         this.directoryFile = directoryFile;
         this.options = (options != null) ? options : DEFAULT_OPTIONS;
         this.databases = new HashMap<String, Database>();
         this.replications = new ArrayList<Replication>();
 
-        //create the directory, but don't fail if it already exists
-        if(!directoryFile.exists()) {
-            boolean result = directoryFile.mkdir();
-            if(!result) {
-                throw new RuntimeException("Unable to create directory " + directoryFile);
-            }
+        directoryFile.mkdirs();
+        if (!directoryFile.isDirectory()) {
+            throw new IOException(String.format("Unable to create directory for: %s", directoryFile));
         }
 
         upgradeOldDatabaseFiles(directoryFile);
@@ -209,22 +208,21 @@ public class Manager {
      * you should first check .exists to avoid replacing the database if it exists already. The
      * canned database would have been copied into your app bundle at build time.
      *
-     * @param databaseName  The name of the database to replace.
-     * @param databasePath  Path of the database file that should replace it.
-     * @param attachmentsPath  Path of the associated attachments directory, or nil if there are no attachments.
+     * @param databaseName  The name of the target Database to replace or create.
+     * @param databaseFile  Path of the source Database file.
+     * @param attachmentsDirectory  Path of the associated Attachments directory, or null if there are no attachments.
      **/
     @InterfaceAudience.Public
-    public void replaceDatabase(String databaseName, String databasePath, String attachmentsPath) throws IOException {
+    public void replaceDatabase(String databaseName, File databaseFile, File attachmentsDirectory) throws IOException {
         Database database = getDatabase(databaseName);
         String dstAttachmentsPath = database.getAttachmentStorePath();
-        File sourceFile = new File(databasePath);
         File destFile = new File(database.getPath());
-        FileDirUtils.copyFile(sourceFile, destFile);
+        FileDirUtils.copyFile(databaseFile, destFile);
         File attachmentsFile = new File(dstAttachmentsPath);
         FileDirUtils.deleteRecursive(attachmentsFile);
         attachmentsFile.mkdirs();
-        if(attachmentsPath != null) {
-            FileDirUtils.copyFolder(new File(attachmentsPath), attachmentsFile);
+        if(attachmentsDirectory != null) {
+            FileDirUtils.copyFolder(attachmentsDirectory, attachmentsFile);
         }
         database.replaceUUIDs();
     }
@@ -336,11 +334,13 @@ public class Manager {
         }
 
         Replication replicator = null;
+        final boolean continuous = false;
+
         if (push) {
-            replicator = new Pusher(db, remote, true, getWorkExecutor());
+            replicator = new Pusher(db, remote, continuous, getWorkExecutor());
         }
         else {
-            replicator = new Puller(db, remote, true, getWorkExecutor());
+            replicator = new Puller(db, remote, continuous, getWorkExecutor());
         }
 
         replications.add(replicator);
@@ -355,6 +355,9 @@ public class Manager {
 
     @InterfaceAudience.Private
     public Replication getReplicator(Map<String,Object> properties) throws CouchbaseLiteException {
+
+        // TODO: in the iOS equivalent of this code, there is: {@"doc_ids", _documentIDs}) - write unit test that detects this bug
+        // TODO: ditto for "headers"
 
         Authorizer authorizer = null;
         Replication repl = null;
