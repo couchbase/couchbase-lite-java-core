@@ -57,14 +57,20 @@ public class Router implements Database.ChangeListener {
     private boolean waiting = false;
     private ReplicationFilter changesFilter;
     private boolean longpoll = false;
+    private RequestAuthorization requestAuthorization = null;
 
     public static String getVersionString() {
         return Manager.VERSION_STRING;
     }
 
     public Router(Manager manager, URLConnection connection) {
+        this(manager, connection, null);
+    }
+
+    public Router(Manager manager, URLConnection connection, RequestAuthorization requestAuthorization) {
         this.manager = manager;
         this.connection = connection;
+        this.requestAuthorization = requestAuthorization;
     }
 
     public void setCallbackBlock(RouterCallbackBlock callbackBlock) {
@@ -263,7 +269,23 @@ public class Router implements Database.ChangeListener {
         }
     }
 
+    private void SendErrorResponseNoResponseBody(int statusCode) {
+        assert statusCode >= 400 && statusCode < 600;
+        connection.setResponseCode(statusCode);
+        try {
+            connection.getResponseOutputStream().close();
+        } catch (IOException e) {
+            Log.e(Database.TAG, "Error closing empty output stream");
+        }
+        sendResponse();
+    }
+
     public void start() {
+        if (requestAuthorization != null && requestAuthorization.Authorize(manager, connection) == false) {
+            sendResponse();
+            return;
+        }
+
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
 
         // We're going to map the request into a method call using reflection based on the method and path.
@@ -277,20 +299,14 @@ public class Router implements Database.ChangeListener {
         // First interpret the components of the request:
         List<String> path = splitPath(connection.getURL());
         if(path == null) {
-            connection.setResponseCode(Status.BAD_REQUEST);
-            try {
-                connection.getResponseOutputStream().close();
-            } catch (IOException e) {
-                Log.e(Database.TAG, "Error closing empty output stream");
-            }
-            sendResponse();
+            SendErrorResponseNoResponseBody(Status.BAD_REQUEST);
             return;
         }
 
         int pathLen = path.size();
         if(pathLen > 0) {
             String dbName = path.get(0);
-            if(dbName.startsWith("_")) {
+            if(dbName.startsWith("_") || "favicon.ico".equals(dbName)) {
                 message += dbName;  // special root path, like /_all_dbs
             } else {
                 message += "_Database";
@@ -310,7 +326,6 @@ public class Router implements Database.ChangeListener {
                         sendResponse();
                         return;
                     }
-
                 }
             }
         } else {
@@ -323,39 +338,21 @@ public class Router implements Database.ChangeListener {
             // Make sure database exists, then interpret doc name:
             Status status = openDB();
             if(!status.isSuccessful()) {
-                connection.setResponseCode(status.getCode());
-                try {
-                    connection.getResponseOutputStream().close();
-                } catch (IOException e) {
-                    Log.e(Database.TAG, "Error closing empty output stream");
-                }
-                sendResponse();
+                SendErrorResponseNoResponseBody(status.getCode());
                 return;
             }
             String name = path.get(1);
             if(!name.startsWith("_")) {
                 // Regular document
                 if(!Database.isValidDocumentId(name)) {
-                    connection.setResponseCode(Status.BAD_REQUEST);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(Database.TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    SendErrorResponseNoResponseBody(Status.BAD_REQUEST);
                     return;
                 }
                 docID = name;
             } else if("_design".equals(name) || "_local".equals(name)) {
                 // "_design/____" and "_local/____" are document names
                 if(pathLen <= 2) {
-                    connection.setResponseCode(Status.NOT_FOUND);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(Database.TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    SendErrorResponseNoResponseBody(Status.NOT_FOUND);
                     return;
                 }
                 docID = name + "/" + path.get(2);
@@ -431,7 +428,7 @@ public class Router implements Database.ChangeListener {
                 status = (Status)m.invoke(this, db, docID, attachmentName);
             } catch (Exception e) {
                 //default status is internal server error
-                Log.e(Database.TAG, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
+                Log.e(Database.TAG, "Router attempted do_UNKNOWN fallback, but that threw an exception", e);
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("error", "not_found");
                 result.put("reason", "Router unable to route request");
@@ -789,8 +786,6 @@ public class Router implements Database.ChangeListener {
             connection.setResponseBody(new Body(result));
             return new Status(Status.BAD_REQUEST);
         }
-
-
     }
 
     public Status do_POST_persona_assertion(Database _db, String _docID, String _attachmentName) {
@@ -825,9 +820,6 @@ public class Router implements Database.ChangeListener {
             connection.setResponseBody(new Body(result));
             return new Status(Status.BAD_REQUEST);
         }
-
-
-
     }
 
     public Status do_POST_Document_bulk_docs(Database _db, String _docID, String _attachmentName) {

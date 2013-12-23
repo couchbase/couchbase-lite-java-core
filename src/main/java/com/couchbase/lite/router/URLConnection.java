@@ -5,33 +5,23 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.util.Log;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import javax.net.ssl.SSLSession;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.ProtocolException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 
 public class URLConnection extends HttpURLConnection {
-
+	private static final String unsupportedOperationMessage = "This method is not supported as this object just represents a request, it doesn't actually bind on the wire to anything.";
     private Header resHeader;
     private boolean sentRequest = false;
     private ByteArrayOutputStream os;
     private Body responseBody;
     private boolean chunked = false;
+    private SSLSession sslSession = null;
 
     private HashMap<String, List<String>> requestProperties = new HashMap<String, List<String>>();
 
@@ -57,19 +47,17 @@ public class URLConnection extends HttpURLConnection {
 
     @Override
     public void connect() throws IOException {
-
+        throw new UnsupportedOperationException(unsupportedOperationMessage);
     }
 
     @Override
     public void disconnect() {
-        // TODO Auto-generated method stub
-
+        throw new UnsupportedOperationException(unsupportedOperationMessage);
     }
 
     @Override
     public boolean usingProxy() {
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException(unsupportedOperationMessage);
     }
 
     @Override
@@ -150,7 +138,7 @@ public class URLConnection extends HttpURLConnection {
         return resHeader.getFieldMap();
     }
 
-    Header getResHeader() {
+    public Header getResHeader() {
         if(resHeader == null) {
             resHeader = new Header();
         }
@@ -162,11 +150,11 @@ public class URLConnection extends HttpURLConnection {
         return responseCode;
     }
 
-    void setResponseCode(int responseCode) {
+    public void setResponseCode(int responseCode) {
         this.responseCode = responseCode;
     }
 
-    void setResponseBody(Body responseBody) {
+    public void setResponseBody(Body responseBody) {
         this.responseBody = responseBody;
     }
 
@@ -213,7 +201,8 @@ public class URLConnection extends HttpURLConnection {
 
         if (!connected) {
             // connect and see if there is cache available.
-            connect();
+            // TODO: This calls CBLURLConnection connect() which doesn't do anything
+            // connect();
         }
         return os = new ByteArrayOutputStream();
 
@@ -256,6 +245,25 @@ public class URLConnection extends HttpURLConnection {
         this.requestInputStream = requestInputStream;
     }
 
+    /**
+     * Returns a SSLSession object, if any, for the underlying connection.
+     *
+     * Originally we were going to write this functionality based on HTTPSURLConnection but dealing with the
+     * consequences of double inheritance (since we would need to expose both the CBLURLConnection interfaces
+     * and the HTTPSURLConnection interfaces) was more trouble than it was worth.
+     * @return
+     */
+    public SSLSession getSSLSession() {
+        return this.sslSession;
+    }
+
+    public void setSSLSession(SSLSession sslSession) {
+        if (this.sslSession != null) {
+            throw new IllegalArgumentException("No double setting SSLSession to non-null values.");
+        }
+
+        this.sslSession = sslSession;
+    }
 }
 
 /**
