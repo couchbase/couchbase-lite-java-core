@@ -1,6 +1,6 @@
 buildscript {
     repositories {
-        maven { url 'http://repo1.maven.org/maven2' }
+        mavenCentral()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:0.6.+'
@@ -11,6 +11,7 @@ apply plugin: 'maven'
 apply plugin: 'eclipse'
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -30,8 +31,6 @@ dependencies {
 
     compile 'org.codehaus.jackson:jackson-core-asl:1.9.2'
     compile 'org.codehaus.jackson:jackson-mapper-asl:1.9.2'
-
-
 }
 
 android {
@@ -42,7 +41,6 @@ android {
         minSdkVersion 9
         targetSdkVersion 16
     }
-
 }
 
 task createMavenDirectory(type: Exec) {
@@ -64,12 +62,17 @@ task uploadArchivesWrapper(dependsOn: createMavenDirectory) << {
 uploadArchives {
     repositories {
         mavenDeployer {
-            repository(url: System.getenv("UPLOAD_MAVEN_REPO_URL")) {
-                authentication(userName: System.getenv("UPLOAD_USERNAME"), password: System.getenv("UPLOAD_PASSWORD"))
+            if (System.getProperty('localOnlyBuild', "false") == "true") {
+                repository url: 'file://' + new File(System.getProperty('user.home'), '.m2/repository').absolutePath
+            } else {
+                repository(url: System.getenv("UPLOAD_MAVEN_REPO_URL")) {
+                    authentication(userName: System.getenv("UPLOAD_USERNAME"), password: System.getenv("UPLOAD_PASSWORD"))
+                }
             }
-            pom.version = System.getenv("UPLOAD_VERSION_CBLITE")
-            pom.groupId = 'com.couchbase.cblite'
-            pom.artifactId = 'CBLite'
+
+            pom.version = System.properties['UPLOAD_VERSION_CBLITE']
+            pom.groupId = 'com.couchbase.lite'
+            pom.artifactId = 'Manager'
             pom.project {
                 licenses {
                     license {
@@ -83,11 +86,17 @@ uploadArchives {
     }
 }
 
+task install(dependsOn: uploadArchives)
+
 task sourcesJar(type: Jar) {
     classifier = 'sources'
     from android.sourceSets.main.java.srcDirs
 }
 
-task generateJavadocs(type: Javadoc) {
-    source = android.sourceSets.main.java.srcDirs
+artifacts {
+    archives sourcesJar
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '1.8'
 }
