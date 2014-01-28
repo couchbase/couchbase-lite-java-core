@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Gradle: td_collator_so">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/libs/td_collator_so.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
