@@ -48,6 +48,7 @@ public abstract class CBLReplicator extends Observable {
     protected boolean savingCheckpoint;
     protected boolean overdueForSave;
     protected boolean running;
+    protected boolean stopping;
     protected boolean active;
     protected Throwable error;
     protected String sessionID;
@@ -311,17 +312,10 @@ public abstract class CBLReplicator extends Observable {
 
     public void stopped() {
         Log.d(CBLDatabase.TAG, toString() + " STOPPED");
-        running = false;
+        stopping = true;
         this.changesProcessed = this.changesTotal = 0;
         Log.d(CBLDatabase.TAG, this + " stopped() calling saveLastSequence()");
         saveLastSequence();
-        setChanged();
-        notifyObservers();
-
-        batcher = null;
-
-        // commented per issue #108 - https://github.com/couchbase/couchbase-lite-android/issues/108#issuecomment-29043658
-        // db = null;
     }
 
     protected void login() {
@@ -504,6 +498,17 @@ public abstract class CBLReplicator extends Observable {
                         Log.d(CBLDatabase.TAG, this + ": Replicating from lastSequence=" + lastSequence);
                     } else {
                         Log.d(CBLDatabase.TAG, this + ": lastSequence mismatch: I had " + localLastSequence + ", remote had " + remoteLastSequence);
+                        try {
+                            if (Integer.parseInt(localLastSequence) < Integer.parseInt(remoteLastSequence)) {
+                                Log.d(CBLDatabase.TAG, this + ": using " + localLastSequence);
+                                lastSequence = localLastSequence;
+                            } else {
+                                Log.d(CBLDatabase.TAG, this + ": using " + remoteLastSequence);
+                                lastSequence = remoteLastSequence;
+                            }
+                        } catch (NumberFormatException ignore) {
+
+                        }
                     }
                     Log.d(CBLDatabase.TAG, this + "got remote sequence, call beginReplicating() ");
                     beginReplicating();
@@ -549,6 +554,7 @@ public abstract class CBLReplicator extends Observable {
         Log.d(CBLDatabase.TAG, this + " saveLastSequence() called");
         if (!lastSequenceChanged) {
             Log.d(CBLDatabase.TAG, this + " !lastSequenceChanged, returning");
+            setStopped();
             return;
         }
         if (savingCheckpoint) {
@@ -571,6 +577,7 @@ public abstract class CBLReplicator extends Observable {
 
         String remoteCheckpointDocID = remoteCheckpointDocID();
         if (remoteCheckpointDocID == null) {
+            setStopped();
             return;
         }
         savingCheckpoint = true;
@@ -632,12 +639,25 @@ public abstract class CBLReplicator extends Observable {
                 }
                 else {
                     Log.d(CBLDatabase.TAG, this + "!overDueForSave, so not calling saveLastSequence().  lastSequenceSnapshot: " + lastSequenceSnapshot);
+                    setStopped();
                 }
 
             }
 
         });
 
+    }
+    
+    public void setStopped() {
+        if (stopping && !savingCheckpoint && !overdueForSave) {
+            Log.d(CBLDatabase.TAG, "Replicator is stopping, setting running = false and db = null");
+            setChanged();
+            batcher = null;
+            stopping = false;
+            running = false;
+            notifyObservers();
+            db = null;
+        }
     }
 
     public Throwable getError() {
