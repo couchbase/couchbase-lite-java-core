@@ -3,7 +3,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:0.8.+'
+    	// There is a bug in 0.8 that causes it to not support android-library
+        classpath 'com.android.tools.build:gradle:0.7.+'
     }
 }
 apply plugin: 'android-library'
@@ -110,5 +111,8 @@ task generateJavadocs(type: Javadoc) {
     options.doclet = "ExcludeDoclet"
     options.showFromPublic()
     exclude "org/apache/http/**", "com/couchbase/touchdb/**"
+}
 
+task wraper(type: Wrapper) {
+	gradleVersion = '1.9'
 }
