@@ -315,6 +315,9 @@ public class Puller extends Replication implements ChangeTrackerClient {
                     List<String> history = db.parseCouchDBRevisionHistory(properties);
                     if(history != null) {
                         rev.setProperties(properties);
+                        if (properties.containsKey("_deleted") && (Boolean) properties.get("_deleted")) {
+                            rev.setDeleted(true);
+                        }
                         // Add to batcher ... eventually it will be fed to -insertRevisions:.
                         List<Object> toInsert = new ArrayList<Object>();
                         toInsert.add(rev);
