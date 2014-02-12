@@ -120,7 +120,7 @@ public class Puller extends Replication implements ChangeTrackerClient {
         }
         pendingSequences = new SequenceMap();
         Log.w(Database.TAG, this + " starting ChangeTracker with since=" + lastSequence);
-        changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, lastSequence, this);
+        changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, true, lastSequence, this);
         if(filterName != null) {
             changeTracker.setFilterName(filterName);
             if(filterParams != null) {
@@ -315,6 +315,9 @@ public class Puller extends Replication implements ChangeTrackerClient {
                     List<String> history = db.parseCouchDBRevisionHistory(properties);
                     if(history != null) {
                         rev.setProperties(properties);
+                        if (properties.containsKey("_deleted") && (Boolean) properties.get("_deleted")) {
+                            rev.setDeleted(true);
+                        }
                         // Add to batcher ... eventually it will be fed to -insertRevisions:.
                         List<Object> toInsert = new ArrayList<Object>();
                         toInsert.add(rev);
