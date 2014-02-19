@@ -34,7 +34,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * @exclude
  */
 @InterfaceAudience.Private
-public class Puller extends Replication implements ChangeTrackerClient {
+public final class Puller extends Replication implements ChangeTrackerClient {
 
     private static final int MAX_OPEN_HTTP_CONNECTIONS = 16;
 
@@ -120,7 +120,7 @@ public class Puller extends Replication implements ChangeTrackerClient {
         }
         pendingSequences = new SequenceMap();
         Log.w(Database.TAG, this + " starting ChangeTracker with since=" + lastSequence);
-        changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, lastSequence, this);
+        changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, true, lastSequence, this);
         if(filterName != null) {
             changeTracker.setFilterName(filterName);
             if(filterParams != null) {
@@ -314,10 +314,10 @@ public class Puller extends Replication implements ChangeTrackerClient {
                     Map<String,Object> properties = (Map<String,Object>)result;
                     List<String> history = db.parseCouchDBRevisionHistory(properties);
                     if(history != null) {
-                        rev.setProperties(properties);
+                        PulledRevision gotRev = new PulledRevision(properties, db);
                         // Add to batcher ... eventually it will be fed to -insertRevisions:.
                         List<Object> toInsert = new ArrayList<Object>();
-                        toInsert.add(rev);
+                        toInsert.add(gotRev);
                         toInsert.add(history);
                         downloadsToInsert.queueObject(toInsert);
                         asyncTaskStarted();

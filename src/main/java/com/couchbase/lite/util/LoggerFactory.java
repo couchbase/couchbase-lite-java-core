@@ -16,7 +16,6 @@
 
 package com.couchbase.lite.util;
 
-import java.util.Properties;
 import java.util.ServiceLoader;
 
 public class LoggerFactory {
@@ -24,15 +23,6 @@ public class LoggerFactory {
         // Attempt to load a Logger service.
         for (Logger logger : ServiceLoader.load(Logger.class)) {
             return logger;
-        }
-
-        // Choose Logger based on runtime.
-        Properties properties = System.getProperties();
-        String runtime = properties.getProperty("java.runtime.name");
-        if (runtime != null) {
-            if (runtime.toLowerCase().contains("android")) {
-                return new AndroidLogger();
-            }
         }
 
         // Return default System logger.

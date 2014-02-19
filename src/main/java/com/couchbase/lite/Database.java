@@ -45,6 +45,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,9 +55,13 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * A CouchbaseLite database.
  */
-public class Database {
+public final class Database {
 
     private static final int MAX_DOC_CACHE_SIZE = 50;
+
+    // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
+    private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
+
     private static ReplicationFilterCompiler filterCompiler;
 
     private String path;
@@ -86,6 +91,8 @@ public class Database {
     private Manager manager;
     final private List<ChangeListener> changeListeners;
     private LruCache<String, Document> docCache;
+
+    private int maxRevTreeDepth = DEFAULT_MAX_REVS;
 
     private long startTime;
 
@@ -274,14 +281,16 @@ public class Database {
     }
 
     /**
-     * Compacts the database file by purging non-current revisions, deleting unused attachment files,
-     * and running a SQLite "VACUUM" command.
+     * Compacts the database file by purging non-current JSON bodies, pruning revisions older than
+     * the maxRevTreeDepth, deleting unused attachment files, and vacuuming the SQLite database.
      */
     @InterfaceAudience.Public
     public void compact() throws CouchbaseLiteException {
         // Can't delete any rows because that would lose revision tree history.
         // But we can remove the JSON of non-current revisions, which is most of the space.
         try {
+            Log.v(Database.TAG, "Pruning old revisions...");
+            pruneRevsToMaxDepth(0);
             Log.v(Database.TAG, "Deleting JSON of old revisions...");
             ContentValues args = new ContentValues();
             args.put("json", (String)null);
@@ -712,6 +721,27 @@ public class Database {
     public static interface ChangeListener {
         public void changed(ChangeEvent event);
     }
+
+    /**
+     * Get the maximum depth of a document's revision tree (or, max length of its revision history.)
+     * Revisions older than this limit will be deleted during a -compact: operation.
+     * Smaller values save space, at the expense of making document conflicts somewhat more likely.
+     */
+    @InterfaceAudience.Public
+    public int getMaxRevTreeDepth() {
+        return maxRevTreeDepth;
+    }
+
+    /**
+     * Set the maximum depth of a document's revision tree (or, max length of its revision history.)
+     * Revisions older than this limit will be deleted during a -compact: operation.
+     * Smaller values save space, at the expense of making document conflicts somewhat more likely.
+     */
+    @InterfaceAudience.Public
+    public void setMaxRevTreeDepth(int maxRevTreeDepth) {
+        this.maxRevTreeDepth = maxRevTreeDepth;
+    }
+
 
     /** PRIVATE METHODS **/
 
@@ -2841,7 +2871,10 @@ public class Database {
 
         // TODO: it is currently sending one change at a time rather than batching them up
 
-        boolean isExternalFixMe = false; // TODO: fix this to have a real value
+        boolean isExternal = false;
+        if (source != null) {
+            isExternal = true;
+        }
 
         DocumentChange change = new DocumentChange(
                 rev,
@@ -2851,7 +2884,7 @@ public class Database {
 
         List<DocumentChange> changes = new ArrayList<DocumentChange>();
         changes.add(change);
-        ChangeEvent changeEvent = new ChangeEvent(this, isExternalFixMe, changes);
+        ChangeEvent changeEvent = new ChangeEvent(this, isExternal, changes);
 
         // TODO: this is expensive, it should be using a WeakHashMap
         // TODO: instead of loading from the DB.  iOS code below.
@@ -3264,7 +3297,10 @@ public class Database {
                     throw new CouchbaseLiteException("Unnkown encoding: " + encodingStr, Status.BAD_ENCODING);
                 }
                 attachment.setEncodedLength(attachment.getLength());
-                attachment.setLength((Long)attachInfo.get("length"));
+                if (attachInfo.containsKey("length")) {
+                    Number attachmentLength = (Number) attachInfo.get("length");
+                    attachment.setLength(attachmentLength.longValue());
+                }
             }
             if (attachInfo.containsKey("revpos")) {
                 attachment.setRevpos((Integer)attachInfo.get("revpos"));
@@ -3349,14 +3385,6 @@ public class Database {
                 else {
                     // This revision isn't known, so add it:
 
-                    if (sequence == localParentSequence) {
-                        // This is the point where we branch off of the existing rev tree.
-                        // If the branch wasn't from the single existing leaf, this creates a conflict.
-                        if (localRevs.size() != 0 && !rev.isDeleted() && !revId.equals(localParentRevID)) {
-                            inConflict = true;
-                        }
-                    }
-
                     RevisionInternal newRev;
                     byte[] data = null;
                     boolean current = false;
@@ -3401,8 +3429,12 @@ public class Database {
                 ContentValues args = new ContentValues();
                 args.put("current", 0);
                 String[] whereArgs = { Long.toString(localParentSequence) };
+                int numRowsChanged = 0;
                 try {
-                    database.update("revs", args, "sequence=?", whereArgs);
+                    numRowsChanged = database.update("revs", args, "sequence=? AND current!=0", whereArgs);
+                    if (numRowsChanged == 0) {
+                        inConflict = true;  // local parent wasn't a leaf, ergo we just created a branch
+                    }
                 } catch (SQLException e) {
                     throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
                 }
@@ -4004,7 +4036,80 @@ public class Database {
         this.name = name;
     }
 
+    /**
+     * Prune revisions to the given max depth.  Eg, remove revisions older than that max depth,
+     * which will reduce storage requirements.
+     *
+     * TODO: This implementation is a bit simplistic. It won't do quite the right thing in
+     * histories with branches, if one branch stops much earlier than another. The shorter branch
+     * will be deleted entirely except for its leaf revision. A more accurate pruning
+     * would require an expensive full tree traversal. Hopefully this way is good enough.
+     *
+     * @throws CouchbaseLiteException
+     */
+    @InterfaceAudience.Private
+    /* package */ int pruneRevsToMaxDepth(int maxDepth) throws CouchbaseLiteException {
 
+        int outPruned = 0;
+        boolean shouldCommit = false;
+        Map<Long, Integer> toPrune = new HashMap<Long, Integer>();
+
+        if (maxDepth == 0) {
+            maxDepth = DEFAULT_MAX_REVS;
+        }
+
+        // First find which docs need pruning, and by how much:
+
+        Cursor cursor = null;
+        String[] args = { };
+
+        long docNumericID = -1;
+        int minGen = 0;
+        int maxGen = 0;
+
+        try {
+
+            cursor = database.rawQuery("SELECT doc_id, MIN(revid), MAX(revid) FROM revs GROUP BY doc_id", args);
+
+            while(cursor.moveToNext()) {
+                docNumericID = cursor.getLong(0);
+                String minGenRevId = cursor.getString(1);
+                String maxGenRevId = cursor.getString(2);
+                minGen = Revision.generationFromRevID(minGenRevId);
+                maxGen = Revision.generationFromRevID(maxGenRevId);
+                if ((maxGen - minGen + 1) > maxDepth) {
+                    toPrune.put(docNumericID, (maxGen - minGen));
+                }
+
+            }
+
+            beginTransaction();
+
+            if (toPrune.size() == 0) {
+                return 0;
+            }
+
+            for (Long docNumericIDLong : toPrune.keySet()) {
+                String minIDToKeep = String.format("%d-", toPrune.get(docNumericIDLong).intValue() + 1);
+                String[] deleteArgs = { Long.toString(docNumericID), minIDToKeep};
+                int rowsDeleted = database.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
+                outPruned += rowsDeleted;
+            }
+
+            shouldCommit = true;
+
+        } catch (Exception e) {
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
+        } finally {
+            endTransaction(shouldCommit);
+            if(cursor != null) {
+                cursor.close();
+            }
+        }
+
+        return outPruned;
+
+    }
 
 
 }

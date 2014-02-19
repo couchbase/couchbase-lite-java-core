@@ -1,7 +1,5 @@
 package com.couchbase.lite;
 
-import android.provider.ContactsContract;
-
 import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
@@ -36,7 +34,7 @@ import java.util.regex.Pattern;
 /**
  * Top-level CouchbaseLite object; manages a collection of databases as a CouchDB server does.
  */
-public class Manager {
+public final class Manager {
 
     public static final String VERSION =  "1.0.0-beta2";
 
@@ -566,6 +564,11 @@ public class Manager {
 
             if (authorizer != null) {
                 repl.setAuthorizer(authorizer);
+            }
+
+            Map<String, Object> headers = (Map) properties.get("headers");
+            if (headers != null && !headers.isEmpty()) {
+                repl.setHeaders(headers);
             }
 
             String filterName = (String)properties.get("filter");

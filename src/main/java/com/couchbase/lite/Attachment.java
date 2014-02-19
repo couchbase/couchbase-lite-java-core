@@ -28,7 +28,7 @@ import java.util.Map;
 /**
  * A Couchbase Lite Document Attachment.
  */
-public class Attachment {
+public final class Attachment {
 
     /**
      * The owning document revision.
@@ -140,7 +140,7 @@ public class Attachment {
      */
     @InterfaceAudience.Public
     public long getLength() {
-        Long length = (Long) metadata.get("length");
+        Number length = (Number) metadata.get("length");
         if (length != null) {
             return length.longValue();
         }
@@ -200,6 +200,9 @@ public class Attachment {
             }
             else if (value instanceof AttachmentInternal) {
                 throw new IllegalArgumentException("AttachmentInternal objects not expected here.  Could indicate a bug");
+            }
+            else if (value != null) {
+                updatedAttachments.put(name, value);
             }
         }
         return updatedAttachments;
