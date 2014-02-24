@@ -1670,12 +1670,76 @@ public final class Database {
     }
 
     /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public static Map<String,Object> makeRevisionHistoryDict(List<RevisionInternal> history, long lastSequence) {
+        if (history == null) {
+            return null;
+        }
+
+        List<String> suffixes = new ArrayList<String>();
+        int start = -1;
+        int lastRevNo = -1;
+        boolean lastSyncIncluded = false;
+        //only include doc revisions suffixes till the last synchronized revision
+        for (RevisionInternal rev: history) {
+            if (rev.getSequence() > lastSequence) {
+                int revNo = parseRevIDNumber(rev.getRevId());
+                String suffix = parseRevIDSuffix(rev.getRevId());
+                if(revNo > 0 && suffix.length() > 0) {
+                    if(start < 0) {
+                        start = revNo;
+                    }
+                    else if(revNo != lastRevNo - 1) {
+                        start = -1;
+                        break;
+                    }
+                    lastRevNo = revNo;
+                    suffixes.add(suffix);
+                }
+                else {
+                    start = -1;
+                    break;
+                }
+            } else if (!lastSyncIncluded) {
+                lastSyncIncluded = true;
+                suffixes.add(parseRevIDSuffix(rev.getRevId()));
+            }
+        }
+
+        Map<String,Object> result = new HashMap<String,Object>();
+        if(start == -1) {
+            // we failed to build sequence, just stuff all the revs in list
+            suffixes = new ArrayList<String>();
+            for (RevisionInternal rev : history) {
+                suffixes.add(rev.getRevId());
+            }
+        }
+        else {
+            result.put("start", start);
+        }
+        result.put("ids", suffixes);
+
+        return result;
+    }
+
+    /**
      * Returns the revision history as a _revisions dictionary, as returned by the REST API's ?revs=true option.
      * @exclude
      */
     @InterfaceAudience.Private
     public Map<String,Object> getRevisionHistoryDict(RevisionInternal rev) {
         return makeRevisionHistoryDict(getRevisionHistory(rev));
+    }
+
+    /**
+     * Returns the revision history since the last synchronized revision(including it) as a _revisions dictionary, as returned by the REST API's ?revs=true option.
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public Map<String,Object> getRevisionHistoryDict(RevisionInternal rev, String lastSequence) {
+        return makeRevisionHistoryDict(getRevisionHistory(rev), Long.parseLong(lastSequence));
     }
 
     /**

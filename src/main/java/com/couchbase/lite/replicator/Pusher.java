@@ -248,7 +248,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                                 }
                                 if(properties != null) {
                                     // Add the _revisions list:
-                                    properties.put("_revisions", db.getRevisionHistoryDict(rev));
+                                    properties.put("_revisions", db.getRevisionHistoryDict(rev, getLastSequence()));
                                     //now add it to the docs to send
                                     docsToSend.add(properties);
                                 }
@@ -300,7 +300,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
         MultipartEntity multiPart = null;
 
         Map<String, Object> revProps = revision.getProperties();
-        revProps.put("_revisions", db.getRevisionHistoryDict(revision));
+        revProps.put("_revisions", db.getRevisionHistoryDict(revision, getLastSequence()));
 
         Map<String, Object> attachments = (Map<String, Object>) revProps.get("_attachments");
         for (String attachmentKey : attachments.keySet()) {
