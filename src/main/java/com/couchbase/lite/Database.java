@@ -1739,7 +1739,11 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public Map<String,Object> getRevisionHistoryDict(RevisionInternal rev, String lastSequence) {
-        return makeRevisionHistoryDict(getRevisionHistory(rev), Long.parseLong(lastSequence));
+        if (lastSequence == null) {
+            return makeRevisionHistoryDict(getRevisionHistory(rev), 0L);
+        } else {
+            return makeRevisionHistoryDict(getRevisionHistory(rev), Long.parseLong(lastSequence));
+        }
     }
 
     /**
