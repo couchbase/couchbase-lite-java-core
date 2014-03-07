@@ -403,9 +403,10 @@ public final class Pusher extends Replication implements Database.ChangeListener
         String path = String.format("/%s?new_edits=false", revision.getDocId());
 
         // TODO: need to throttle these requests
-        Log.d(Database.TAG, "Uploadeding multipart request.  Revision: " + revision);
+        Log.d(Database.TAG, "Uploading multipart request.  Revision: " + revision);
         Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": uploadMultipartRevision() calling asyncTaskStarted()");
 
+        // TODO: ios code has self.changesTotal++; here
         asyncTaskStarted();
         sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
