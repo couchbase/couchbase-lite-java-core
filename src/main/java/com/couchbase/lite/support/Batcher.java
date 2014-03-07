@@ -61,7 +61,7 @@ public class Batcher<T> {
      */
     public synchronized void queueObjects(List<T> objects) {
 
-        Log.d(Database.TAG, "queuObjects called with " + objects.size() + " objects. ");
+        Log.d(Database.TAG, this + ": queueObjects called with " + objects.size() + " objects: " + objects);
         if (objects.size() == 0) {
             return;
         }
@@ -69,27 +69,27 @@ public class Batcher<T> {
             inbox = new LinkedHashSet<T>();
         }
 
-        Log.d(Database.TAG, "inbox size before adding objects: " + inbox.size());
+        Log.d(Database.TAG, this + ": inbox size before adding objects: " + inbox.size());
 
         inbox.addAll(objects);
-        Log.d(Database.TAG, objects.size() + " objects added to inbox.  inbox size: " + inbox.size());
+        Log.d(Database.TAG, this + ": " + objects.size() + " objects added to inbox.  inbox size: " + inbox.size());
 
         if (inbox.size() < capacity) {
             // Schedule the processing. To improve latency, if we haven't processed anything
             // in at least our delay time, rush these object(s) through ASAP:
-            Log.d(Database.TAG, "inbox.size() < capacity, schedule processing");
+            Log.d(Database.TAG, this + ": inbox.size() < capacity, schedule processing");
             int delayToUse = delay;
             long delta = (System.currentTimeMillis() - lastProcessedTime);
             if (delta >= delay) {
-                Log.d(Database.TAG, "delta " + delta + " >= delay " + delay + " --> using delay 0");
+                Log.d(Database.TAG, this + ": delta " + delta + " >= delay " + delay + " --> using delay 0");
                 delayToUse = 0;
             } else {
-                Log.d(Database.TAG, "delta " + delta + " < delay " + delay + " --> using delay " + delayToUse);
+                Log.d(Database.TAG, this + ": delta " + delta + " < delay " + delay + " --> using delay " + delayToUse);
             }
             scheduleWithDelay(delayToUse);
         } else {
             // If inbox fills up, process it immediately:
-            Log.d(Database.TAG, "inbox.size() >= capacity, process immediately");
+            Log.d(Database.TAG, this + ": inbox.size() >= capacity, process immediately");
             unschedule();
             processNow();
         }
