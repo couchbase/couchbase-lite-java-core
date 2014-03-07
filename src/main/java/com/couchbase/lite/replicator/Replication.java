@@ -778,11 +778,11 @@ public abstract class Replication {
     public synchronized void asyncTaskFinished(int numTasks) {
         Log.d(Database.TAG, this + "|" + Thread.currentThread().toString() + ": asyncTaskFinished() called, asyncTaskCount: " + asyncTaskCount + " numTasks: " + numTasks);
         this.asyncTaskCount -= numTasks;
+        Log.d(Database.TAG, "asyncTaskFinished() updated asyncTaskCount to: " + asyncTaskCount);
         assert(asyncTaskCount >= 0);
         if (asyncTaskCount == 0) {
             updateActive();
         }
-        Log.d(Database.TAG, "asyncTaskFinished() updated asyncTaskCount to: " + asyncTaskCount);
     }
 
     /**
@@ -800,7 +800,7 @@ public abstract class Replication {
             }
             boolean newActive = batcherCount > 0 || asyncTaskCount > 0;
             if (active != newActive) {
-                Log.d(Database.TAG, this + " Progress: set active = " + newActive);
+                Log.d(Database.TAG, this + " Progress: set active = " + newActive + " asyncTaskCount: " + asyncTaskCount + " batcherCount: " + batcherCount );
                 active = newActive;
                 notifyChangeListeners();
 
