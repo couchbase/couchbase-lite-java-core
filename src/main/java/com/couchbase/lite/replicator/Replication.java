@@ -32,11 +32,13 @@ import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +80,7 @@ public abstract class Replication {
     protected Map<String, Object> requestHeaders;
     private int revisionsFailed;
     private ScheduledFuture retryIfReadyFuture;
+    private Map<RemoteRequest, Future> requests;
 
     protected static final int PROCESSOR_DELAY = 500;
     protected static final int INBOX_CAPACITY = 100;
@@ -138,6 +141,7 @@ public abstract class Replication {
         this.changeListeners = new ArrayList<ChangeListener>();
         this.online = true;
         this.requestHeaders = new HashMap<String, Object>();
+        this.requests = Collections.synchronizedMap(new HashMap<RemoteRequest, Future>());
 
         if (remote.getQuery() != null && !remote.getQuery().isEmpty()) {
 
@@ -458,14 +462,17 @@ public abstract class Replication {
         if (!running) {
             return;
         }
-        Log.v(Database.TAG, toString() + " STOPPING...");
+        Log.v(Database.TAG, this + ": STOPPING...");
         batcher.clear();  // no sense processing any pending changes
         continuous = false;
         stopRemoteRequests();
         cancelPendingRetryIfReady();
         db.forgetReplication(this);
-        if (running && asyncTaskCount == 0) {
+        if (running && asyncTaskCount <= 0) {
+            Log.v(Database.TAG, this + ": calling stopped()");
             stopped();
+        } else {
+            Log.v(Database.TAG, this + ": not calling stopped().  running: " + running + " asyncTaskCount: " + asyncTaskCount);
         }
     }
 
@@ -867,13 +874,24 @@ public abstract class Replication {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void sendAsyncRequest(String method, URL url, Object body, RemoteRequestCompletionBlock onCompletion) {
-        RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
+    public void sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
+
+        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
+        request.setExtraCompletionBlock(new RemoteRequestCompletionBlock() {
+            @Override
+            public void onCompletion(Object result, Throwable e) {
+                requests.remove(request);
+            }
+        });
+
+
         if (remoteRequestExecutor.isTerminated()) {
             String msg = "sendAsyncRequest called, but remoteRequestExecutor has been terminated";
             throw new IllegalStateException(msg);
         }
-        remoteRequestExecutor.execute(request);
+        Future future = remoteRequestExecutor.submit(request);
+        requests.put(request, future);
+
     }
 
     /**
@@ -1137,29 +1155,13 @@ public abstract class Replication {
 
     @InterfaceAudience.Private
     private void stopRemoteRequests() {
-
-        if (remoteRequestExecutor == null) {
-            Log.w(Database.TAG, this + " stopRemoteRequests() called, but remoteRequestExecutor == null.  Ignoring.");
-            return;
+        Log.d(Database.TAG, this + ": stopRemoteRequests() cancelling " + requests.size() + " requests");
+        for (RemoteRequest request : requests.keySet()) {
+            Future future = requests.get(request);
+            Log.d(Database.TAG, this + ": cancelling future " + future + " for request: " + request + " isCancelled: " + future.isCancelled() + " isDone: " + future.isDone());
+            boolean result = future.cancel(true);
+            Log.d(Database.TAG, this + ": cancelled future, result: " + result);
         }
-
-        int timeoutSeconds = 30;
-        List<Runnable> inProgress = remoteRequestExecutor.shutdownNow();
-        Log.d(Database.TAG, this + " stopped remoteRequestExecutor. " + inProgress.size() + " remote requests in progress.  Awaiting termination with timeout: " + timeoutSeconds);
-        boolean finishedBeforeTimeout = false;
-        try {
-            finishedBeforeTimeout = remoteRequestExecutor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS);
-            if (finishedBeforeTimeout) {
-                Log.d(Database.TAG, this + " Awaiting termination finished normally");
-            } else {
-                Log.w(Database.TAG, this + " Timed out awaiting termination of remoteRequestExecutor");
-            }
-        } catch (InterruptedException e) {
-            Log.e(Database.TAG, this + "  Exception Awaiting termination", e);
-        } finally {
-            remoteRequestExecutor = null;
-        }
-
     }
 
     @InterfaceAudience.Private

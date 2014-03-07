@@ -48,6 +48,8 @@ public class RemoteRequest implements Runnable {
     protected URL url;
     protected Object body;
     protected RemoteRequestCompletionBlock onCompletion;
+    protected RemoteRequestCompletionBlock extraOnCompletion;
+
     protected Map<String, Object> requestHeaders;
 
     public RemoteRequest(ScheduledExecutorService workExecutor,
@@ -88,6 +90,10 @@ public class RemoteRequest implements Runnable {
         for (String requestHeaderKey : requestHeaders.keySet()) {
             request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
         }
+    }
+
+    public void setExtraCompletionBlock(RemoteRequestCompletionBlock extraOnCompletion) {
+        this.extraOnCompletion = extraOnCompletion;
     }
 
     protected HttpUriRequest createConcreteRequest() {
@@ -222,6 +228,9 @@ public class RemoteRequest implements Runnable {
                 public void run() {
                     try {
                         onCompletion.onCompletion(result, error);
+                        if (extraOnCompletion != null) {
+                            extraOnCompletion.onCompletion(result, error);
+                        }
                     } catch (Exception e) {
                         // don't let this crash the thread
                         Log.e(Database.TAG,
