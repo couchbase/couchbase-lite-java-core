@@ -1,5 +1,6 @@
 package com.couchbase.lite.replicator;
 
+import com.couchbase.lite.AsyncTask;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
@@ -1097,11 +1098,16 @@ public abstract class Replication {
         if (!online) {
             return false;
         }
-        Log.d(Database.TAG, this + ": Going offline");
-        online = false;
-        stopRemoteRequests();
-        updateProgress();
-        notifyChangeListeners();
+        db.runAsync(new AsyncTask() {
+            @Override
+            public void run(Database database) {
+                Log.d(Database.TAG, this + ": Going offline");
+                online = false;
+                stopRemoteRequests();
+                updateProgress();
+                notifyChangeListeners();
+            }
+        });
         return true;
     }
 
@@ -1110,16 +1116,22 @@ public abstract class Replication {
         if (online) {
             return false;
         }
-        Log.d(Database.TAG, this + ": Going online");
-        online = true;
+        db.runAsync(new AsyncTask() {
+            @Override
+            public void run(Database database) {
+                Log.d(Database.TAG, this + ": Going online");
+                online = true;
 
-        if (running) {
-            lastSequence = null;
-            setError(null);
-        }
-        remoteRequestExecutor = Executors.newCachedThreadPool();
-        checkSession();
-        notifyChangeListeners();
+                if (running) {
+                    lastSequence = null;
+                    setError(null);
+                }
+                remoteRequestExecutor = Executors.newCachedThreadPool();
+                checkSession();
+                notifyChangeListeners();
+            }
+        });
+
         return true;
     }
 
