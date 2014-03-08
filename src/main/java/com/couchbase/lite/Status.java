@@ -27,6 +27,7 @@ public class Status {
     public static final int CREATED = 201;
     public static final int NOT_MODIFIED = 304;
     public static final int BAD_REQUEST = 400;
+    public static final int UNAUTHORIZED = 401;
     public static final int FORBIDDEN = 403;
     public static final int NOT_FOUND = 404;
     public static final int METHOD_NOT_ALLOWED = 405;
@@ -38,7 +39,7 @@ public class Status {
     public static final int BAD_JSON = 493;
     public static final int INTERNAL_SERVER_ERROR = 500;
     public static final int STATUS_ATTACHMENT_ERROR = 592;
-
+    public static final int UPSTREAM_ERROR = 589;
     public static final int DB_ERROR = 590;
 
     private int code;
@@ -61,6 +62,10 @@ public class Status {
 
     public boolean isSuccessful() {
         return (code > 0 && code < 400);
+    }
+
+    public boolean isError() {
+        return !isSuccessful();
     }
 
     @Override

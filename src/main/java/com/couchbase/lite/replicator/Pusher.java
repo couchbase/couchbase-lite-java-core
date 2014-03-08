@@ -9,6 +9,7 @@ import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
+import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
@@ -25,10 +26,15 @@ import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
@@ -41,6 +47,9 @@ public final class Pusher extends Replication implements Database.ChangeListener
     private boolean creatingTarget;
     private boolean observing;
     private ReplicationFilter filter;
+
+    SortedSet<Long> pendingSequences;
+    Long maxPendingSequence;
 
     /**
      * Constructor
@@ -84,6 +93,42 @@ public final class Pusher extends Replication implements Database.ChangeListener
     public void stop() {
         stopObserving();
         super.stop();
+    }
+
+    /**
+     * Adds a local revision to the "pending" set that are awaiting upload:
+     */
+    @InterfaceAudience.Private
+    private void addPending(RevisionInternal revisionInternal) {
+        long seq = revisionInternal.getSequence();
+        pendingSequences.add(seq);
+        if (seq > maxPendingSequence) {
+            maxPendingSequence = seq;
+        }
+    }
+
+    /**
+     * Removes a revision from the "pending" set after it's been uploaded. Advances checkpoint.
+     */
+    @InterfaceAudience.Private
+    private void removePending(RevisionInternal revisionInternal) {
+        long seq = revisionInternal.getSequence();
+        boolean wasFirst = (seq == pendingSequences.first());
+        if (!pendingSequences.contains(seq)) {
+            Log.w(Database.TAG, this + " removePending: sequence " + seq + " not in set, for rev " + revisionInternal);
+        }
+        pendingSequences.remove(seq);
+        if (wasFirst) {
+            // If I removed the first pending sequence, can advance the checkpoint:
+            long maxCompleted;
+            if (pendingSequences.size() == 0) {
+                maxCompleted = maxPendingSequence;
+            } else {
+                maxCompleted = pendingSequences.first();
+                --maxCompleted;
+            }
+            lastSequence = Long.toString(maxCompleted);
+        }
     }
 
     @Override
@@ -134,6 +179,14 @@ public final class Pusher extends Replication implements Database.ChangeListener
             return;
         } else {
             Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": creatingTarget != true, continuing");
+        }
+
+        pendingSequences = Collections.synchronizedSortedSet(new TreeSet<Long>());
+        try {
+            maxPendingSequence = Long.parseLong(lastSequence);
+        } catch (NumberFormatException e) {
+            Log.w(Database.TAG, "Error converting lastSequence: " + lastSequence + " to long.  Using 0");
+            maxPendingSequence = new Long(0);
         }
 
         if(filterName != null) {
@@ -202,7 +255,236 @@ public final class Pusher extends Replication implements Database.ChangeListener
 
     @Override
     @InterfaceAudience.Private
-    protected void processInbox(final RevisionList inbox) {
+    protected void processInbox(final RevisionList changes) {
+
+        // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
+        // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>
+        Map<String,List<String>> diffs = new HashMap<String,List<String>>();
+        for (RevisionInternal rev : changes) {
+            String docID = rev.getDocId();
+            List<String> revs = diffs.get(docID);
+            if(revs == null) {
+                revs = new ArrayList<String>();
+                diffs.put(docID, revs);
+            }
+            revs.add(rev.getRevId());
+            addPending(rev);
+        }
+
+        // Call _revs_diff on the target db:
+        Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": processInbox() calling asyncTaskStarted()");
+        Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": posting to /_revs_diff: " + diffs);
+
+        asyncTaskStarted();
+        sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
+
+            @Override
+            public void onCompletion(Object response, Throwable e) {
+
+                try {
+
+                    Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": /_revs_diff response: " + response);
+                    Map<String, Object> results = (Map<String, Object>) response;
+                    if (e != null) {
+                        setError(e);
+                        revisionFailed();
+                    } else if (results.size() != 0) {
+                        // Go through the list of local changes again, selecting the ones the destination server
+                        // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
+                        final List<Object> docsToSend = new ArrayList<Object>();
+                        for(RevisionInternal rev : changes) {
+                            // Is this revision in the server's 'missing' list?
+                            Map<String,Object> properties = null;
+                            Map<String,Object> revResults = (Map<String,Object>)results.get(rev.getDocId());
+                            if(revResults == null) {
+                                continue;
+                            }
+                            List<String> revs = (List<String>)revResults.get("missing");
+                            if(revs == null || !revs.contains(rev.getRevId())) {
+                                removePending(rev);
+                                continue;
+                            }
+
+                            // Get the revision's properties:
+                            EnumSet<Database.TDContentOptions> contentOptions = EnumSet.of(
+                                    Database.TDContentOptions.TDIncludeAttachments,
+                                    Database.TDContentOptions.TDBigAttachmentsFollow
+                            );
+
+                            try {
+                                db.loadRevisionBody(rev, contentOptions);
+                            } catch (CouchbaseLiteException e1) {
+                                String msg = String.format("%s Couldn't get local contents of %s", rev, Pusher.this);
+                                Log.w(Database.TAG, msg);
+                                revisionFailed();
+                                continue;
+                            }
+                            properties = new HashMap<String,Object>(rev.getProperties());
+                            assert properties.get("_revisions") != null;
+
+                            // Strip any attachments already known to the target db:
+                            if (properties.containsKey("_attachments")) {
+                                /* TODO: port this ios code
+                                 // Look for the latest common ancestor and stub out older attachments:
+                                    NSArray* possible = revResults[@"possible_ancestors"];
+                                    int minRevPos = findCommonAncestor(rev, possible);
+                                    [CBLDatabase stubOutAttachmentsIn: rev beforeRevPos: minRevPos + 1
+                                                   attachmentsFollow: NO];
+                                    properties = rev.properties;
+                                 */
+                                if (uploadMultipartRevision(rev)) {
+                                    continue;
+                                }
+                            }
+
+                            if(properties != null) {
+
+                                // TODO: ios code does not call db.getRevisionHistoryDict() here
+                                // Add the _revisions list:
+                                properties.put("_revisions", db.getRevisionHistoryDict(rev));
+
+                                //now add it to the docs to send
+                                docsToSend.add(properties);
+
+                                assert properties.get("_id") != null;
+                            }
+
+                        }
+
+                        // Post the revisions to the destination:
+                        uploadBulkDocs(docsToSend, changes);
+
+                    } else {
+                        // None of the revisions are new to the remote
+                        for (RevisionInternal revisionInternal : changes) {
+                            removePending(revisionInternal);
+                        }
+                    }
+
+                } finally {
+                    Log.d(Database.TAG, Pusher.this + "|" + Thread.currentThread() + ": processInbox() calling asyncTaskFinished()");
+                    asyncTaskFinished(1);
+                }
+            }
+
+        });
+
+    }
+
+    /**
+     * Post the revisions to the destination. "new_edits":false means that the server should
+     * use the given _rev IDs instead of making up new ones.
+     */
+    @InterfaceAudience.Private
+    protected void uploadBulkDocs(List<Object> docsToSend, final RevisionList changes) {
+
+        final int numDocsToSend = docsToSend.size();
+        if (numDocsToSend == 0 ) {
+            return;
+        }
+
+        Log.v(Database.TAG, String.format("%s: POSTing " + numDocsToSend + " revisions to _bulk_docs: %s", Pusher.this, docsToSend));
+        setChangesCount(getChangesCount() + numDocsToSend);
+
+        Map<String,Object> bulkDocsBody = new HashMap<String,Object>();
+        bulkDocsBody.put("docs", docsToSend);
+        bulkDocsBody.put("new_edits", false);
+
+        asyncTaskStarted();
+        sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
+
+            @Override
+            public void onCompletion(Object result, Throwable e) {
+                try {
+                    if (e == null) {
+                        Set<String> failedIDs = new HashSet<String>();
+                        // _bulk_docs response is really an array, not a dictionary!
+                        List<Map<String, Object>> items = (List) result;
+                        for (Map<String, Object> item : items) {
+                            Status status = statusFromBulkDocsResponseItem(item);
+                            if (status.isError()) {
+                                // One of the docs failed to save.
+                                Log.w(Database.TAG, this + " _bulk_docs got an error: " + item);
+                                // 403/Forbidden means validation failed; don't treat it as an error
+                                // because I did my job in sending the revision. Other statuses are
+                                // actual replication errors.
+                                if (status.getCode() != Status.FORBIDDEN) {
+                                    String docID = (String) item.get("id");
+                                    failedIDs.add(docID);
+                                    // TODO - port from iOS
+                                    // NSURL* url = docID ? [_remote URLByAppendingPathComponent: docID] : nil;
+                                    // error = CBLStatusToNSError(status, url);
+                                }
+                            }
+                        }
+
+                        // Remove from the pending list all the revs that didn't fail:
+                        for (RevisionInternal revisionInternal : changes) {
+                            if (!failedIDs.contains(revisionInternal.getDocId())) {
+                                removePending(revisionInternal);
+                            }
+                        }
+
+                    }
+                    if (e != null) {
+                        setError(e);
+                        revisionFailed();
+                    } else {
+                        Log.v(Database.TAG, String.format("%s: POSTed to _bulk_docs: %s", Pusher.this, changes));
+                    }
+                    setCompletedChangesCount(getCompletedChangesCount() + numDocsToSend);
+
+                } finally {
+                    Log.d(Database.TAG, Pusher.this + "|" + Thread.currentThread() + ": processInbox-after_bulk_docs() calling asyncTaskFinished()");
+                    asyncTaskFinished(1);
+                }
+
+            }
+        });
+
+    }
+
+    @InterfaceAudience.Private
+    private Status statusFromBulkDocsResponseItem(Map<String, Object> item) {
+
+        try {
+            if (!item.containsKey("error")) {
+                return new Status(Status.OK);
+            }
+            String errorStr = (String) item.get("error");
+            if (errorStr == null || errorStr.isEmpty()) {
+                return new Status(Status.OK);
+            }
+
+            // 'status' property is nonstandard; TouchDB returns it, others don't.
+            String statusString = (String) item.get("status");
+            int status = Integer.parseInt(statusString);
+            if (status >= 400) {
+                return new Status(status);
+            }
+            // If no 'status' present, interpret magic hardcoded CouchDB error strings:
+            if (errorStr.equalsIgnoreCase("unauthorized")) {
+                return new Status(Status.UNAUTHORIZED);
+            } else if (errorStr.equalsIgnoreCase("forbidden")) {
+                return new Status(Status.FORBIDDEN);
+            } else if (errorStr.equalsIgnoreCase("conflict")) {
+                return new Status(Status.CONFLICT);
+            } else {
+                return new Status(Status.UPSTREAM_ERROR);
+            }
+
+        } catch (Exception e) {
+            Log.e(Database.TAG, "Exception getting status from " + item, e);
+        }
+        return new Status(Status.OK);
+
+
+    }
+
+    /*
+    @Override
+    @InterfaceAudience.Private
+    protected void processInboxOLD(final RevisionList inbox) {
         final long lastInboxSequence = inbox.get(inbox.size()-1).getSequence();
         // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
         // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>
@@ -215,6 +497,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                 diffs.put(docID, revs);
             }
             revs.add(rev.getRevId());
+            addPending(rev);
         }
 
         // Call _revs_diff on the target db:
@@ -331,10 +614,10 @@ public final class Pusher extends Replication implements Database.ChangeListener
             }
 
         });
-    }
+    } */
 
     @InterfaceAudience.Private
-    private boolean uploadMultipartRevision(RevisionInternal revision) {
+    private boolean uploadMultipartRevision(final RevisionInternal revision) {
 
         MultipartEntity multiPart = null;
 
@@ -427,6 +710,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                         revisionFailed();
                     } else {
                         Log.d(Database.TAG, "Uploaded multipart request.  Result: " + result);
+                        removePending(revision);
                     }
                 } finally {
                     Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": uploadMultipartRevision() calling asyncTaskFinished()");

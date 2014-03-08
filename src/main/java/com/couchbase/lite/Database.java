@@ -3643,6 +3643,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public boolean setLastSequence(String lastSequence, String checkpointId, boolean push) {
+        Log.d(Database.TAG, this + " setLastSequence() called with lastSequence: " + lastSequence + " checkpointId: " + checkpointId);
         ContentValues values = new ContentValues();
         values.put("remote", checkpointId);
         values.put("push", push);
