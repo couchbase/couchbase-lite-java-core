@@ -2910,17 +2910,17 @@ public final class Database {
                 outgoingChanges.addAll(changesToNotify);
                 changesToNotify.clear();
 
-
+                // TODO: change this to match iOS and call cachedDocumentWithID
                 /*
                 BOOL external = NO;
-    for (CBLDatabaseChange* change in changes) {
-        // Notify the corresponding instantiated CBLDocument object (if any):
-        [[self _cachedDocumentWithID: change.documentID] revisionAdded: change];
-        if (change.source != nil)
-            external = YES;
-    }
+                for (CBLDatabaseChange* change in changes) {
+                    // Notify the corresponding instantiated CBLDocument object (if any):
+                    [[self _cachedDocumentWithID: change.documentID] revisionAdded: change];
+                    if (change.source != nil)
+                        external = YES;
+                }
+                */
 
-                 */
                 boolean isExternal = false;
                 for (DocumentChange change: outgoingChanges) {
                     Document document = getDocument(change.getDocumentId());
