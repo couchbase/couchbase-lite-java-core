@@ -57,8 +57,6 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public final class Database {
 
-    private static final int MAX_DOC_CACHE_SIZE = 50;
-
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
 
@@ -92,7 +90,7 @@ public final class Database {
     private BlobStore attachments;
     private Manager manager;
     final private List<ChangeListener> changeListeners;
-    private LruCache<String, Document> docCache;
+    private Cache<String, Document> docCache;
     private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
 
@@ -207,7 +205,7 @@ public final class Database {
         this.name = FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
         this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
-        this.docCache = new LruCache<String, Document>(MAX_DOC_CACHE_SIZE);
+        this.docCache = new Cache<String, Document>();
         this.startTime = System.currentTimeMillis();
         this.changesToNotify = new ArrayList<DocumentChange>();
         this.activeReplicators = Collections.synchronizedSet(new HashSet<Replication>());
@@ -772,7 +770,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     protected void clearDocumentCache() {
-        docCache.evictAll();
+        docCache.clear();
     }
 
     /**
