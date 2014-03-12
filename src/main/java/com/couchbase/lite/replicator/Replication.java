@@ -1161,11 +1161,13 @@ public abstract class Replication {
     @InterfaceAudience.Private
     private void stopRemoteRequests() {
         Log.d(Database.TAG, this + ": stopRemoteRequests() cancelling " + requests.size() + " requests");
-        for (RemoteRequest request : requests.keySet()) {
-            Future future = requests.get(request);
-            Log.d(Database.TAG, this + ": cancelling future " + future + " for request: " + request + " isCancelled: " + future.isCancelled() + " isDone: " + future.isDone());
-            boolean result = future.cancel(true);
-            Log.d(Database.TAG, this + ": cancelled future, result: " + result);
+        synchronized (requests) {
+            for (RemoteRequest request : requests.keySet()) {
+                Future future = requests.get(request);
+                Log.d(Database.TAG, this + ": cancelling future " + future + " for request: " + request + " isCancelled: " + future.isCancelled() + " isDone: " + future.isDone());
+                boolean result = future.cancel(true);
+                Log.d(Database.TAG, this + ": cancelled future, result: " + result);
+            }
         }
     }
 
