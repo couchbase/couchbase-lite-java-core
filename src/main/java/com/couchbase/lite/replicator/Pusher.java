@@ -689,7 +689,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
         Log.d(Database.TAG, "Uploading multipart request.  Revision: " + revision);
         Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": uploadMultipartRevision() calling asyncTaskStarted()");
 
-        // TODO: ios code has self.changesTotal++; here
+        setChangesCount(getChangesCount() + 1);
         asyncTaskStarted();
         sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
@@ -714,6 +714,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     }
                 } finally {
                     Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": uploadMultipartRevision() calling asyncTaskFinished()");
+                    setCompletedChangesCount(getCompletedChangesCount() + 1);
                     asyncTaskFinished(1);
 
                 }
