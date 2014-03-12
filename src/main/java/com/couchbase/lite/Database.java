@@ -2843,9 +2843,12 @@ public final class Database {
     public static List<String> parseCouchDBRevisionHistory(Map<String,Object> docProperties) {
         Map<String,Object> revisions = (Map<String,Object>)docProperties.get("_revisions");
         if(revisions == null) {
-            return null;
+            return new ArrayList<String>();
         }
         List<String> revIDs = (List<String>)revisions.get("ids");
+        if (revIDs == null || revIDs.isEmpty()) {
+            return new ArrayList<String>();
+        }
         Integer start = (Integer)revisions.get("start");
         if(start != null) {
             for(int i=0; i < revIDs.size(); i++) {

@@ -28,7 +28,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -39,7 +38,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     private static final int MAX_OPEN_HTTP_CONNECTIONS = 16;
 
-    protected Batcher<List<Object>> downloadsToInsert;
+    protected Batcher<RevisionInternal> downloadsToInsert;
     protected List<RevisionInternal> revsToPull;
     protected ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
@@ -114,10 +113,10 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         if(downloadsToInsert == null) {
             int capacity = 200;
             int delay = 1000;
-            downloadsToInsert = new Batcher<List<Object>>(workExecutor, capacity, delay, new BatchProcessor<List<Object>>() {
+            downloadsToInsert = new Batcher<RevisionInternal>(workExecutor, capacity, delay, new BatchProcessor<RevisionInternal>() {
                 @Override
-                public void process(List<List<Object>> inbox) {
-                    insertRevisions(inbox);
+                public void process(List<RevisionInternal> inbox) {
+                    insertDownloads(inbox);
                 }
             });
         }
@@ -338,34 +337,24 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             @Override
             public void onCompletion(Object result, Throwable e) {
                 try {
-                    // OK, now we've got the response revision:
-                    Log.d(Database.TAG, this + ": pullRemoteRevision got response for rev: " + rev);
-                    if(result != null) {
-                        Map<String,Object> properties = (Map<String,Object>)result;
-                        List<String> history = db.parseCouchDBRevisionHistory(properties);
-                        if(history != null) {
-                            PulledRevision gotRev = new PulledRevision(properties, db);
-                            // Add to batcher ... eventually it will be fed to -insertRevisions:.
-                            List<Object> toInsert = new ArrayList<Object>();
-                            toInsert.add(gotRev);
-                            toInsert.add(history);
-                            Log.d(Database.TAG, this + ": pullRemoteRevision add rev: " + rev + " to batcher");
-                            downloadsToInsert.queueObject(toInsert);
-                            Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": pullRemoteRevision.onCompletion() calling asyncTaskStarted()");
 
-                            asyncTaskStarted();
-                        } else {
-                            Log.w(Database.TAG, this + ": Missing revision history in response from " + pathInside);
-                            setCompletedChangesCount(getCompletedChangesCount() + 1);
-                        }
-                    } else {
-                        if(e != null) {
-                            Log.e(Database.TAG, "Error pulling remote revision", e);
-                            setError(e);
-                        }
+                    if (e != null) {
+                        Log.e(Database.TAG, "Error pulling remote revision", e);
+                        setError(e);
                         revisionFailed();
                         setCompletedChangesCount(getCompletedChangesCount() + 1);
+                    } else {
+                        Map<String,Object> properties = (Map<String,Object>)result;
+                        PulledRevision gotRev = new PulledRevision(properties, db);
+                        gotRev.setSequence(rev.getSequence());
+                        // Add to batcher ... eventually it will be fed to -insertDownloads:.
+                        asyncTaskStarted();
+                        // TODO: [gotRev.body compact];
+                        Log.d(Database.TAG, this + ": pullRemoteRevision add rev: " + gotRev + " to batcher");
+                        downloadsToInsert.queueObject(gotRev);
+
                     }
+
                 } finally {
                     Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": pullRemoteRevision.onCompletion() calling asyncTaskFinished()");
                     asyncTaskFinished(1);
@@ -385,50 +374,32 @@ public final class Puller extends Replication implements ChangeTrackerClient {
      * This will be called when _revsToInsert fills up:
      */
     @InterfaceAudience.Private
-    public void insertRevisions(List<List<Object>> revs) {
-        Log.i(Database.TAG, this + " inserting " + revs.size() + " revisions...");
-        //Log.v(Database.TAG, String.format("%s inserting %s", this, revs));
+    public void insertDownloads(List<RevisionInternal> downloads) {
 
-        /* Updating self.lastSequence is tricky. It needs to be the received sequence ID of
-        the revision for which we've successfully received and inserted (or rejected) it and
-        all previous received revisions. That way, next time we can start tracking remote
-        changes from that sequence ID and know we haven't missed anything. */
-        /* FIX: The current code below doesn't quite achieve that: it tracks the latest
-        sequence ID we've successfully processed, but doesn't handle failures correctly
-        across multiple calls to -insertRevisions. I think correct behavior will require
-        keeping an NSMutableIndexSet to track the fake-sequences of all processed revisions;
-        then we can find the first missing index in that set and not advance lastSequence
-        past the revision with that fake-sequence. */
-        Collections.sort(revs, new Comparator<List<Object>>() {
+        Log.i(Database.TAG, this + " inserting " + downloads.size() + " revisions...");
+        long time = System.currentTimeMillis();
+        Collections.sort(downloads, getRevisionListComparator());
 
-            public int compare(List<Object> list1, List<Object> list2) {
-                RevisionInternal reva = (RevisionInternal)list1.get(0);
-                RevisionInternal revb = (RevisionInternal)list2.get(0);
-                return Misc.TDSequenceCompare(reva.getSequence(), revb.getSequence());
-            }
-
-        });
-
-        if(db == null) {
-            Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": insertRevisions() calling asyncTaskFinished() since db == null");
-            asyncTaskFinished(revs.size());
-            return;
-        }
         db.beginTransaction();
         boolean success = false;
         try {
-            for (List<Object> revAndHistory : revs) {
-                PulledRevision rev = (PulledRevision)revAndHistory.get(0);
+            for (RevisionInternal rev : downloads) {
                 long fakeSequence = rev.getSequence();
-                List<String> history = (List<String>)revAndHistory.get(1);
-                // Insert the revision:
+                List<String> history = db.parseCouchDBRevisionHistory(rev.getProperties());
+                if (history.isEmpty() && rev.getGeneration() > 1) {
+                    Log.w(Database.TAG, this + ": Missing revision history in response for: " + rev);
+                    setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));
+                    revisionFailed();
+                    continue;
+                }
 
+                Log.v(Database.TAG, this + " inserting " + rev.getDocId() + " " + history);
+
+                // Insert the revision
                 try {
-                    Log.i(Database.TAG, this + ": db.forceInsert " + rev);
                     db.forceInsert(rev, history, remote);
-                    Log.i(Database.TAG, this + ": db.forceInsert succeeded " + rev);
                 } catch (CouchbaseLiteException e) {
-                    if(e.getCBLStatus().getCode() == Status.FORBIDDEN) {
+                    if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
                         Log.i(Database.TAG, this + ": Remote rev failed validation: " + rev);
                     } else {
                         Log.w(Database.TAG, this + " failed to write " + rev + ": status=" + e.getCBLStatus().getCode());
@@ -438,23 +409,44 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                     }
                 }
 
+                // Mark this revision's fake sequence as processed:
                 pendingSequences.removeSequence(fakeSequence);
+
             }
 
-            Log.w(Database.TAG, this + " finished inserting " + revs.size() + " revisions");
-
-            setLastSequence(pendingSequences.getCheckpointedValue());
-
+            Log.v(Database.TAG, this + " finished inserting " + downloads.size() + "revisions");
             success = true;
+
         } catch(SQLException e) {
             Log.e(Database.TAG, this + ": Exception inserting revisions", e);
         } finally {
             db.endTransaction(success);
-            Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": insertRevisions() calling asyncTaskFinished()");
-            asyncTaskFinished(revs.size());
+            Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": insertDownloads() calling asyncTaskFinished()");
+            asyncTaskFinished(downloads.size());
         }
 
-        setCompletedChangesCount(getCompletedChangesCount() + revs.size());
+        // Checkpoint:
+        setLastSequence(pendingSequences.getCheckpointedValue());
+
+        long delta = System.currentTimeMillis() - time;
+        Log.v(Database.TAG, this + " inserted " + downloads.size() + " revs in " + delta + " milliseconds");
+
+        Log.d(Database.TAG, this + " insertDownloads updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + downloads.size());
+
+        setCompletedChangesCount(getCompletedChangesCount() + downloads.size());
+
+
+    }
+
+    @InterfaceAudience.Private
+    private Comparator<RevisionInternal> getRevisionListComparator() {
+        return new Comparator<RevisionInternal>() {
+
+            public int compare(RevisionInternal reva, RevisionInternal revb) {
+                return Misc.TDSequenceCompare(reva.getSequence(), revb.getSequence());
+            }
+
+        };
     }
 
     @InterfaceAudience.Private

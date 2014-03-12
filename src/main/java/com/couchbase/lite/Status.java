@@ -41,6 +41,7 @@ public class Status {
     public static final int STATUS_ATTACHMENT_ERROR = 592;
     public static final int UPSTREAM_ERROR = 589;
     public static final int DB_ERROR = 590;
+    public static final int DB_BUSY = 595; // SQLite DB is busy (this is recoverable!)
 
     private int code;
 

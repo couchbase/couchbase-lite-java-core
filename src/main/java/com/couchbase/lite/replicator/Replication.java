@@ -615,12 +615,14 @@ public abstract class Replication {
 
     @InterfaceAudience.Private
     /* package */ void setCompletedChangesCount(int processed) {
+        Log.d(Database.TAG, "Updating completedChanges count from " + this.completedChangesCount + " -> " + processed);
         this.completedChangesCount = processed;
         notifyChangeListeners();
     }
 
     @InterfaceAudience.Private
     /* package */ void setChangesCount(int total) {
+        Log.d(Database.TAG, "Updating changes count from " + this.changesCount + " -> " + total);
         this.changesCount = total;
         notifyChangeListeners();
     }
@@ -698,6 +700,9 @@ public abstract class Replication {
     protected void stopped() {
         Log.v(Database.TAG, this + ": STOPPED");
         running = false;
+
+        Log.d(Database.TAG, "Updating completedChangesCount from " + this.completedChangesCount + " -> 0 (reset)");
+        Log.d(Database.TAG, "Updating changesCount from " + this.changesCount + " -> 0 (reset)");
         this.completedChangesCount = this.changesCount = 0;
 
         notifyChangeListeners();
