@@ -701,10 +701,6 @@ public abstract class Replication {
         Log.v(Database.TAG, this + ": STOPPED");
         running = false;
 
-        Log.d(Database.TAG, "Updating completedChangesCount from " + this.completedChangesCount + " -> 0 (reset)");
-        Log.d(Database.TAG, "Updating changesCount from " + this.changesCount + " -> 0 (reset)");
-        this.completedChangesCount = this.changesCount = 0;
-
         notifyChangeListeners();
 
         saveLastSequence();
