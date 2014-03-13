@@ -86,8 +86,8 @@ public class BlobStoreWriter {
         try {
             while ((len = inputStream.read(buffer)) != -1) {
                 outStream.write(buffer, 0, len);
-                sha1Digest.update(buffer);
-                md5Digest.update(buffer);
+                sha1Digest.update(buffer, 0, len);
+                md5Digest.update(buffer, 0, len);
                 length += len;
             }
         } catch (IOException e) {
