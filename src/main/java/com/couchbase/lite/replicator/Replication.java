@@ -5,6 +5,7 @@ import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Misc;
+import com.couchbase.lite.NetworkReachabilityListener;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authorizer;
@@ -46,7 +47,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * A Couchbase Lite pull or push Replication between a local and a remote Database.
  */
-public abstract class Replication {
+public abstract class Replication implements NetworkReachabilityListener {
 
     private static int lastSessionID = 0;
 
@@ -452,6 +453,8 @@ public abstract class Replication {
 
         checkSession();
 
+        db.getManager().getContext().getNetworkReachabilityManager().addNetworkReachabilityListener(this);
+
     }
 
     /**
@@ -710,6 +713,9 @@ public abstract class Replication {
         batcher = null;
 
         clearDbRef();  // db no longer tracks me so it won't notify me when it closes; clear ref now
+
+        db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(this);
+
     }
 
     @InterfaceAudience.Private
@@ -1289,5 +1295,16 @@ public abstract class Replication {
 
     }
 
+    @Override
+    @InterfaceAudience.Private
+    public void networkReachable() {
+        goOnline();
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    public void networkUnreachable() {
+        goOffline();
+    }
 
 }
