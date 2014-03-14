@@ -16,26 +16,35 @@ public abstract class NetworkReachabilityManager {
     /**
      * Add Network Reachability Listener
      */
-    public void addNetworkReachabilityListener(NetworkReachabilityListener listener) {
+    public synchronized void addNetworkReachabilityListener(NetworkReachabilityListener listener) {
         if (networkReachabilityListeners == null) {
             networkReachabilityListeners = new ArrayList<NetworkReachabilityListener>();
         }
+        int numListenersBeforeAdd = networkReachabilityListeners.size();
         networkReachabilityListeners.add(listener);
+        if (numListenersBeforeAdd == 0) {
+            startListening();
+        }
     }
 
     /**
      * Remove Network Reachability Listener
      */
-    public void removeNetworkReachabilityListener(NetworkReachabilityListener listener) {
-        if (networkReachabilityListeners != null) {
-            networkReachabilityListeners.remove(listener);
+    public synchronized void removeNetworkReachabilityListener(NetworkReachabilityListener listener) {
+        if (networkReachabilityListeners == null) {
+            networkReachabilityListeners = new ArrayList<NetworkReachabilityListener>();
+        }
+        networkReachabilityListeners.remove(listener);
+        if (networkReachabilityListeners.size() == 0) {
+            stopListening();
         }
     }
 
     /**
      * Notify listeners that the network is now reachable
      */
-    public void notifyListenersNetworkReachable() {
+    public synchronized void notifyListenersNetworkReachable() {
+
         for (NetworkReachabilityListener networkReachabilityListener : networkReachabilityListeners) {
             networkReachabilityListener.networkReachable();
         }
@@ -44,7 +53,7 @@ public abstract class NetworkReachabilityManager {
     /**
      * Notify listeners that the network is now unreachable
      */
-    public void notifyListenersNetworkUneachable() {
+    public synchronized void notifyListenersNetworkUneachable() {
         for (NetworkReachabilityListener networkReachabilityListener : networkReachabilityListeners) {
             networkReachabilityListener.networkUnreachable();
         }

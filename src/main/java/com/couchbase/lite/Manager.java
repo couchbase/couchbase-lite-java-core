@@ -114,7 +114,6 @@ public final class Manager {
 
         upgradeOldDatabaseFiles(directoryFile);
         workExecutor = Executors.newSingleThreadScheduledExecutor();
-        context.getNetworkReachabilityManager().startListening();
 
     }
 
