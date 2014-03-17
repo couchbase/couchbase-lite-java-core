@@ -1128,9 +1128,14 @@ public class Router implements Database.ChangeListener {
            }
         });
 
-        Long lastSeq = (Long)entries.get(entries.size() - 1).get("seq");
-        if(lastSeq == null) {
+        Long lastSeq;
+        if (entries.size() == 0){
             lastSeq = since;
+        } else {
+            lastSeq = (Long)entries.get(entries.size() - 1).get("seq");
+            if(lastSeq == null) {
+                lastSeq = since;
+            }
         }
 
         Map<String,Object> result = new HashMap<String,Object>();
