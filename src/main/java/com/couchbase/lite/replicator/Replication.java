@@ -712,9 +712,11 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         batcher = null;
 
-        clearDbRef();  // db no longer tracks me so it won't notify me when it closes; clear ref now
+        if (db != null) {
+            db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(this);
+        }
 
-        db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(this);
+        clearDbRef();  // db no longer tracks me so it won't notify me when it closes; clear ref now
 
     }
 
@@ -1123,6 +1125,9 @@ public abstract class Replication implements NetworkReachabilityListener {
         if (!online) {
             return false;
         }
+        if (db == null) {
+            return false;
+        }
         db.runAsync(new AsyncTask() {
             @Override
             public void run(Database database) {
@@ -1139,6 +1144,9 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Public
     public boolean goOnline() {
         if (online) {
+            return false;
+        }
+        if (db == null) {
             return false;
         }
         db.runAsync(new AsyncTask() {
