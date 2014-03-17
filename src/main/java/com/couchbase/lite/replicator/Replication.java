@@ -582,6 +582,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     private void clearDbRef() {
         if (savingCheckpoint && lastSequence != null) {
             db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+            db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(this);
             db = null;
         }
     }
@@ -713,9 +714,6 @@ public abstract class Replication implements NetworkReachabilityListener {
         batcher = null;
 
         clearDbRef();  // db no longer tracks me so it won't notify me when it closes; clear ref now
-
-        db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(this);
-
     }
 
     @InterfaceAudience.Private
