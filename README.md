@@ -6,3 +6,13 @@ The [Couchbase Lite Android](https://github.com/couchbase/couchbase-lite-android
 * [couchbase-lite-android](https://github.com/couchbase/couchbase-lite-android) - which has dependencies on the Android API.
 
 See the [Project Structure](https://github.com/couchbase/couchbase-lite-android/wiki/Project-structure) wiki page for more information.
+
+# How to build
+
+```
+$ ./gradlew build
+```
+
+# How to import into IDE
+
+Import into [IntelliJ IDEA 13 CE](http://www.jetbrains.com/idea)
