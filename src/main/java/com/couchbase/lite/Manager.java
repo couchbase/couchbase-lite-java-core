@@ -11,11 +11,10 @@ import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
 
+import com.couchbase.lite.util.StreamUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
+import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -234,27 +233,35 @@ public final class Manager {
      * canned database would have been copied into your app bundle at build time.
      *
      * @param databaseName  The name of the target Database to replace or create.
-     * @param databaseFile  Path of the source Database file.
-     * @param attachmentsDirectory  Path of the associated Attachments directory, or null if there are no attachments.
+     * @param databaseStream  InputStream on the source Database file.
+     * @param attachmentStreams  Map of the associated source Attachments, or null if there are no attachments.
+     *                           The Map key is the name of the attachment, the map value is an InputStream of
+     *                           the attachment contents
      **/
     @InterfaceAudience.Public
-    public void replaceDatabase(String databaseName, File databaseFile, File attachmentsDirectory) throws CouchbaseLiteException {
+    public void replaceDatabase(String databaseName, InputStream databaseStream, Map<String,InputStream> attachmentStreams) throws CouchbaseLiteException {
         try {
             Database database = getDatabase(databaseName);
             String dstAttachmentsPath = database.getAttachmentStorePath();
-            File destFile = new File(database.getPath());
-            FileDirUtils.copyFile(databaseFile, destFile);
+            OutputStream destStream = new FileOutputStream(new File(database.getPath()));
+            StreamUtils.copyStream(databaseStream, destStream);
             File attachmentsFile = new File(dstAttachmentsPath);
             FileDirUtils.deleteRecursive(attachmentsFile);
             attachmentsFile.mkdirs();
-            if(attachmentsDirectory != null) {
-                FileDirUtils.copyFolder(attachmentsDirectory, attachmentsFile);
+            if(attachmentStreams != null) {
+                StreamUtils.copyStreamsToFolder(attachmentStreams,attachmentsFile);
             }
             database.replaceUUIDs();
-        } catch (IOException e) {
+        }
+        catch (FileNotFoundException e) {
             Log.e(Database.TAG, "", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         }
+        catch (IOException e) {
+            Log.e(Database.TAG, "", e);
+            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+        }
+
     }
 
     /**
