@@ -12,6 +12,7 @@ import org.apache.http.impl.client.trunk.BasicCookieStore;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.params.BasicHttpParams;
+import org.apache.http.params.HttpConnectionParams;
 
 import java.util.List;
 
@@ -22,6 +23,11 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     private CookieStore cookieStore;
 
     private SSLSocketFactory sslSocketFactory;
+
+    private BasicHttpParams basicHttpParams;
+
+    public static final int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 60;
+    public static final int DEFAULT_SO_TIMEOUT_SECONDS = 60;
 
     /**
      * @param sslSocketFactoryFromUser This is to open up the system for end user to inject the sslSocket factories with their
@@ -34,6 +40,10 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         sslSocketFactory = sslSocketFactoryFromUser;
     }
 
+    public void setBasicHttpParams(BasicHttpParams basicHttpParams) {
+        this.basicHttpParams = basicHttpParams;
+    }
+
     @Override
     public HttpClient getHttpClient() {
 
@@ -41,14 +51,21 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         // it does not seem like _not_ using the ThreadSafeClientConnManager actually
         // caused any problems, but it seems wise to use it "just in case", since it provides
         // extra safety and there are no observed side effects.
-        BasicHttpParams params = new BasicHttpParams();
+
+        if (basicHttpParams == null) {
+            basicHttpParams = new BasicHttpParams();
+            HttpConnectionParams.setConnectionTimeout(basicHttpParams, DEFAULT_CONNECTION_TIMEOUT_SECONDS * 1000);
+            HttpConnectionParams.setSoTimeout(basicHttpParams, DEFAULT_SO_TIMEOUT_SECONDS * 1000);
+        }
+
+
         SchemeRegistry schemeRegistry = new SchemeRegistry();
         schemeRegistry.register(new Scheme("http", PlainSocketFactory.getSocketFactory(), 80));
         final SSLSocketFactory sslSocketFactory = SSLSocketFactory.getSocketFactory();
         schemeRegistry.register(new Scheme("https", this.sslSocketFactory == null ? sslSocketFactory : this.sslSocketFactory, 443));
-        ClientConnectionManager cm = new ThreadSafeClientConnManager(params, schemeRegistry);
+        ClientConnectionManager cm = new ThreadSafeClientConnManager(basicHttpParams, schemeRegistry);
 
-        DefaultHttpClient client = new DefaultHttpClient(cm, params);
+        DefaultHttpClient client = new DefaultHttpClient(cm, basicHttpParams);
 
         // synchronize access to the cookieStore in case there is another
         // thread in the middle of updating it.  wait until they are done so we get their changes.
