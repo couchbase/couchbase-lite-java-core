@@ -32,12 +32,14 @@ public class ResourceUtils {
      * @throws URISyntaxException
      * @throws IOException
      */
-    String[] getResourceListing(Class clazz, String path) throws URISyntaxException, IOException {
+    public static String[] getResourceListing(Class clazz, String path) throws URISyntaxException, IOException {
 
         URL dirURL = clazz.getClassLoader().getResource(path);
         if (dirURL != null && dirURL.getProtocol().equals("file")) {
             return new File(dirURL.toURI()).list();
         }
-        throw new UnsupportedOperationException("Cannot list files for JAR or URL "+dirURL);
+
+        
+        throw new UnsupportedOperationException("Cannot list files for URL "+dirURL);
     }
 }
