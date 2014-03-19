@@ -3657,6 +3657,42 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
+    public String getLastSequenceStored(String checkpointId, boolean push) {
+
+        if (!push) {
+            throw new RuntimeException("need to unhardcode push = 1 before it will work with pull replications");
+        }
+
+        String sql = "SELECT last_sequence FROM replicators "
+                + "WHERE remote = ? AND push = 1 ";
+        String[] args = {checkpointId};
+        Cursor cursor = null;
+        RevisionList changes = null;
+        String lastSequence = null;
+
+        try {
+
+            cursor = database.rawQuery(sql, args);
+            cursor.moveToNext();
+            while(!cursor.isAfterLast()) {
+                lastSequence = cursor.getString(0);
+                cursor.moveToNext();
+            }
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error", e);
+        } finally {
+            if(cursor != null) {
+                cursor.close();
+            }
+        }
+
+        return lastSequence;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     public static String quote(String string) {
         return string.replace("'", "''");
     }
