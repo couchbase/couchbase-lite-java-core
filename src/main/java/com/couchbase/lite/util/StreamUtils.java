@@ -16,6 +16,7 @@
 package com.couchbase.lite.util;
 
 import java.io.*;
+import java.util.Iterator;
 import java.util.Map;
 
 public class StreamUtils {
@@ -30,9 +31,10 @@ public class StreamUtils {
         is.close();
     }
 
-    public static void copyStreamsToFolder(Map<String, InputStream> streams, File folder) throws IOException {
+    public static void copyStreamsToFolder(Iterator<Map.Entry<String,InputStream>> streams, File folder) throws IOException {
 
-        for (Map.Entry<String, InputStream> entry : streams.entrySet()) {
+        while(streams.hasNext()) {
+            Map.Entry<String,InputStream> entry = streams.next();
             File file = new File(folder, entry.getKey());
             copyStreamToFile(entry.getValue(), file);
         }

@@ -235,11 +235,17 @@ public final class Manager {
      * @param databaseName  The name of the target Database to replace or create.
      * @param databaseStream  InputStream on the source Database file.
      * @param attachmentStreams  Map of the associated source Attachments, or null if there are no attachments.
-     *                           The Map key is the name of the attachment, the map value is an InputStream of
-     *                           the attachment contents
+     *                           The Map key is the name of the attachment, the map value is an InputStream for
+     *                           the attachment contents. If you wish to control the order that the attachments
+     *                           will be processed, use a LinkedHashMap, SortedMap or similar and the iteration order
+     *                           will be honoured.
      **/
     @InterfaceAudience.Public
     public void replaceDatabase(String databaseName, InputStream databaseStream, Map<String,InputStream> attachmentStreams) throws CouchbaseLiteException {
+        replaceDatabase(databaseName, databaseStream, attachmentStreams.entrySet().iterator());
+    }
+
+    private void replaceDatabase(String databaseName, InputStream databaseStream, Iterator<Map.Entry<String,InputStream>> attachmentStreams) throws CouchbaseLiteException {
         try {
             Database database = getDatabase(databaseName);
             String dstAttachmentsPath = database.getAttachmentStorePath();

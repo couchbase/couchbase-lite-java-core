@@ -39,7 +39,7 @@ public class ResourceUtils {
             return new File(dirURL.toURI()).list();
         }
 
-        
+
         throw new UnsupportedOperationException("Cannot list files for URL "+dirURL);
     }
 }
