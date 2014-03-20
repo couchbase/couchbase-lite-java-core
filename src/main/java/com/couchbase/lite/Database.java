@@ -200,7 +200,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public Database(String path, Manager manager) {
-        assert(path.startsWith("/")); //path must be absolute
+        assert(new File(path).isAbsolute()); //path must be absolute
         this.path = path;
         this.name = FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
