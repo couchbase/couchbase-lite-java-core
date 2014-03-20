@@ -127,7 +127,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                 maxCompleted = pendingSequences.first();
                 --maxCompleted;
             }
-            lastSequence = Long.toString(maxCompleted);
+            setLastSequence(Long.toString(maxCompleted));
         }
     }
 

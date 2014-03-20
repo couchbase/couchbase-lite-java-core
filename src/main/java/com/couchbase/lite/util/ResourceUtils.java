@@ -15,13 +15,13 @@
  */
 package com.couchbase.lite.util;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.util.Enumeration;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -38,14 +38,14 @@ public class ResourceUtils {
      * @throws URISyntaxException
      * @throws IOException
      */
-    String[] getResourceListing(Class clazz, String path) throws URISyntaxException, IOException {
+    public static String[] getResourceListing(Class clazz, String path) throws URISyntaxException, IOException {
 
         URL dirURL = clazz.getClassLoader().getResource(path);
         if (dirURL != null && dirURL.getProtocol().equals("file")) {
             return new File(dirURL.toURI()).list();
         }
 
-        if (dirURL.getProtocol().equals("jar")) {
+        if (dirURL != null && dirURL.getProtocol().equals("jar")) {
             String jarPath = dirURL.getPath().substring(5, dirURL.getPath().indexOf("!"));
             JarFile jar = new JarFile(URLDecoder.decode(jarPath, "UTF-8"));
             Enumeration<JarEntry> entries = jar.entries();
@@ -65,6 +65,7 @@ public class ResourceUtils {
             return result.toArray(new String[result.size()]);
         }
 
-        throw new UnsupportedOperationException("Cannot list files for JAR or URL "+dirURL);
+        throw new UnsupportedOperationException("Cannot list files for URL "+dirURL);
+
     }
 }

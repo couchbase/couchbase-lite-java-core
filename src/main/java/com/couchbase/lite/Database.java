@@ -200,7 +200,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public Database(String path, Manager manager) {
-        assert(path.startsWith("/")); //path must be absolute
+        assert(new File(path).isAbsolute()); //path must be absolute
         this.path = path;
         this.name = FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
@@ -3651,6 +3651,42 @@ public final class Database {
         values.put("last_sequence", lastSequence);
         long newId = database.insertWithOnConflict("replicators", null, values, SQLiteStorageEngine.CONFLICT_REPLACE);
         return (newId == -1);
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public String getLastSequenceStored(String checkpointId, boolean push) {
+
+        if (!push) {
+            throw new RuntimeException("need to unhardcode push = 1 before it will work with pull replications");
+        }
+
+        String sql = "SELECT last_sequence FROM replicators "
+                + "WHERE remote = ? AND push = 1 ";
+        String[] args = {checkpointId};
+        Cursor cursor = null;
+        RevisionList changes = null;
+        String lastSequence = null;
+
+        try {
+
+            cursor = database.rawQuery(sql, args);
+            cursor.moveToNext();
+            while(!cursor.isAfterLast()) {
+                lastSequence = cursor.getString(0);
+                cursor.moveToNext();
+            }
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error", e);
+        } finally {
+            if(cursor != null) {
+                cursor.close();
+            }
+        }
+
+        return lastSequence;
     }
 
     /**
