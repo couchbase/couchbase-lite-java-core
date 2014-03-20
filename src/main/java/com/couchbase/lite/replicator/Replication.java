@@ -140,7 +140,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         this.workExecutor = workExecutor;
         this.remote = remote;
         this.remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
-        this.changeListeners = new ArrayList<ChangeListener>();
+        this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
         this.online = true;
         this.requestHeaders = new HashMap<String, Object>();
         this.requests = Collections.synchronizedMap(new HashMap<RemoteRequest, Future>());
@@ -724,9 +724,11 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     private void notifyChangeListeners() {
         updateProgress();
-        for (ChangeListener listener : changeListeners) {
-            ChangeEvent changeEvent = new ChangeEvent(this);
-            listener.changed(changeEvent);
+        synchronized (changeListeners) {
+            for (ChangeListener listener : changeListeners) {
+                ChangeEvent changeEvent = new ChangeEvent(this);
+                listener.changed(changeEvent);
+            }
         }
     }
 
