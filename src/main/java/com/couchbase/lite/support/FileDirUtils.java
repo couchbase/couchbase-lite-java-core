@@ -48,8 +48,9 @@ public class FileDirUtils {
         int lastSlashPos = path.lastIndexOf("/");
         int extensionPos = path.lastIndexOf(".");
         if(lastSlashPos < 0 || extensionPos < 0 || extensionPos < lastSlashPos) {
-            Log.e(Database.TAG, "Unable to determine database name from path");
-            return null;
+            String message = "Unable to determine database name from path: " + path;
+            Log.e(Database.TAG, message);
+            throw new IllegalArgumentException(message);
         }
         return path.substring(lastSlashPos + 1, extensionPos);
     }
