@@ -320,7 +320,6 @@ public final class Pusher extends Replication implements Database.ChangeListener
                                 continue;
                             }
                             properties = new HashMap<String,Object>(rev.getProperties());
-                            assert properties.get("_revisions") != null;
 
                             // Strip any attachments already known to the target db:
                             if (properties.containsKey("_attachments")) {
