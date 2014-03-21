@@ -90,7 +90,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             changeTracker.stop();
             changeTracker = null;
             if(!continuous) {
-                Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": stop() calling asyncTaskFinished()");
+                Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": puller.stop() calling asyncTaskFinished()");
                 asyncTaskFinished(1);  // balances asyncTaskStarted() in beginReplicating()
             }
         }
@@ -348,6 +348,8 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                         PulledRevision gotRev = new PulledRevision(properties, db);
                         gotRev.setSequence(rev.getSequence());
                         // Add to batcher ... eventually it will be fed to -insertDownloads:.
+                        Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": pullRemoteRevision() calling asyncTaskStarted() - innner");
+
                         asyncTaskStarted();
                         // TODO: [gotRev.body compact];
                         Log.d(Database.TAG, this + ": pullRemoteRevision add rev: " + gotRev + " to batcher");
@@ -421,7 +423,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             Log.e(Database.TAG, this + ": Exception inserting revisions", e);
         } finally {
             db.endTransaction(success);
-            Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": insertDownloads() calling asyncTaskFinished()");
+            Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": insertDownloads() calling asyncTaskFinished() with value: " + downloads.size());
             asyncTaskFinished(downloads.size());
         }
 

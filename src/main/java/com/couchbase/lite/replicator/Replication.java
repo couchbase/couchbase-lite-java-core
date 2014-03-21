@@ -1279,6 +1279,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     private void refreshRemoteCheckpointDoc() {
         Log.d(Database.TAG, this + ": Refreshing remote checkpoint to get its _rev...");
         savingCheckpoint = true;
+        Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": refreshRemoteCheckpointDoc() calling asyncTaskStarted()");
         asyncTaskStarted();
         sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
 
@@ -1299,6 +1300,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                         saveLastSequence();  // try saving again
                     }
                 } finally {
+                    Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": refreshRemoteCheckpointDoc() calling asyncTaskFinished()");
                     asyncTaskFinished(1);
                 }
             }
