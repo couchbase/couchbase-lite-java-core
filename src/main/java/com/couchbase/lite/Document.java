@@ -231,6 +231,61 @@ public final class Document {
     }
 
     /**
+     * Shorthand for (String) getProperties().get(key)
+     */
+    @InterfaceAudience.Public
+    public String getStringProperty(String key) {
+        return (String) getProperty(key);
+    }
+
+    /**
+     * Casts the requested property, using the default if null is encountered
+     */
+    @InterfaceAudience.Public
+    public double getDoubleProperty(String key, double defaultValue) {
+        Object o = getProperty(key);
+        return o == null ? defaultValue : (Double) o;
+    }
+
+    /**
+     * Casts the requested property, using the default if null is encountered
+     */
+    @InterfaceAudience.Public
+    public boolean getBooleanProperty(String key, boolean defaultValue) {
+        Object o = getProperty(key);
+        return o == null ? defaultValue : (Boolean) o;
+    }
+
+    /**
+     * Casts the requested property, using the default if null is encountered
+     */
+    @InterfaceAudience.Public
+    public int getIntProperty(String key, int defaultValue) {
+        Object o = getProperty(key);
+        return o == null ? defaultValue : (Integer) o;
+    }
+
+    /**
+     * Casts the requested property, using the default if null is encountered
+     */
+    @InterfaceAudience.Public
+    public long getLongProperty(String key, long defaultValue) {
+        Object o = getProperty(key);
+        return o == null ? defaultValue : (Long) o;
+    }
+
+    /**
+     * Casts the requested property
+     * <br>
+     * Ex. {@code Customer customer = document.getTypedProperty("customer");}
+     */
+    @InterfaceAudience.Public
+    @SuppressWarnings("unchecked")  // Because we're explicitly casting
+    public <T> T getTypedProperty(String key) {
+        return (T) getProperty(key);
+    }
+
+    /**
      * Saves a new revision. The properties dictionary must have a "_rev" property
      * whose ID matches the current revision's (as it will if it's a modified
      * copy of this document's .properties property.)
