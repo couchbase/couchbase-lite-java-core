@@ -173,9 +173,14 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             rev.setRemoteSequenceID(lastSequence);
             Log.d(Database.TAG, this + ": adding rev to inbox " + rev);
 
+            Log.v(Database.TAG, String.format("%s: changeTrackerReceivedChange() incrementing changesCount by 1", this));
+
+            // this is purposefully done slightly different than the ios version
+            setChangesCount(getChangesCount() + 1);
+
             addToInbox(rev);
         }
-        setChangesCount(getChangesCount() + changes.size());
+
         while(revsToPull != null && revsToPull.size() > 1000) {
             try {
                 Thread.sleep(500);  // <-- TODO: why is this here?
@@ -228,20 +233,29 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @InterfaceAudience.Private
     protected void processInbox(RevisionList inbox) {
         // Ask the local database which of the revs are not known to it:
-        //Log.w(Database.TAG, String.format("%s: Looking up %s", this, inbox));
         String lastInboxSequence = ((PulledRevision)inbox.get(inbox.size()-1)).getRemoteSequenceID();
-        int total = getChangesCount() - inbox.size();
-        if(!db.findMissingRevisions(inbox)) {
-            Log.w(Database.TAG, String.format("%s failed to look up local revs", this));
+
+        int numRevisionsRemoved = 0;
+        try {
+             // findMissingRevisions is the local equivalent of _revs_diff. it looks at the
+             // array of revisions in ‘inbox’ and removes the ones that already exist. So whatever’s left in ‘inbox’
+             // afterwards are the revisions that need to be downloaded.
+            numRevisionsRemoved = db.findMissingRevisions(inbox);
+        } catch (SQLException e) {
+            Log.e(Database.TAG, String.format("%s failed to look up local revs", this), e);
             inbox = null;
         }
+
         //introducing this to java version since inbox may now be null everywhere
         int inboxCount = 0;
         if(inbox != null) {
             inboxCount = inbox.size();
         }
-        if(getChangesCount() != total + inboxCount) {
-            setChangesCount(total + inboxCount);
+
+        if(numRevisionsRemoved > 0) {
+            Log.v(Database.TAG, String.format("%s: processInbox() setting changesCount to: %s", this, getChangesCount() - numRevisionsRemoved));
+            // May decrease the changesCount, to account for the revisions we just found out we don’t need to get.
+            setChangesCount(getChangesCount() - numRevisionsRemoved);
         }
 
         if(inboxCount == 0) {
@@ -254,7 +268,6 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
 
         Log.v(Database.TAG, this + " fetching " + inboxCount + " remote revisions...");
-        //Log.v(Database.TAG, String.format("%s fetching remote revisions %s", this, inbox));
 
         // Dump the revs into the queue of revs to pull from the remote db:
         synchronized (this) {
@@ -342,6 +355,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                         Log.e(Database.TAG, "Error pulling remote revision", e);
                         setError(e);
                         revisionFailed();
+                        Log.d(Database.TAG, this + " pullRemoteRevision() updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + 1 + " due to error pulling remote revision");
                         setCompletedChangesCount(getCompletedChangesCount() + 1);
                     } else {
                         Map<String,Object> properties = (Map<String,Object>)result;
@@ -433,7 +447,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         long delta = System.currentTimeMillis() - time;
         Log.v(Database.TAG, this + " inserted " + downloads.size() + " revs in " + delta + " milliseconds");
 
-        Log.d(Database.TAG, this + " insertDownloads updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + downloads.size());
+        Log.d(Database.TAG, this + " insertDownloads() updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + downloads.size());
 
         setCompletedChangesCount(getCompletedChangesCount() + downloads.size());
 

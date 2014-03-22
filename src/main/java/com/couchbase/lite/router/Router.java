@@ -24,6 +24,7 @@ import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
+import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.util.Log;
 
 import org.apache.http.client.HttpResponseException;
@@ -963,7 +964,10 @@ public class Router implements Database.ChangeListener {
         }
 
         // Look them up, removing the existing ones from revs:
-        if(!db.findMissingRevisions(revs)) {
+        try {
+            db.findMissingRevisions(revs);
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Exception", e);
             return new Status(Status.DB_ERROR);
         }
 

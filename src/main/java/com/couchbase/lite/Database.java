@@ -3738,9 +3738,10 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public boolean findMissingRevisions(RevisionList touchRevs) {
+    public int findMissingRevisions(RevisionList touchRevs) throws SQLException {
+        int numRevisionsRemoved = 0;
         if(touchRevs.size() == 0) {
-            return true;
+            return numRevisionsRemoved;
         }
 
         String quotedDocIds = joinQuoted(touchRevs.getAllDocIds());
@@ -3762,19 +3763,17 @@ public final class Database {
 
                 if(rev != null) {
                     touchRevs.remove(rev);
+                    numRevisionsRemoved += 1;
                 }
 
                 cursor.moveToNext();
             }
-        } catch (SQLException e) {
-            Log.e(Database.TAG, "Error finding missing revisions", e);
-            return false;
         } finally {
             if(cursor != null) {
                 cursor.close();
             }
         }
-        return true;
+        return numRevisionsRemoved;
     }
 
     /*************************************************************************************************/

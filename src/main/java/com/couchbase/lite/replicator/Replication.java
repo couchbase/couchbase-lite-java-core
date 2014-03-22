@@ -619,14 +619,17 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     @InterfaceAudience.Private
     /* package */ void setCompletedChangesCount(int processed) {
-        Log.d(Database.TAG, "Updating completedChanges count from " + this.completedChangesCount + " -> " + processed);
+        assert(processed > 0);
+        Log.d(Database.TAG, "Updating changesCountCompleted count from " + this.completedChangesCount + " -> " + processed);
         this.completedChangesCount = processed;
         notifyChangeListeners();
+
     }
 
     @InterfaceAudience.Private
     /* package */ void setChangesCount(int total) {
-        Log.d(Database.TAG, "Updating changes count from " + this.changesCount + " -> " + total);
+        assert(total > 0);
+        Log.d(Database.TAG, "Updating changesCount count from " + this.changesCount + " -> " + total);
         this.changesCount = total;
         notifyChangeListeners();
     }
