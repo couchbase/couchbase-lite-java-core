@@ -553,7 +553,7 @@ public class Router implements Database.ChangeListener {
     /*************************************************************************************************/
 
     public void setResponseLocation(URL url) {
-        String location = url.toExternalForm();
+        String location = url.getPath();
         String query = url.getQuery();
         if(query != null) {
             int startOfQuery = location.indexOf(query);
