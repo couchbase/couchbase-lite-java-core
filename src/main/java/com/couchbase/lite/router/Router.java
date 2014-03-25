@@ -737,8 +737,10 @@ public class Router implements Database.ChangeListener {
     private void convertCBLQueryRowsToMaps(Map<String,Object> allDocsResult) {
         List<Map<String, Object>> rowsAsMaps = new ArrayList<Map<String, Object>>();
         List<QueryRow> rows = (List<QueryRow>) allDocsResult.get("rows");
-        for (QueryRow row : rows) {
-            rowsAsMaps.add(row.asJSONDictionary());
+        if (rows != null) {
+            for (QueryRow row : rows) {
+                rowsAsMaps.add(row.asJSONDictionary());
+            }
         }
         allDocsResult.put("rows", rowsAsMaps);
     }
