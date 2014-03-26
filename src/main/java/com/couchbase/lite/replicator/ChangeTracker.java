@@ -442,7 +442,7 @@ public class ChangeTracker implements Runnable {
         this.docIDs = docIDs;
     }
 
-    private String changesFeedPOSTBody() {
+    public String changesFeedPOSTBody() {
         Map<String, Object> postBodyMap = changesFeedPOSTBodyMap();
         try {
             return Manager.getObjectMapper().writeValueAsString(postBodyMap);
@@ -459,7 +459,7 @@ public class ChangeTracker implements Runnable {
         this.usePOST = usePOST;
     }
 
-    private Map<String, Object> changesFeedPOSTBodyMap() {
+    public Map<String, Object> changesFeedPOSTBodyMap() {
 
         if (!usePOST) {
             return null;
@@ -495,19 +495,7 @@ public class ChangeTracker implements Runnable {
 
         if (filterName != null) {
             post.put("filter", filterName);
-            if(filterParams != null) {
-                for (String filterParamKey : filterParams.keySet()) {
-                    Object value = filterParams.get(filterParamKey);
-                    if (!(value instanceof String)) {
-                        try {
-                            value = Manager.getObjectMapper().writeValueAsString(value);
-                        } catch (IOException e) {
-                            throw new IllegalArgumentException(e);
-                        }
-                    }
-                    post.put(filterParamKey, value);
-                }
-            }
+            post.putAll(filterParams);
         }
 
         return post;
