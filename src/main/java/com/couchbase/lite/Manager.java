@@ -569,8 +569,8 @@ public final class Manager {
         } catch (MalformedURLException e) {
             throw new CouchbaseLiteException("malformed remote url: " + remoteStr, new Status(Status.BAD_REQUEST));
         }
-        if(remote == null || !remote.getProtocol().startsWith("http")) {
-            throw new CouchbaseLiteException("remote URL is null or non-http: " + remoteStr, new Status(Status.BAD_REQUEST));
+        if(remote == null) {
+            throw new CouchbaseLiteException("remote URL is null: " + remoteStr, new Status(Status.BAD_REQUEST));
         }
 
 
