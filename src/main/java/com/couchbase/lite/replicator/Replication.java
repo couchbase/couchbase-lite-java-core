@@ -25,6 +25,8 @@ import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Log;
 
+import org.apache.http.Header;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.entity.mime.MultipartEntity;
 
@@ -82,6 +84,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     private int revisionsFailed;
     private ScheduledFuture retryIfReadyFuture;
     private Map<RemoteRequest, Future> requests;
+    private String serverType;
 
     protected static final int PROCESSOR_DELAY = 500;
     protected static final int INBOX_CAPACITY = 100;
@@ -895,6 +898,15 @@ public abstract class Replication implements NetworkReachabilityListener {
         request.setExtraCompletionBlock(new RemoteRequestCompletionBlock() {
             @Override
             public void onCompletion(Object result, Throwable e) {
+                if (serverType == null && result instanceof HttpResponse) {
+                    HttpResponse response = (HttpResponse) result;
+                    Header serverHeader = response.getFirstHeader("Server");
+                    if (serverHeader != null) {
+                        String serverVersion = serverHeader.getValue();
+                        Log.d(Database.TAG, "serverVersion: " + serverVersion);
+                        serverType = serverVersion;
+                    }
+                }
                 requests.remove(request);
             }
         });
@@ -1019,6 +1031,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             @Override
             public void onCompletion(Object result, Throwable e) {
                 try {
+
                     if (e != null && !is404(e)) {
                         Log.d(Database.TAG, this + " error getting remote checkpoint: " + e);
                         setError(e);
@@ -1323,4 +1336,23 @@ public abstract class Replication implements NetworkReachabilityListener {
         goOffline();
     }
 
+    @InterfaceAudience.Private
+    /* package */ boolean serverIsSyncGatewayVersion(String minVersion) {
+        String prefix = "Couchbase Sync Gateway/";
+        if (serverType == null) {
+            return false;
+        } else {
+            if (serverType.startsWith(prefix)) {
+                String versionString = serverType.substring(prefix.length());
+                return versionString.compareTo(minVersion) >= 0;
+            }
+
+        }
+        return false;
+    }
+
+    @InterfaceAudience.Private
+    /* package */ void setServerType(String serverType) {
+        this.serverType = serverType;
+    }
 }

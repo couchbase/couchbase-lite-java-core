@@ -106,7 +106,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         reader.finish();
                         fullBody = reader.getDocumentProperties();
 
-                        respondWithResult(fullBody, error);
+                        respondWithResult(fullBody, error, response);
 
                     } finally {
                         try {
@@ -123,7 +123,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                             inputStream = entity.getContent();
                             fullBody = Manager.getObjectMapper().readValue(inputStream,
                                     Object.class);
-                            respondWithResult(fullBody, error);
+                            respondWithResult(fullBody, error, response);
                         } finally {
                             try {
                                 inputStream.close();

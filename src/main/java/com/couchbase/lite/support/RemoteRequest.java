@@ -126,10 +126,11 @@ public class RemoteRequest implements Runnable {
     protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
         Object fullBody = null;
         Throwable error = null;
+        HttpResponse response = null;
 
         try {
 
-            HttpResponse response = httpClient.execute(request);
+            response = httpClient.execute(request);
 
             // add in cookies to global store
             try {
@@ -173,7 +174,7 @@ public class RemoteRequest implements Runnable {
             Log.e(Database.TAG, "io exception", e);
             error = e;
         }
-        respondWithResult(fullBody, error);
+        respondWithResult(fullBody, error, response);
     }
 
     protected void preemptivelySetAuthCredentials(HttpClient httpClient) {
@@ -220,7 +221,7 @@ public class RemoteRequest implements Runnable {
         }
     }
 
-    public void respondWithResult(final Object result, final Throwable error) {
+    public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
         if (workExecutor != null) {
             workExecutor.submit(new Runnable() {
 
@@ -229,7 +230,7 @@ public class RemoteRequest implements Runnable {
                     try {
                         onCompletion.onCompletion(result, error);
                         if (extraOnCompletion != null) {
-                            extraOnCompletion.onCompletion(result, error);
+                            extraOnCompletion.onCompletion(response, error);
                         }
                     } catch (Exception e) {
                         // don't let this crash the thread
