@@ -47,8 +47,9 @@ public class RemoteRequest implements Runnable {
     protected String method;
     protected URL url;
     protected Object body;
+    protected RemoteRequestCompletionBlock onPreCompletion;
     protected RemoteRequestCompletionBlock onCompletion;
-    protected RemoteRequestCompletionBlock extraOnCompletion;
+    protected RemoteRequestCompletionBlock onPostCompletion;
 
     protected Map<String, Object> requestHeaders;
 
@@ -92,8 +93,12 @@ public class RemoteRequest implements Runnable {
         }
     }
 
-    public void setExtraCompletionBlock(RemoteRequestCompletionBlock extraOnCompletion) {
-        this.extraOnCompletion = extraOnCompletion;
+    public void setOnPostCompletion(RemoteRequestCompletionBlock onPostCompletion) {
+        this.onPostCompletion = onPostCompletion;
+    }
+
+    public void setOnPreCompletion(RemoteRequestCompletionBlock onPreCompletion) {
+        this.onPreCompletion = onPreCompletion;
     }
 
     protected HttpUriRequest createConcreteRequest() {
@@ -228,9 +233,12 @@ public class RemoteRequest implements Runnable {
                 @Override
                 public void run() {
                     try {
+                        if (onPreCompletion != null) {
+                            onPreCompletion.onCompletion(response, error);
+                        }
                         onCompletion.onCompletion(result, error);
-                        if (extraOnCompletion != null) {
-                            extraOnCompletion.onCompletion(response, error);
+                        if (onPostCompletion != null) {
+                            onPostCompletion.onCompletion(response, error);
                         }
                     } catch (Exception e) {
                         // don't let this crash the thread

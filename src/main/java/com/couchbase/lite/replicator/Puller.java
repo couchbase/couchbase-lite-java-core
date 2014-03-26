@@ -137,6 +137,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": beginReplicating() calling asyncTaskStarted()");
             asyncTaskStarted();
         }
+        changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
         changeTracker.start();
     }
 

@@ -895,7 +895,8 @@ public abstract class Replication implements NetworkReachabilityListener {
     public void sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
 
         final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
-        request.setExtraCompletionBlock(new RemoteRequestCompletionBlock() {
+
+        request.setOnPreCompletion(new RemoteRequestCompletionBlock() {
             @Override
             public void onCompletion(Object result, Throwable e) {
                 if (serverType == null && result instanceof HttpResponse) {
@@ -907,6 +908,12 @@ public abstract class Replication implements NetworkReachabilityListener {
                         serverType = serverVersion;
                     }
                 }
+            }
+        });
+
+        request.setOnPostCompletion(new RemoteRequestCompletionBlock() {
+            @Override
+            public void onCompletion(Object result, Throwable e) {
                 requests.remove(request);
             }
         });

@@ -22,8 +22,10 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.protocol.ClientContext;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.protocol.ExecutionContext;
@@ -34,12 +36,15 @@ import org.codehaus.jackson.JsonToken;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.management.relation.RoleUnresolved;
 
 
 /**
@@ -68,6 +73,9 @@ public class ChangeTracker implements Runnable {
     private Throwable error;
     protected Map<String, Object> requestHeaders;
     protected ChangeTrackerBackoff backoff;
+    private boolean usePOST;
+    private int heartBeatSeconds;
+    private int limit;
 
 
     public enum ChangeTrackerMode {
@@ -82,6 +90,8 @@ public class ChangeTracker implements Runnable {
         this.lastSequenceID = lastSequenceID;
         this.client = client;
         this.requestHeaders = new HashMap<String, Object>();
+        this.heartBeatSeconds = 300;
+        this.limit = 50;
     }
 
     public void setFilterName(String filterName) {
@@ -110,20 +120,34 @@ public class ChangeTracker implements Runnable {
         return result;
     }
 
-    public String getChangesFeedPath() {
-        String path = "_changes?feed=";
+    public String getFeed() {
         switch (mode) {
-        case OneShot:
-            path += "normal";
-            break;
-        case LongPoll:
-            path += "longpoll&limit=50";
-            break;
-        case Continuous:
-            path += "continuous";
-            break;
+            case OneShot:
+                return "normal";
+            case LongPoll:
+                return "longpoll";
+            case Continuous:
+                return "continuous";
         }
-        path += "&heartbeat=300000";
+        return "normal";
+    }
+
+    public long getHeartbeatMilliseconds() {
+        return heartBeatSeconds * 1000;
+    }
+
+    public String getChangesFeedPath() {
+
+        if (usePOST) {
+            return "_changes";
+        }
+
+        String path = "_changes?feed=";
+        path += getFeed();
+        if (mode == ChangeTrackerMode.LongPoll) {
+            path += String.format("&limit=%s", limit);
+        }
+        path += String.format("&heartbeat=%s", getHeartbeatMilliseconds());
 
         if (includeConflicts) {
             path += "&style=all_docs";
@@ -203,7 +227,21 @@ public class ChangeTracker implements Runnable {
         while (running) {
 
             URL url = getChangesFeedURL();
-            request = new HttpGet(url.toString());
+            if (usePOST) {
+                HttpPost postRequest = new HttpPost(url.toString());
+                postRequest.setHeader("Content-Type", "application/json");
+                StringEntity entity;
+                try {
+                    entity = new StringEntity(changesFeedPOSTBody());
+                } catch (UnsupportedEncodingException e) {
+                    throw new RuntimeException(e);
+                }
+                postRequest.setEntity(entity);
+                request = postRequest;
+
+            } else {
+                request = new HttpGet(url.toString());
+            }
 
             addRequestHeaders(request);
 
@@ -402,6 +440,77 @@ public class ChangeTracker implements Runnable {
 
     public void setDocIDs(List<String> docIDs) {
         this.docIDs = docIDs;
+    }
+
+    private String changesFeedPOSTBody() {
+        Map<String, Object> postBodyMap = changesFeedPOSTBodyMap();
+        try {
+            return Manager.getObjectMapper().writeValueAsString(postBodyMap);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public boolean isUsePOST() {
+        return usePOST;
+    }
+
+    public void setUsePOST(boolean usePOST) {
+        this.usePOST = usePOST;
+    }
+
+    private Map<String, Object> changesFeedPOSTBodyMap() {
+
+        if (!usePOST) {
+            return null;
+        }
+
+        if (docIDs != null && docIDs.size() > 0) {
+            filterName = "_doc_ids";
+            filterParams = new HashMap<String, Object>();
+            filterParams.put("doc_ids", docIDs);
+        }
+
+        Map<String, Object> post = new HashMap<String, Object>();
+        post.put("feed", getFeed());
+        post.put("heartbeat", getHeartbeatMilliseconds());
+        if (includeConflicts) {
+            post.put("style","all_docs");
+        } else {
+            post.put("style", null);
+        }
+        if (lastSequenceID != null) {
+            try {
+                post.put("since", Long.parseLong(lastSequenceID.toString()));
+            } catch (NumberFormatException e) {
+                post.put("since", lastSequenceID.toString());
+            }
+        }
+        if (limit > 0) {
+            post.put("limit", limit);
+        } else {
+            post.put("limit", null);
+        }
+
+        if (filterName != null) {
+            post.put("filter", filterName);
+            if(filterParams != null) {
+                for (String filterParamKey : filterParams.keySet()) {
+                    Object value = filterParams.get(filterParamKey);
+                    if (!(value instanceof String)) {
+                        try {
+                            value = Manager.getObjectMapper().writeValueAsString(value);
+                        } catch (IOException e) {
+                            throw new IllegalArgumentException(e);
+                        }
+                    }
+                    post.put(filterParamKey, value);
+                }
+            }
+        }
+
+        return post;
+
     }
 
 }
