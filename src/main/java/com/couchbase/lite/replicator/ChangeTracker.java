@@ -486,7 +486,8 @@ public class ChangeTracker implements Runnable {
                 post.put("since", lastSequenceID.toString());
             }
         }
-        if (limit > 0) {
+
+        if (mode == ChangeTrackerMode.LongPoll && limit > 0) {
             post.put("limit", limit);
         } else {
             post.put("limit", null);
