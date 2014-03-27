@@ -73,7 +73,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     private int changesCount;
     protected boolean online;
     protected HttpClientFactory clientFactory;
-    private List<ChangeListener> changeListeners;
+    private final List<ChangeListener> changeListeners;
     protected List<String> documentIDs;
 
     protected Map<String, Object> filterParams;
@@ -83,7 +83,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     protected Map<String, Object> requestHeaders;
     private int revisionsFailed;
     private ScheduledFuture retryIfReadyFuture;
-    private Map<RemoteRequest, Future> requests;
+    private final Map<RemoteRequest, Future> requests;
     private String serverType;
 
     protected static final int PROCESSOR_DELAY = 500;
