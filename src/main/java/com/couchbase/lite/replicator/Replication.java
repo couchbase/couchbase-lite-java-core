@@ -45,6 +45,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A Couchbase Lite pull or push Replication between a local and a remote Database.
@@ -69,8 +70,8 @@ public abstract class Replication implements NetworkReachabilityListener {
     protected String sessionID;
     protected Batcher<RevisionInternal> batcher;
     protected int asyncTaskCount;
-    private int completedChangesCount;
-    private int changesCount;
+    private AtomicInteger completedChangesCount;
+    private AtomicInteger changesCount;
     protected boolean online;
     protected HttpClientFactory clientFactory;
     private final List<ChangeListener> changeListeners;
@@ -147,6 +148,9 @@ public abstract class Replication implements NetworkReachabilityListener {
         this.online = true;
         this.requestHeaders = new HashMap<String, Object>();
         this.requests = Collections.synchronizedMap(new HashMap<RemoteRequest, Future>());
+
+        this.completedChangesCount = new AtomicInteger(0);
+        this.changesCount = new AtomicInteger(0);
 
         if (remote.getQuery() != null && !remote.getQuery().isEmpty()) {
 
@@ -401,7 +405,7 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Public
     public int getCompletedChangesCount() {
-        return completedChangesCount;
+        return completedChangesCount.get();
     }
 
     /**
@@ -409,7 +413,7 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Public
     public int getChangesCount() {
-        return changesCount;
+        return changesCount.get();
     }
 
     /**
@@ -619,27 +623,23 @@ public abstract class Replication implements NetworkReachabilityListener {
         }
     }
 
-
     @InterfaceAudience.Private
-    /* package */ void setCompletedChangesCount(int processed) {
-        if (processed < 0) {
-            Log.w(Database.TAG, "setCompletedChangesCount called with negative number, could indicate an error: " + processed);
-        }
-        Log.d(Database.TAG, "Updating changesCountCompleted count from " + this.completedChangesCount + " -> " + processed);
-        this.completedChangesCount = processed;
+    /* package */ void addToCompletedChangesCount(int delta) {
+        int previousVal = this.completedChangesCount.getAndAdd(delta);
+        Log.d(Database.TAG, "Incrementing completedChangesCount count from " + previousVal + " by adding " + delta + " -> " + this.completedChangesCount.get());
         notifyChangeListeners();
-
     }
 
     @InterfaceAudience.Private
-    /* package */ void setChangesCount(int total) {
-        if (total < 0) {
-            Log.w(Database.TAG, "setChangesCount called with negative number, could indicate an error: " + total);
+    /* package */ void addToChangesCount(int delta) {
+        int previousVal = this.changesCount.getAndAdd(delta);
+        if (changesCount.get() < 0) {
+            Log.w(Database.TAG, "Changes count is negative, this could indicate an error");
         }
-        Log.d(Database.TAG, "Updating changesCount count from " + this.changesCount + " -> " + total);
-        this.changesCount = total;
+        Log.d(Database.TAG, "Incrementing changesCount count from " + previousVal + " by adding " + delta + " -> " + this.changesCount.get());
         notifyChangeListeners();
     }
+
 
     /**
      * @exclude

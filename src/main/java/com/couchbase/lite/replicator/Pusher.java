@@ -377,7 +377,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
         }
 
         Log.v(Database.TAG, String.format("%s: POSTing " + numDocsToSend + " revisions to _bulk_docs: %s", Pusher.this, docsToSend));
-        setChangesCount(getChangesCount() + numDocsToSend);
+        addToChangesCount(numDocsToSend);
 
         Map<String,Object> bulkDocsBody = new HashMap<String,Object>();
         bulkDocsBody.put("docs", docsToSend);
@@ -426,7 +426,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     } else {
                         Log.v(Database.TAG, String.format("%s: POSTed to _bulk_docs: %s", Pusher.this, changes));
                     }
-                    setCompletedChangesCount(getCompletedChangesCount() + numDocsToSend);
+                    addToCompletedChangesCount(numDocsToSend);
 
                 } finally {
                     Log.d(Database.TAG, Pusher.this + "|" + Thread.currentThread() + ": uploadBulkDocs() calling asyncTaskFinished()");
@@ -547,7 +547,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
         Log.d(Database.TAG, "Uploading multipart request.  Revision: " + revision);
         Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": uploadMultipartRevision() calling asyncTaskStarted()");
 
-        setChangesCount(getChangesCount() + 1);
+        addToChangesCount(1);
         asyncTaskStarted();
         sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
@@ -572,7 +572,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     }
                 } finally {
                     Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": uploadMultipartRevision() calling asyncTaskFinished()");
-                    setCompletedChangesCount(getCompletedChangesCount() + 1);
+                    addToCompletedChangesCount(1);
                     asyncTaskFinished(1);
 
                 }

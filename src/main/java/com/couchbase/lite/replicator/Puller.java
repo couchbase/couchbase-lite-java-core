@@ -177,7 +177,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             Log.v(Database.TAG, String.format("%s: changeTrackerReceivedChange() incrementing changesCount by 1", this));
 
             // this is purposefully done slightly different than the ios version
-            setChangesCount(getChangesCount() + 1);
+            addToChangesCount(1);
 
             addToInbox(rev);
         }
@@ -256,7 +256,8 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         if(numRevisionsRemoved > 0) {
             Log.v(Database.TAG, String.format("%s: processInbox() setting changesCount to: %s", this, getChangesCount() - numRevisionsRemoved));
             // May decrease the changesCount, to account for the revisions we just found out we don’t need to get.
-            setChangesCount(getChangesCount() - numRevisionsRemoved);
+            addToChangesCount(-1 * numRevisionsRemoved);
+
         }
 
         if(inboxCount == 0) {
@@ -357,7 +358,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                         setError(e);
                         revisionFailed();
                         Log.d(Database.TAG, this + " pullRemoteRevision() updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + 1 + " due to error pulling remote revision");
-                        setCompletedChangesCount(getCompletedChangesCount() + 1);
+                        addToCompletedChangesCount(1);
                     } else {
                         Map<String,Object> properties = (Map<String,Object>)result;
                         PulledRevision gotRev = new PulledRevision(properties, db);
@@ -450,8 +451,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         Log.d(Database.TAG, this + " insertDownloads() updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + downloads.size());
 
-        setCompletedChangesCount(getCompletedChangesCount() + downloads.size());
-
+        addToCompletedChangesCount(downloads.size());
 
     }
 
