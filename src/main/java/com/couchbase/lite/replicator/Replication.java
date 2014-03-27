@@ -622,7 +622,9 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     @InterfaceAudience.Private
     /* package */ void setCompletedChangesCount(int processed) {
-        assert(processed > 0);
+        if (processed < 0) {
+            Log.w(Database.TAG, "setCompletedChangesCount called with negative number, could indicate an error: " + processed);
+        }
         Log.d(Database.TAG, "Updating changesCountCompleted count from " + this.completedChangesCount + " -> " + processed);
         this.completedChangesCount = processed;
         notifyChangeListeners();
@@ -631,7 +633,9 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     @InterfaceAudience.Private
     /* package */ void setChangesCount(int total) {
-        assert(total > 0);
+        if (total < 0) {
+            Log.w(Database.TAG, "setChangesCount called with negative number, could indicate an error: " + total);
+        }
         Log.d(Database.TAG, "Updating changesCount count from " + this.changesCount + " -> " + total);
         this.changesCount = total;
         notifyChangeListeners();
