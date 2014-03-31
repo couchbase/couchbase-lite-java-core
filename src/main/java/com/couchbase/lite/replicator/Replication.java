@@ -11,19 +11,19 @@ import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
-import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
+import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
 import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
-import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
-import com.couchbase.lite.util.Log;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -1000,20 +1001,38 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     public String remoteCheckpointDocID() {
 
-        // TODO: iOS code is calling [CBLCanonicalJSON canonicalData: spec]
-        // Waiting on response from Jens to see if something similar is needed here
-
         if (db == null) {
             return null;
         }
-        Map<String, Object> spec = new HashMap<String, Object>();
+
+        // canonicalization: make sure it produces the same checkpoint id regardless of
+        // ordering of filterparams / docids
+        Map<String, Object> filterParamsCanonical = null;
+        if (getFilterParams() != null) {
+            filterParamsCanonical = new TreeMap<String, Object>(getFilterParams());
+        }
+
+        List<String> docIdsSorted = null;
+        if (getDocIds() != null) {
+            docIdsSorted = new ArrayList<String>(getDocIds());
+            Collections.sort(docIdsSorted);
+        }
+
+        // use a treemap rather than a dictionary for purposes of canonicalization
+        Map<String, Object> spec = new TreeMap<String, Object>();
         spec.put("localUUID", db.privateUUID());
         spec.put("remoteURL", remote.toExternalForm());
         spec.put("push", !isPull());
         spec.put("continuous", isContinuous());
-        spec.put("filter", getFilter());
-        spec.put("filterParams", getFilterParams());
-        spec.put("docids", getDocIds());
+        if (getFilter() != null) {
+            spec.put("filter", getFilter());
+        }
+        if (filterParamsCanonical != null) {
+            spec.put("filterParams", filterParamsCanonical);
+        }
+        if (docIdsSorted != null) {
+            spec.put("docids", docIdsSorted);
+        }
 
         byte[] inputBytes = null;
         try {
