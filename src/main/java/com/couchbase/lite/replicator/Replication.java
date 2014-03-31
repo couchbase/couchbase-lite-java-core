@@ -30,6 +30,7 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.entity.mime.MultipartEntity;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
@@ -999,22 +1000,28 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     public String remoteCheckpointDocID() {
 
-        /*  TODO: enhance to match iOS version
-            NSMutableDictionary* spec = $mdict({@"localUUID", _db.privateUUID},
-                                       {@"remoteURL", _remote.absoluteString},
-                                       {@"push", @(self.isPush)},
-                                       {@"continuous", (self.continuous ? nil : $false)},
-                                       {@"filter", _filterName},
-                                       {@"filterParams", _filterParameters},
-                                     //{@"headers", _requestHeaders}, (removed; see #143)
-                                       {@"docids", _docIDs});
-         */
+        // TODO: iOS code is calling [CBLCanonicalJSON canonicalData: spec]
+        // Waiting on response from Jens to see if something similar is needed here
 
         if (db == null) {
             return null;
         }
-        String input = db.privateUUID() + "\n" + remote.toExternalForm() + "\n" + (!isPull() ? "1" : "0");
-        return Misc.TDHexSHA1Digest(input.getBytes());
+        Map<String, Object> spec = new HashMap<String, Object>();
+        spec.put("localUUID", db.privateUUID());
+        spec.put("remoteURL", remote.toExternalForm());
+        spec.put("push", !isPull());
+        spec.put("continuous", isContinuous());
+        spec.put("filter", getFilter());
+        spec.put("filterParams", getFilterParams());
+        spec.put("docids", getDocIds());
+
+        byte[] inputBytes = null;
+        try {
+            inputBytes = db.getManager().getObjectMapper().writeValueAsBytes(spec);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return Misc.TDHexSHA1Digest(inputBytes);
     }
 
     @InterfaceAudience.Private
