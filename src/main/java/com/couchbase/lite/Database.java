@@ -976,10 +976,12 @@ public final class Database {
         views = null;
 
         if(activeReplicators != null) {
-            for(Replication replicator : activeReplicators) {
-                replicator.databaseClosing();
+            synchronized (activeReplicators) {
+                for(Replication replicator : activeReplicators) {
+                    replicator.databaseClosing();
+                }
+                activeReplicators = null;
             }
-            activeReplicators = null;
         }
 
         allReplicators = null;
@@ -3577,9 +3579,11 @@ public final class Database {
     @InterfaceAudience.Private
     public Replication getActiveReplicator(URL remote, boolean push) {
         if(activeReplicators != null) {
-            for (Replication replicator : activeReplicators) {
-                if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
-                    return replicator;
+            synchronized (activeReplicators) {
+                for (Replication replicator : activeReplicators) {
+                    if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
+                        return replicator;
+                    }
                 }
             }
         }
@@ -3602,9 +3606,11 @@ public final class Database {
     @InterfaceAudience.Private
     public Replication getReplicator(String sessionId) {
     	if(activeReplicators != null) {
-            for (Replication replicator : allReplicators) {
-                if(replicator.getSessionID().equals(sessionId)) {
-                    return replicator;
+            synchronized (allReplicators) {
+                for (Replication replicator : allReplicators) {
+                    if(replicator.getSessionID().equals(sessionId)) {
+                        return replicator;
+                    }
                 }
             }
         }
