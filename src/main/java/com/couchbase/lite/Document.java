@@ -71,7 +71,11 @@ public final class Document {
      */
     @InterfaceAudience.Public
     public boolean isDeleted() {
-        return getCurrentRevision().isDeletion();
+        try {
+            return getCurrentRevision() == null && getLeafRevisions().size() > 0;
+        } catch (CouchbaseLiteException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -475,8 +479,13 @@ public final class Document {
         if (rev == null) {
             return;  // current revision didn't change
         }
+
         if (currentRevision != null && !rev.getRevId().equals(currentRevision.getId())) {
-            currentRevision = new SavedRevision(this, rev);
+            if (!rev.isDeleted()) {
+                currentRevision = new SavedRevision(this, rev);
+            } else {
+                currentRevision = null;
+            }
         }
 
         for (ChangeListener listener : changeListeners) {
