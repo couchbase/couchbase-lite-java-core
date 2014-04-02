@@ -8,6 +8,7 @@ sourceCompatibility = 1.6
 repositories {
     maven { url 'http://files.couchbase.com/maven2/' }
     mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
