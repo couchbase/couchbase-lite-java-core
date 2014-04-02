@@ -2165,15 +2165,15 @@ public final class Database {
             cursor.moveToNext();
             if (!cursor.isAfterLast()) {
                 revId = cursor.getString(0);
-                boolean deleted = cursor.getInt(1)>0;
+                boolean deleted = cursor.getInt(1) > 0;
                 if (deleted) {
                     outIsDeleted.add(true);
                 }
                 // The document is in conflict if there are two+ result rows that are not deletions.
                 boolean hasNextResult = cursor.moveToNext();
                 if (hasNextResult) {
-                    boolean isNextDeleted = cursor.getInt(1)>0;
-                    boolean isInConflict = !deleted && hasNextResult && isNextDeleted;
+                    boolean isNextDeleted = cursor.getInt(1) > 0;
+                    boolean isInConflict = !deleted && hasNextResult && !isNextDeleted;
                     if (isInConflict) {
                         outIsConflict.add(true);
                     }
