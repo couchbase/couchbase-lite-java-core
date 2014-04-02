@@ -3607,7 +3607,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public Replication getReplicator(String sessionId) {
-    	if(activeReplicators != null) {
+    	if(allReplicators != null) {
             synchronized (allReplicators) {
                 for (Replication replicator : allReplicators) {
                     if(replicator.getSessionID().equals(sessionId)) {
