@@ -1,6 +1,7 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.util.Utils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -224,14 +225,11 @@ public class QueryRow {
 
         QueryRow other = (QueryRow) object;
 
-        boolean documentPropertiesBothNull = (documentProperties == null &&
-                other.getDocumentProperties() == null);
-        boolean documentPropertiesEqual = documentPropertiesBothNull ||
-                documentProperties.equals(other.getDocumentProperties());
+        boolean documentPropertiesEqual = Utils.isEqual(documentProperties, other.getDocumentProperties());
 
         if (database == other.database
-                && key.equals(other.getKey())
-                && sourceDocumentId.equals(other.getSourceDocumentId())
+                && Utils.isEqual(key, other.getKey())
+                && Utils.isEqual(sourceDocumentId, other.getSourceDocumentId())
                 && documentPropertiesEqual) {
             // If values were emitted, compare them. Otherwise we have nothing to go on so check
             // if _anything_ about the doc has changed (i.e. the sequences are different.)
