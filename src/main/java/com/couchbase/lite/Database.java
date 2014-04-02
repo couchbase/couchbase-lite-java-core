@@ -1221,9 +1221,11 @@ public final class Database {
             RevisionList revs = getAllRevisionsOfDocumentID(docId, true);
             if(revs.size() > 1) {
                 conflicts = new ArrayList<String>();
-                for (RevisionInternal historicalRev : revs) {
-                    if(!historicalRev.equals(rev)) {
-                        conflicts.add(historicalRev.getRevId());
+                for (RevisionInternal aRev : revs) {
+                    if(aRev.equals(rev) || aRev.isDeleted()) {
+                        // don't add in this case
+                    } else {
+                        conflicts.add(aRev.getRevId());
                     }
                 }
             }
