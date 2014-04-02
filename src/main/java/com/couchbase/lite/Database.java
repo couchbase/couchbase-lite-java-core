@@ -47,6 +47,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -203,12 +205,12 @@ public final class Database {
         this.path = path;
         this.name = FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
-        this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
+        this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.docCache = new Cache<String, Document>();
         this.startTime = System.currentTimeMillis();
         this.changesToNotify = new ArrayList<DocumentChange>();
-        this.activeReplicators = Collections.synchronizedSet(new HashSet<Replication>());
-        this.allReplicators = Collections.synchronizedSet(new HashSet<Replication>());
+        this.activeReplicators =  Collections.newSetFromMap(new ConcurrentHashMap());
+        this.allReplicators = Collections.newSetFromMap(new ConcurrentHashMap());
     }
 
     /**
@@ -976,12 +978,10 @@ public final class Database {
         views = null;
 
         if(activeReplicators != null) {
-            synchronized (activeReplicators) {
-                for(Replication replicator : activeReplicators) {
-                    replicator.databaseClosing();
-                }
-                activeReplicators = null;
+            for(Replication replicator : activeReplicators) {
+                replicator.databaseClosing();
             }
+            activeReplicators = null;
         }
 
         allReplicators = null;
@@ -2949,10 +2949,8 @@ public final class Database {
 
                 ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
 
-                synchronized (changeListeners) {
-                    for (ChangeListener changeListener : changeListeners) {
-                        changeListener.changed(changeEvent);
-                    }
+                for (ChangeListener changeListener : changeListeners) {
+                    changeListener.changed(changeEvent);
                 }
 
             } catch (Exception e) {
@@ -3581,11 +3579,9 @@ public final class Database {
     @InterfaceAudience.Private
     public Replication getActiveReplicator(URL remote, boolean push) {
         if(activeReplicators != null) {
-            synchronized (activeReplicators) {
-                for (Replication replicator : activeReplicators) {
-                    if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
-                        return replicator;
-                    }
+            for (Replication replicator : activeReplicators) {
+                if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
+                    return replicator;
                 }
             }
         }
@@ -3608,11 +3604,9 @@ public final class Database {
     @InterfaceAudience.Private
     public Replication getReplicator(String sessionId) {
     	if(allReplicators != null) {
-            synchronized (allReplicators) {
-                for (Replication replicator : allReplicators) {
-                    if(replicator.getSessionID().equals(sessionId)) {
-                        return replicator;
-                    }
+            for (Replication replicator : allReplicators) {
+                if(replicator.getSessionID().equals(sessionId)) {
+                    return replicator;
                 }
             }
         }

@@ -41,6 +41,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -146,10 +148,10 @@ public abstract class Replication implements NetworkReachabilityListener {
         this.workExecutor = workExecutor;
         this.remote = remote;
         this.remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
-        this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
+        this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.online = true;
         this.requestHeaders = new HashMap<String, Object>();
-        this.requests = Collections.synchronizedMap(new HashMap<RemoteRequest, Future>());
+        this.requests = new ConcurrentHashMap<RemoteRequest, Future>();
 
         this.completedChangesCount = new AtomicInteger(0);
         this.changesCount = new AtomicInteger(0);
@@ -736,12 +738,11 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     private void notifyChangeListeners() {
         updateProgress();
-        synchronized (changeListeners) {
-            for (ChangeListener listener : changeListeners) {
-                ChangeEvent changeEvent = new ChangeEvent(this);
-                listener.changed(changeEvent);
-            }
+        for (ChangeListener listener : changeListeners) {
+            ChangeEvent changeEvent = new ChangeEvent(this);
+            listener.changed(changeEvent);
         }
+
     }
 
     @InterfaceAudience.Private
@@ -1227,13 +1228,11 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     private void stopRemoteRequests() {
         Log.d(Database.TAG, this + ": stopRemoteRequests() cancelling " + requests.size() + " requests");
-        synchronized (requests) {
-            for (RemoteRequest request : requests.keySet()) {
-                Future future = requests.get(request);
-                Log.d(Database.TAG, this + ": cancelling future " + future + " for request: " + request + " isCancelled: " + future.isCancelled() + " isDone: " + future.isDone());
-                boolean result = future.cancel(true);
-                Log.d(Database.TAG, this + ": cancelled future, result: " + result);
-            }
+        for (RemoteRequest request : requests.keySet()) {
+            Future future = requests.get(request);
+            Log.d(Database.TAG, this + ": cancelling future " + future + " for request: " + request + " isCancelled: " + future.isCancelled() + " isDone: " + future.isDone());
+            boolean result = future.cancel(true);
+            Log.d(Database.TAG, this + ": cancelled future, result: " + result);
         }
     }
 
