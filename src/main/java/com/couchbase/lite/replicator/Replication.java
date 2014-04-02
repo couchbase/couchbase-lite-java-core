@@ -592,7 +592,7 @@ public abstract class Replication implements NetworkReachabilityListener {
      * @exclude
      */
     private void clearDbRef() {
-        if (savingCheckpoint && lastSequence != null) {
+        if (savingCheckpoint && lastSequence != null && db != null) {
             db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
             db = null;
         }
