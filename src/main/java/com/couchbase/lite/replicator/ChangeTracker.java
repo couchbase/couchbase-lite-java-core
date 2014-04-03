@@ -248,7 +248,6 @@ public class ChangeTracker implements Runnable {
             // if the URL contains user info AND if this a DefaultHttpClient
             // then preemptively set the auth credentials
             if (url.getUserInfo() != null) {
-                Log.v(Database.TAG, this + ": url.getUserInfo(): " + url.getUserInfo());
                 if (url.getUserInfo().contains(":") && !url.getUserInfo().trim().equals(":")) {
                     String[] userInfoSplit = url.getUserInfo().split(":");
                     final Credentials creds = new UsernamePasswordCredentials(
