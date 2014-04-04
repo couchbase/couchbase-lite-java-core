@@ -4,6 +4,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
@@ -38,9 +39,13 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 public class RemoteRequest implements Runnable {
+
+    private static final int MAX_RETRIES = 2;
+    private static final int RETRY_DELAY_MS = 10 * 1000;
 
     protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
@@ -50,6 +55,7 @@ public class RemoteRequest implements Runnable {
     protected RemoteRequestCompletionBlock onPreCompletion;
     protected RemoteRequestCompletionBlock onCompletion;
     protected RemoteRequestCompletionBlock onPostCompletion;
+    private int retryCount;
 
     protected Map<String, Object> requestHeaders;
 
@@ -128,6 +134,25 @@ public class RemoteRequest implements Runnable {
         }
     }
 
+    /**
+     * Retry this remote request, unless we've already retried MAX_RETRIES times
+     *
+     * NOTE: This assumes all requests are idempotent, since even though we got an error back, the
+     * request might have succeeded on the remote server, and by retrying we'd be issuing it again.
+     * PUT and POST requests aren't generally idempotent, but the ones sent by the replicator are.
+     *
+     * @return true if going to retry the request, false otherwise
+     */
+    protected boolean retryRequest() {
+        if (retryCount >= MAX_RETRIES) {
+            return false;
+        }
+        workExecutor.schedule(this, RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
+        retryCount += 1;
+        Log.d(Database.TAG, "Will retry in " + RETRY_DELAY_MS + " ms");
+        return true;
+    }
+
     protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
         Object fullBody = null;
         Throwable error = null;
@@ -148,6 +173,10 @@ public class RemoteRequest implements Runnable {
             }
 
             StatusLine status = response.getStatusLine();
+            if (Utils.isTransientError(status) && retryRequest()) {
+                return;
+            }
+
             if (status.getStatusCode() >= 300) {
                 Log.e(Database.TAG,
                         "Got error " + Integer.toString(status.getStatusCode()));
