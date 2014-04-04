@@ -207,6 +207,11 @@ public class RemoteRequest implements Runnable {
         } catch (IOException e) {
             Log.e(Database.TAG, "io exception", e);
             error = e;
+            // Treat all IOExceptions as transient, per:
+            // http://hc.apache.org/httpclient-3.x/exception-handling.html
+            if (retryRequest()) {
+                return;
+            }
         }
         respondWithResult(fullBody, error, response);
     }
