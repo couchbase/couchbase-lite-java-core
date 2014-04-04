@@ -5,10 +5,16 @@ apply plugin: 'eclipse'
 
 sourceCompatibility = 1.6
 
+def couchbaseMavenRepo = 'http://files.couchbase.com/maven2/'
+
+def localMavenRepo     = System.getProperty('MAVEN_LOCAL_REPO') == null ?
+                         'file://' + new File(System.getProperty('user.home'), '.m2/repository').absolutePath :
+                         'file://' + System.getProperty('MAVEN_LOCAL_REPO')
 repositories {
     mavenCentral()
-    mavenLocal()
-}
+    maven { url couchbaseMavenRepo }
+    maven { url localMavenRepo     }
+} 
 
 dependencies {
 
