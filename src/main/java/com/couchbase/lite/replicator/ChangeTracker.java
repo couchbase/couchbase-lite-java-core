@@ -79,7 +79,9 @@ public class ChangeTracker implements Runnable {
 
 
     public enum ChangeTrackerMode {
-        OneShot, LongPoll, Continuous
+        OneShot,
+        LongPoll,
+        Continuous  // does not work, do not use it.
     }
 
     public ChangeTracker(URL databaseURL, ChangeTrackerMode mode, boolean includeConflicts,
