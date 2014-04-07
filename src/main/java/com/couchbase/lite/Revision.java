@@ -242,6 +242,14 @@ public abstract class Revision {
      * @exclude
      */
     @InterfaceAudience.Private
+    /* package */ void setParentRevisionID(String parentRevID) {
+        this.parentRevID = parentRevID;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     /* package */ void setSequence(long sequence) {
         this.sequence = sequence;
     }

@@ -3,6 +3,7 @@ package com.couchbase.lite.router;
 
 import com.couchbase.lite.AsyncTask;
 import com.couchbase.lite.Attachment;
+import com.couchbase.lite.BlobStoreWriter;
 import com.couchbase.lite.ChangesOptions;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
@@ -21,15 +22,18 @@ import com.couchbase.lite.View;
 import com.couchbase.lite.View.TDViewCollation;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
+import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.StreamUtils;
 
 import org.apache.http.client.HttpResponseException;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -49,6 +53,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import sun.misc.IOUtils;
 
 
 public class Router implements Database.ChangeListener {
@@ -1564,7 +1570,19 @@ public class Router implements Database.ChangeListener {
         if(revID == null) {
             revID = getRevIDFromIfMatchHeader();
         }
-        RevisionInternal rev = db.updateAttachment(attachment, contentStream, connection.getRequestProperty("content-type"),
+
+        BlobStoreWriter body = new BlobStoreWriter(db.getAttachments());
+        ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
+
+        try{
+            StreamUtils.copyStream(contentStream,dataStream);
+            body.appendData(dataStream.toByteArray());
+            body.finish();
+        } catch (IOException e) {
+            throw new CouchbaseLiteException(Status.BAD_ATTACHMENT);
+        }
+
+        RevisionInternal rev = db.updateAttachment(attachment, body, connection.getRequestProperty("content-type"), AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
                 docID, revID);
         Map<String, Object> resultDict = new HashMap<String, Object>();
         resultDict.put("ok", true);

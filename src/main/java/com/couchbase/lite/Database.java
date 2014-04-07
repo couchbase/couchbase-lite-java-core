@@ -1264,11 +1264,13 @@ public final class Database {
     @InterfaceAudience.Private
     public void expandStoredJSONIntoRevisionWithAttachments(byte[] json, RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) {
         Map<String,Object> extra = extraPropertiesForRevision(rev, contentOptions);
-        if(json != null) {
+        if(json != null && json.length > 0) {
             rev.setJson(appendDictToJSON(json, extra));
         }
         else {
             rev.setProperties(extra);
+            if (json == null)
+                rev.setMissing(true);
         }
     }
 
@@ -1365,7 +1367,11 @@ public final class Database {
         if(rev.getBody() != null && contentOptions == EnumSet.noneOf(Database.TDContentOptions.class) && rev.getSequence() != 0) {
             return rev;
         }
-        assert((rev.getDocId() != null) && (rev.getRevId() != null));
+
+        if((rev.getDocId() == null) || (rev.getRevId() == null)) {
+            Log.e(Database.TAG, "Error loading revision body");
+            throw new CouchbaseLiteException(Status.PRECONDITION_FAILED);
+        }
 
         Cursor cursor = null;
         Status result = new Status(Status.NOT_FOUND);
@@ -2554,12 +2560,15 @@ public final class Database {
             for (String attachmentKey : attachmentsFromProps.keySet()) {
                 Map<String, Object> attachmentFromProps = (Map<String, Object>) attachmentsFromProps.get(attachmentKey);
                 if (attachmentFromProps.get("follows") != null || attachmentFromProps.get("data") != null) {
+
                     attachmentFromProps.remove("follows");
                     attachmentFromProps.remove("data");
+
                     attachmentFromProps.put("stub", true);
                     if (attachmentFromProps.get("revpos") == null) {
                         attachmentFromProps.put("revpos",rev.getGeneration());
                     }
+
                     AttachmentInternal attachmentObject = attachments.get(attachmentKey);
                     if (attachmentObject != null) {
                         attachmentFromProps.put("length", attachmentObject.getLength());
@@ -2633,11 +2642,11 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public RevisionInternal updateAttachment(String filename, InputStream contentStream, String contentType, String docID, String oldRevID) throws CouchbaseLiteException {
+    public RevisionInternal updateAttachment(String filename, BlobStoreWriter body, String contentType, AttachmentInternal.AttachmentEncoding encoding, String docID, String oldRevID) throws CouchbaseLiteException {
 
         boolean isSuccessful = false;
 
-        if(filename == null || filename.length() == 0 || (contentStream != null && contentType == null) || (oldRevID != null && docID == null) || (contentStream != null && docID == null)) {
+        if(filename == null || filename.length() == 0 || (body != null && contentType == null) || (oldRevID != null && docID == null) || (body != null && docID == null)) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
@@ -2655,48 +2664,54 @@ public final class Database {
                     }
                 }
 
-                Map<String, Object> oldRevProps = oldRev.getProperties();
-                Map<String,Object> attachments = null;
-                if (oldRevProps != null) {
-                    attachments = (Map<String, Object>) oldRevProps.get("_attachments");
-                }
-                if(contentStream == null && attachments != null && !attachments.containsKey(filename)) {
-                    throw new CouchbaseLiteException(Status.NOT_FOUND);
-                }
-                // Remove the _attachments stubs so putRevision: doesn't copy the rows for me
-                // OPT: Would be better if I could tell loadRevisionBody: not to add it
-                if(attachments != null) {
-                    Map<String,Object> properties = new HashMap<String,Object>(oldRev.getProperties());
-                    properties.remove("_attachments");
-                    oldRev.setBody(new Body(properties));
-                }
             } else {
                 // If this creates a new doc, it needs a body:
                 oldRev.setBody(new Body(new HashMap<String,Object>()));
             }
 
+            // Update the _attachments dictionary:
+            Map<String, Object> oldRevProps = oldRev.getProperties();
+            Map<String,Object> attachments = null;
+            if (oldRevProps != null) {
+                attachments = (Map<String, Object>) oldRevProps.get("_attachments");
+            }
+
+            if (attachments == null)
+                attachments = new HashMap<String, Object>();
+
+            if (body != null) {
+                BlobKey key = body.getBlobKey();
+                String digest = key.base64Digest();
+
+                Map<String, BlobStoreWriter> blobsByDigest = new HashMap<String, BlobStoreWriter>();
+                blobsByDigest.put(digest,body);
+                rememberAttachmentWritersForDigests(blobsByDigest);
+
+                String encodingName = (encoding == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) ? "gzip" : null;
+                Map<String,Object> dict = new HashMap<String, Object>();
+
+                dict.put("digest", digest);
+                dict.put("length", body.getLength());
+                dict.put("follows", true);
+                dict.put("content_type", contentType);
+                dict.put("encoding", encodingName);
+
+                attachments.put(filename, dict);
+            } else {
+                if (oldRevID != null && !attachments.containsKey(filename) ) {
+                    throw new CouchbaseLiteException(Status.NOT_FOUND);
+                }
+                attachments.remove(filename);
+            }
+
+            Map<String, Object> properties = oldRev.getProperties();
+            properties.put("_attachments",attachments);
+            oldRev.setProperties(properties);
+
+
             // Create a new revision:
             Status putStatus = new Status();
             RevisionInternal newRev = putRevision(oldRev, oldRevID, false, putStatus);
-            if(newRev == null) {
-                return null;
-            }
-
-            if(oldRevID != null) {
-                // Copy all attachment rows _except_ for the one being updated:
-                String[] args = { Long.toString(newRev.getSequence()), Long.toString(oldRev.getSequence()), filename };
-                database.execSQL("INSERT INTO attachments "
-                        + "(sequence, filename, key, type, length, revpos) "
-                        + "SELECT ?, filename, key, type, length, revpos FROM attachments "
-                        + "WHERE sequence=? AND filename != ?", args);
-            }
-
-            if(contentStream != null) {
-                // If not deleting, add a new attachment entry:
-                insertAttachmentForSequenceWithNameAndType(contentStream, newRev.getSequence(),
-                        filename, contentType, newRev.getGeneration());
-
-            }
 
             isSuccessful = true;
             return newRev;
@@ -3104,17 +3119,7 @@ public final class Database {
                     throw new CouchbaseLiteException(msg ,Status.NOT_FOUND);
                 }
 
-                String[] args = {Long.toString(docNumericID), prevRevId};
-                String additionalWhereClause = "";
-                if(!allowConflict) {
-                    additionalWhereClause = "AND current=1";
-                }
-
-                cursor = database.rawQuery("SELECT sequence FROM revs WHERE doc_id=? AND revid=? " + additionalWhereClause + " LIMIT 1", args);
-
-                if(cursor.moveToNext()) {
-                    parentSequence = cursor.getLong(0);
-                }
+                parentSequence = getSequenceOfDocument(docNumericID, prevRevId, !allowConflict);
 
                 if(parentSequence == 0) {
                     // Not found: either a 404 or a 409, depending on whether there is any current revision
@@ -3130,14 +3135,11 @@ public final class Database {
 
                 if(validations != null && validations.size() > 0) {
                     // Fetch the previous revision and validate the new one against it:
+                    RevisionInternal fakeNewRev = oldRev.copyWithDocID(oldRev.getDocId(), null);
                     RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false, this);
-                    validateRevision(oldRev, prevRev);
+                    validateRevision(fakeNewRev, prevRev,prevRevId);
                 }
 
-                // Make replaced rev non-current:
-                ContentValues updateContent = new ContentValues();
-                updateContent.put("current", 0);
-                database.update("revs", updateContent, "sequence=" + parentSequence, null);
             }
             else {
                 // Inserting first revision.
@@ -3152,7 +3154,7 @@ public final class Database {
                 }
 
                 // Validate:
-                validateRevision(oldRev, null);
+                validateRevision(oldRev, null, null);
 
                 if(docId != null) {
                     // Inserting first revision, with docID given (PUT):
@@ -3195,13 +3197,12 @@ public final class Database {
                             !prevRevId.equals(oldWinningRevID));
 
 
-            //// PART II: In which insertion occurs...
+            //// PART II: In which we prepare for insertion...
 
             // Get the attachments:
             Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(oldRev);
 
             // Bump the revID and update the JSON:
-            String newRevId = generateNextRevisionID(prevRevId);
             byte[] data = null;
             if(!oldRev.isDeleted()) {
                 data = encodeDocumentJSON(oldRev);
@@ -3209,21 +3210,47 @@ public final class Database {
                     // bad or missing json
                     throw new CouchbaseLiteException(Status.BAD_REQUEST);
                 }
+
+                if(data.length == 2 && data[0] == '{' && data[1] == '}') {
+                    data = null;
+                }
+
             }
 
+            String newRevId = generateNextRevisionID(prevRevId);
             newRev = oldRev.copyWithDocID(docId, newRevId);
             stubOutAttachmentsInRevision(attachments, newRev);
 
+            // Don't store a SQL null in the 'json' column -- I reserve it to mean that the revision data
+            // is missing due to compaction or replication.
+            // Instead, store an empty zero-length blob.
+            if(data == null)
+                data = new byte[0];
+
+            //// PART III: In which the actual insertion finally takes place:
+
             // Now insert the rev itself:
-            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, data);
+            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true,data);
             if(newSequence == 0) {
                 return null;
             }
+
+            // Make replaced rev non-current:
+            try {
+                ContentValues args = new ContentValues();
+                args.put("current", 0);
+                database.update("revs", args, "sequence=?", new String[] {String.valueOf(parentSequence)});
+            } catch (SQLException e) {
+                Log.e(Database.TAG, "Error setting parent rev non-current", e);
+                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            }
+
 
             // Store any attachments:
             if(attachments != null) {
                 processAttachmentsForRevision(attachments, newRev, parentSequence);
             }
+
 
             // Figure out what the new winning rev ID is:
             winningRev = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion, newRev);
@@ -3395,9 +3422,7 @@ public final class Database {
             if (attachInfo.containsKey("revpos")) {
                 attachment.setRevpos((Integer)attachInfo.get("revpos"));
             }
-            else {
-                attachment.setRevpos(1);
-            }
+
             attachments.put(name, attachment);
         }
 
@@ -3554,12 +3579,16 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void validateRevision(RevisionInternal newRev, RevisionInternal oldRev) throws CouchbaseLiteException {
+    public void validateRevision(RevisionInternal newRev, RevisionInternal oldRev, String parentRevID) throws CouchbaseLiteException {
         if(validations == null || validations.size() == 0) {
             return;
         }
-        ValidationContextImpl context = new ValidationContextImpl(this, oldRev, newRev);
+
         SavedRevision publicRev = new SavedRevision(this, newRev);
+        publicRev.setParentRevisionID(parentRevID);
+
+        ValidationContextImpl context = new ValidationContextImpl(this, oldRev, newRev);
+
         for (String validationName : validations.keySet()) {
             Validator validation = getValidation(validationName);
             validation.validate(publicRev, context);
