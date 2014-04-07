@@ -2560,12 +2560,15 @@ public final class Database {
             for (String attachmentKey : attachmentsFromProps.keySet()) {
                 Map<String, Object> attachmentFromProps = (Map<String, Object>) attachmentsFromProps.get(attachmentKey);
                 if (attachmentFromProps.get("follows") != null || attachmentFromProps.get("data") != null) {
+
                     attachmentFromProps.remove("follows");
                     attachmentFromProps.remove("data");
+
                     attachmentFromProps.put("stub", true);
                     if (attachmentFromProps.get("revpos") == null) {
                         attachmentFromProps.put("revpos",rev.getGeneration());
                     }
+
                     AttachmentInternal attachmentObject = attachments.get(attachmentKey);
                     if (attachmentObject != null) {
                         attachmentFromProps.put("length", attachmentObject.getLength());
@@ -2691,7 +2694,6 @@ public final class Database {
                 dict.put("length", body.getLength());
                 dict.put("follows", true);
                 dict.put("content_type", contentType);
-                dict.put("revpos",  oldRevID == null ? 1 : oldRev.getGeneration()+1);  //increment revpos to new revision generation
                 dict.put("encoding", encodingName);
 
                 attachments.put(filename, dict);
@@ -2710,13 +2712,6 @@ public final class Database {
             // Create a new revision:
             Status putStatus = new Status();
             RevisionInternal newRev = putRevision(oldRev, oldRevID, false, putStatus);
-
-            /*
-            if (!(body == null && putStatus.getCode() == Status.CREATED)) {
-                Log.e(TAG, "Error creating revision");
-                throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
-            }
-            */
 
             isSuccessful = true;
             return newRev;
@@ -3124,20 +3119,6 @@ public final class Database {
                     throw new CouchbaseLiteException(msg ,Status.NOT_FOUND);
                 }
 
-                /*
-                String[] args = {Long.toString(docNumericID), prevRevId};
-                String additionalWhereClause = "";
-                if(!allowConflict) {
-                    additionalWhereClause = "AND current=1";
-                }
-
-                cursor = database.rawQuery("SELECT sequence FROM revs WHERE doc_id=? AND revid=? " + additionalWhereClause + " LIMIT 1", args);
-
-                if(cursor.moveToNext()) {
-                    parentSequence = cursor.getLong(0);
-                }
-                */
-
                 parentSequence = getSequenceOfDocument(docNumericID, prevRevId, !allowConflict);
 
                 if(parentSequence == 0) {
@@ -3154,18 +3135,11 @@ public final class Database {
 
                 if(validations != null && validations.size() > 0) {
                     // Fetch the previous revision and validate the new one against it:
-                    //RevisionInternal fakeNewRev = new RevisionInternal(oldRev.getDocId(), null, false, this);
                     RevisionInternal fakeNewRev = oldRev.copyWithDocID(oldRev.getDocId(), null);
                     RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false, this);
                     validateRevision(fakeNewRev, prevRev,prevRevId);
                 }
 
-                // Make replaced rev non-current:
-                /*
-                ContentValues updateContent = new ContentValues();
-                updateContent.put("current", 0);
-                database.update("revs", updateContent, "sequence=" + parentSequence, null);
-                */
             }
             else {
                 // Inserting first revision.
@@ -3243,10 +3217,6 @@ public final class Database {
 
             }
 
-            //String newRevID = generateIDForRevision(oldRev,data,attachments,prevRevId);
-
-
-            //TODO: This does not look like a comparable impl to iOS
             String newRevId = generateNextRevisionID(prevRevId);
             newRev = oldRev.copyWithDocID(docId, newRevId);
             stubOutAttachmentsInRevision(attachments, newRev);
@@ -3452,9 +3422,7 @@ public final class Database {
             if (attachInfo.containsKey("revpos")) {
                 attachment.setRevpos((Integer)attachInfo.get("revpos"));
             }
-            else {
-                attachment.setRevpos(1);
-            }
+
             attachments.put(name, attachment);
         }
 
