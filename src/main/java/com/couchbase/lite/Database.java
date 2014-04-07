@@ -1367,7 +1367,11 @@ public final class Database {
         if(rev.getBody() != null && contentOptions == EnumSet.noneOf(Database.TDContentOptions.class) && rev.getSequence() != 0) {
             return rev;
         }
-        assert((rev.getDocId() != null) && (rev.getRevId() != null));
+
+        if((rev.getDocId() == null) || (rev.getRevId() == null)) {
+            Log.e(Database.TAG, "Error loading revision body");
+            throw new CouchbaseLiteException(Status.PRECONDITION_FAILED);
+        }
 
         Cursor cursor = null;
         Status result = new Status(Status.NOT_FOUND);
@@ -3150,7 +3154,8 @@ public final class Database {
 
                 if(validations != null && validations.size() > 0) {
                     // Fetch the previous revision and validate the new one against it:
-                    RevisionInternal fakeNewRev = new RevisionInternal(oldRev.getDocId(), null, false, this);
+                    //RevisionInternal fakeNewRev = new RevisionInternal(oldRev.getDocId(), null, false, this);
+                    RevisionInternal fakeNewRev = oldRev.copyWithDocID(oldRev.getDocId(), null);
                     RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false, this);
                     validateRevision(fakeNewRev, prevRev,prevRevId);
                 }

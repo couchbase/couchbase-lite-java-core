@@ -157,7 +157,8 @@ public class RevisionInternal {
     }
 
     public RevisionInternal copyWithDocID(String docId, String revId) {
-        assert((docId != null) && (revId != null));
+        //assert((docId != null) && (revId != null));
+        assert(docId != null);
         assert((this.docId == null) || (this.docId.equals(docId)));
         RevisionInternal result = new RevisionInternal(docId, revId, deleted, database);
         Map<String, Object> unmodifiableProperties = getProperties();
