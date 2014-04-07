@@ -3118,6 +3118,7 @@ public final class Database {
                     throw new CouchbaseLiteException(msg ,Status.NOT_FOUND);
                 }
 
+                /*
                 String[] args = {Long.toString(docNumericID), prevRevId};
                 String additionalWhereClause = "";
                 if(!allowConflict) {
@@ -3129,6 +3130,9 @@ public final class Database {
                 if(cursor.moveToNext()) {
                     parentSequence = cursor.getLong(0);
                 }
+                */
+
+                parentSequence = getSequenceOfDocument(docNumericID, prevRevId, !allowConflict);
 
                 if(parentSequence == 0) {
                     // Not found: either a 404 or a 409, depending on whether there is any current revision
@@ -3144,14 +3148,17 @@ public final class Database {
 
                 if(validations != null && validations.size() > 0) {
                     // Fetch the previous revision and validate the new one against it:
+                    RevisionInternal fakeNewRev = new RevisionInternal(oldRev.getDocId(), null, false, this);
                     RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false, this);
-                    validateRevision(oldRev, prevRev);
+                    validateRevision(fakeNewRev, prevRev,prevRevId);
                 }
 
                 // Make replaced rev non-current:
+                /*
                 ContentValues updateContent = new ContentValues();
                 updateContent.put("current", 0);
                 database.update("revs", updateContent, "sequence=" + parentSequence, null);
+                */
             }
             else {
                 // Inserting first revision.
@@ -3166,7 +3173,7 @@ public final class Database {
                 }
 
                 // Validate:
-                validateRevision(oldRev, null);
+                validateRevision(oldRev, null, null);
 
                 if(docId != null) {
                     // Inserting first revision, with docID given (PUT):
@@ -3209,13 +3216,12 @@ public final class Database {
                             !prevRevId.equals(oldWinningRevID));
 
 
-            //// PART II: In which insertion occurs...
+            //// PART II: In which we prepare for insertion...
 
             // Get the attachments:
             Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(oldRev);
 
             // Bump the revID and update the JSON:
-            String newRevId = generateNextRevisionID(prevRevId);
             byte[] data = null;
             if(!oldRev.isDeleted()) {
                 data = encodeDocumentJSON(oldRev);
@@ -3223,21 +3229,48 @@ public final class Database {
                     // bad or missing json
                     throw new CouchbaseLiteException(Status.BAD_REQUEST);
                 }
+
+                if(data.length == 2 && data[0] == '{' && data[1] == '}') {
+                    data = null;
+                }
+
             }
 
+            //TODO: This does not look like a comparable impl to iOS
+            String newRevId = generateNextRevisionID(prevRevId);
             newRev = oldRev.copyWithDocID(docId, newRevId);
             stubOutAttachmentsInRevision(attachments, newRev);
 
+            // Don't store a SQL null in the 'json' column -- I reserve it to mean that the revision data
+            // is missing due to compaction or replication.
+            // Instead, store an empty zero-length blob.
+            if(data == null)
+                data = new byte[0];
+
+            //// PART III: In which the actual insertion finally takes place:
+
             // Now insert the rev itself:
-            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, data);
+            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true,data);
             if(newSequence == 0) {
                 return null;
             }
+
+            // Make replaced rev non-current:
+            try {
+                ContentValues args = new ContentValues();
+                args.put("current", 0);
+                database.update("revs", args, "sequence=?", new String[] {String.valueOf(parentSequence)});
+            } catch (SQLException e) {
+                Log.e(Database.TAG, "Error setting parent rev non-current", e);
+                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            }
+
 
             // Store any attachments:
             if(attachments != null) {
                 processAttachmentsForRevision(attachments, newRev, parentSequence);
             }
+
 
             // Figure out what the new winning rev ID is:
             winningRev = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion, newRev);
@@ -3568,12 +3601,16 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void validateRevision(RevisionInternal newRev, RevisionInternal oldRev) throws CouchbaseLiteException {
+    public void validateRevision(RevisionInternal newRev, RevisionInternal oldRev, String parentRevID) throws CouchbaseLiteException {
         if(validations == null || validations.size() == 0) {
             return;
         }
-        ValidationContextImpl context = new ValidationContextImpl(this, oldRev, newRev);
+
         SavedRevision publicRev = new SavedRevision(this, newRev);
+        publicRev.setParentRevisionID(parentRevID);
+
+        ValidationContextImpl context = new ValidationContextImpl(this, oldRev, newRev);
+
         for (String validationName : validations.keySet()) {
             Validator validation = getValidation(validationName);
             validation.validate(publicRev, context);
