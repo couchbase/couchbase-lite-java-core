@@ -1264,11 +1264,13 @@ public final class Database {
     @InterfaceAudience.Private
     public void expandStoredJSONIntoRevisionWithAttachments(byte[] json, RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) {
         Map<String,Object> extra = extraPropertiesForRevision(rev, contentOptions);
-        if(json != null) {
+        if(json != null && json.length > 0) {
             rev.setJson(appendDictToJSON(json, extra));
         }
         else {
             rev.setProperties(extra);
+            if (json == null)
+                rev.setMissing(true);
         }
     }
 
