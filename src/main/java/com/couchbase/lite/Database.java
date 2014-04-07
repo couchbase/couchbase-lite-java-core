@@ -3236,6 +3236,9 @@ public final class Database {
 
             }
 
+            //String newRevID = generateIDForRevision(oldRev,data,attachments,prevRevId);
+
+
             //TODO: This does not look like a comparable impl to iOS
             String newRevId = generateNextRevisionID(prevRevId);
             newRev = oldRev.copyWithDocID(docId, newRevId);
