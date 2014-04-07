@@ -7,6 +7,7 @@ import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
@@ -79,7 +80,9 @@ public class ChangeTracker implements Runnable {
 
 
     public enum ChangeTrackerMode {
-        OneShot, LongPoll, Continuous
+        OneShot,
+        LongPoll,
+        Continuous  // does not work, do not use it.
     }
 
     public ChangeTracker(URL databaseURL, ChangeTrackerMode mode, boolean includeConflicts,
@@ -287,7 +290,7 @@ public class ChangeTracker implements Runnable {
                 Log.v(Database.TAG, this + ": Making request to " + maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
-                if (status.getStatusCode() >= 300) {
+                if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
                     Log.e(Database.TAG, this + ": Change tracker got error " + Integer.toString(status.getStatusCode()));
                     String msg = String.format(status.toString());
                     this.error = new CouchbaseLiteException(msg, new Status(status.getStatusCode()));

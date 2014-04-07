@@ -1,5 +1,7 @@
 package com.couchbase.lite.util;
 
+import org.apache.http.StatusLine;
+
 public class Utils {
 
     /**
@@ -16,6 +18,23 @@ public class Utils {
         } else {
             return obj2 == null;
         }
+    }
+
+    public static boolean isTransientError(StatusLine status) {
+
+        // TODO: in ios implementation, it considers others errors
+        /*
+            if ($equal(domain, NSURLErrorDomain)) {
+        return code == NSURLErrorTimedOut || code == NSURLErrorCannotConnectToHost
+                                          || code == NSURLErrorNetworkConnectionLost;
+         */
+
+        int code = status.getStatusCode();
+        if (code == 500 || code == 502 || code == 503 || code == 504) {
+            return true;
+        }
+        return false;
+
     }
 
 }
