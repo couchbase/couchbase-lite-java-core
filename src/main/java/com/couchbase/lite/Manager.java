@@ -205,7 +205,10 @@ public final class Manager {
         boolean mustExist = false;
         Database db = getDatabaseWithoutOpening(name, mustExist);
         if (db != null) {
-            db.open();
+            boolean opened = db.open();
+            if (!opened) {
+                return null;
+            }
         }
         return db;
     }
