@@ -346,12 +346,13 @@ public final class Database {
         }
         File file = new File(path);
         File fileJournal = new File(path + "-journal");
-        File attachmentsFile = new File(getAttachmentStorePath());
 
         boolean deleteStatus = file.delete();
-        deleteStatus &= fileJournal.delete();
+        if (fileJournal.exists()) {
+            deleteStatus &= fileJournal.delete();
+        }
 
-        attachmentsFile = new File(getAttachmentStorePath());
+        File attachmentsFile = new File(getAttachmentStorePath());
 
 
         //recursively delete attachments path
