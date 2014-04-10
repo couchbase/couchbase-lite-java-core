@@ -26,6 +26,7 @@ import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -482,10 +483,10 @@ public final class View {
                             + "AND revs.doc_id = docs.doc_id "
                             + "ORDER BY revs.doc_id, revid DESC", selectArgs);
 
-            cursor.moveToNext();
 
             long lastDocID = 0;
-            while (!cursor.isAfterLast()) {
+            boolean keepGoing = cursor.moveToNext();
+            while (keepGoing) {
                 long docID = cursor.getLong(0);
                 if (docID != lastDocID) {
                     // Only look at the first-iterated revision of any document,
@@ -506,11 +507,51 @@ public final class View {
 
                     boolean noAttachments = cursor.getInt(5) > 0;
 
-                    EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
+                    // Skip rows with the same doc_id -- these are losing conflicts.
+                    while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
+                        Log.d(Database.TAG, "skipping row for: " + docID);
+                    }
 
+                    if (lastSequence > 0) {
+                        // Find conflicts with documents from previous indexings.
+                        String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
+
+                        Cursor cursor2 = database.getDatabase().rawQuery(
+                                "SELECT revid, sequence FROM revs "
+                                        + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
+                                        + "ORDER BY revID DESC "
+                                        + "LIMIT 1", selectArgs2);
+
+                        if (cursor2.moveToNext()) {
+                            String oldRevId = cursor2.getString(0);
+                            // This is the revision that used to be the 'winner'.
+                            // Remove its emitted rows:
+                            long oldSequence = cursor2.getLong(1);
+                            String[] args = {
+                                    Integer.toString(getViewId()),
+                                    Long.toString(oldSequence)
+                            };
+                            database.getDatabase().execSQL(
+                                    "DELETE FROM maps WHERE view_id=? AND sequence=?", args);
+                            if (RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
+                                // It still 'wins' the conflict, so it's the one that
+                                // should be mapped [again], not the current revision!
+                                revId = oldRevId;
+                                sequence = oldSequence;
+
+                                String[] selectArgs3 = { Long.toString(sequence) };
+                                json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
+
+                            }
+                        }
+
+
+                    }
+
+                    // Get the document properties, to pass to the map function:
+                    EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
                     if (noAttachments)
                         contentOptions.add(TDContentOptions.TDNoAttachments);
-
                     Map<String, Object> properties = database.documentPropertiesFromJSON(
                             json,
                             docId,
@@ -519,20 +560,16 @@ public final class View {
                             sequence,
                             contentOptions
                     );
-
                     if (properties != null) {
                         // Call the user-defined map() to emit new key/value
                         // pairs from this revision:
-                        //Log.v(Database.TAG,
-                        //        "  call map for sequence="
-                        //                + Long.toString(sequence));
+                        Log.v(Database.TAG, "  call map for sequence=" + Long.toString(sequence));
                         emitBlock.setSequence(sequence);
                         mapBlock.map(properties, emitBlock);
                     }
 
                 }
 
-                cursor.moveToNext();
             }
 
             // Finally, record the last revision sequence number that was

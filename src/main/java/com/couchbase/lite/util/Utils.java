@@ -1,5 +1,10 @@
 package com.couchbase.lite.util;
 
+import com.couchbase.lite.Database;
+import com.couchbase.lite.storage.Cursor;
+import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.storage.SQLiteStorageEngine;
+
 import org.apache.http.StatusLine;
 
 public class Utils {
@@ -35,6 +40,15 @@ public class Utils {
         }
         return false;
 
+    }
+
+    public static byte[] byteArrayResultForQuery(SQLiteStorageEngine database, String query, String[] args) throws SQLException {
+        byte[] result = null;
+        Cursor cursor = database.rawQuery(query, args);
+        if (cursor.moveToNext()) {
+            result = cursor.getBlob(0);
+        }
+        return result;
     }
 
 }
