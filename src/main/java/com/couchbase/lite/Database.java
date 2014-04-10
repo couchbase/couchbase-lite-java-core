@@ -109,7 +109,7 @@ public final class Database {
      * @exclude
      */
     public enum TDContentOptions {
-        TDIncludeAttachments, TDIncludeConflicts, TDIncludeRevs, TDIncludeRevsInfo, TDIncludeLocalSeq, TDNoBody, TDBigAttachmentsFollow
+        TDIncludeAttachments, TDIncludeConflicts, TDIncludeRevs, TDIncludeRevsInfo, TDIncludeLocalSeq, TDNoBody, TDBigAttachmentsFollow, TDNoAttachments
     }
 
     private static final Set<String> KNOWN_SPECIAL_KEYS;
@@ -947,7 +947,90 @@ public final class Database {
                 database.close();
                 return false;
             }
+            dbVersion = 4;
         }
+
+        if (dbVersion < 5) {
+            // Version 5: added encoding for attachments
+            String upgradeSql = "ALTER TABLE attachments ADD COLUMN encoding INTEGER DEFAULT 0; " +
+                    "ALTER TABLE attachments ADD COLUMN encoded_length INTEGER; " +
+                    "PRAGMA user_version = 5";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 5;
+        }
+
+
+        if (dbVersion < 6) {
+            // Version 6: enable Write-Ahead Log (WAL) <http://sqlite.org/wal.html>
+            // Not supported on Android, require SQLite 3.7.0
+            //String upgradeSql  = "PRAGMA journal_mode=WAL; " +
+            String upgradeSql  = "PRAGMA user_version = 6";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 6;
+        }
+
+        if (dbVersion < 7) {
+            // Version 7: enable full-text search
+            // Note: Apple's SQLite build does not support the icu or unicode61 tokenizers :(
+            // OPT: Could add compress/decompress functions to make stored content smaller
+            // Not supported on Android
+            //String upgradeSql = "CREATE VIRTUAL TABLE fulltext USING fts4(content, tokenize=unicodesn); " +
+            //"ALTER TABLE maps ADD COLUMN fulltext_id INTEGER; " +
+            //"CREATE INDEX IF NOT EXISTS maps_by_fulltext ON maps(fulltext_id); " +
+            //"CREATE TRIGGER del_fulltext DELETE ON maps WHEN old.fulltext_id not null " +
+            //"BEGIN DELETE FROM fulltext WHERE rowid=old.fulltext_id| END; " +
+            String upgradeSql = "PRAGMA user_version = 7";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 7;
+        }
+
+        // (Version 8 was an older version of the geo index)
+
+        if (dbVersion < 9) {
+            // Version 9: Add geo-query index
+            //String upgradeSql = "CREATE VIRTUAL TABLE bboxes USING rtree(rowid, x0, x1, y0, y1); " +
+            //"ALTER TABLE maps ADD COLUMN bbox_id INTEGER; " +
+            //"ALTER TABLE maps ADD COLUMN geokey BLOB; " +
+            //"CREATE TRIGGER del_bbox DELETE ON maps WHEN old.bbox_id not null " +
+            //"BEGIN DELETE FROM bboxes WHERE rowid=old.bbox_id| END; " +
+            String upgradeSql = "PRAGMA user_version = 9";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 9;
+        }
+
+        if (dbVersion < 10) {
+            // Version 10: Add rev flag for whether it has an attachment
+            String upgradeSql =  "ALTER TABLE revs ADD COLUMN no_attachments BOOLEAN; " +
+                    "PRAGMA user_version = 10";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 10;
+        }
+
+        if (dbVersion < 11) {
+            // Version 10: Add another index
+            String upgradeSql = "CREATE INDEX revs_cur_deleted ON revs(current,deleted); " +
+                    "PRAGMA user_version = 11";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+        }
+
 
         try {
             attachments = new BlobStore(getAttachmentStorePath());
@@ -1182,8 +1265,11 @@ public final class Database {
         assert(revId != null);
         assert(sequenceNumber > 0);
 
+        Map<String, Object> attachmentsDict = null;
         // Get attachment metadata, and optionally the contents:
-        Map<String, Object> attachmentsDict = getAttachmentsDictForSequenceWithContent(sequenceNumber, contentOptions);
+        if (!contentOptions.contains(TDContentOptions.TDNoAttachments)) {
+            attachmentsDict = getAttachmentsDictForSequenceWithContent(sequenceNumber, contentOptions);
+        }
 
         // Get more optional stuff to put in the properties:
         //OPT: This probably ends up making redundant SQL queries if multiple options are enabled.
@@ -1311,17 +1397,19 @@ public final class Database {
         Cursor cursor = null;
         try {
             cursor = null;
-            String cols = "revid, deleted, sequence";
+            String cols = "revid, deleted, sequence, no_attachments";
             if(!contentOptions.contains(TDContentOptions.TDNoBody)) {
                 cols += ", json";
             }
             if(rev != null) {
                 sql = "SELECT " + cols + " FROM revs, docs WHERE docs.docid=? AND revs.doc_id=docs.doc_id AND revid=? LIMIT 1";
+                //sql = "SELECT " + cols + " FROM revs WHERE revs.doc_id=? AND revid=? AND json notnull LIMIT 1";
                 String[] args = {id, rev};
                 cursor = database.rawQuery(sql, args);
             }
             else {
                 sql = "SELECT " + cols + " FROM revs, docs WHERE docs.docid=? AND revs.doc_id=docs.doc_id and current=1 and deleted=0 ORDER BY revid DESC LIMIT 1";
+                //sql = "SELECT " + cols + " FROM revs WHERE revs.doc_id=? and current=1 and deleted=0 ORDER BY revid DESC LIMIT 1";
                 String[] args = {id};
                 cursor = database.rawQuery(sql, args);
             }
@@ -1336,8 +1424,10 @@ public final class Database {
                 if(!contentOptions.equals(EnumSet.of(TDContentOptions.TDNoBody))) {
                     byte[] json = null;
                     if(!contentOptions.contains(TDContentOptions.TDNoBody)) {
-                        json = cursor.getBlob(3);
+                        json = cursor.getBlob(4);
                     }
+                    if (cursor.getInt(3) > 0) // no_attachments == true
+                        contentOptions.add(TDContentOptions.TDNoAttachments);
                     expandStoredJSONIntoRevisionWithAttachments(json, result, contentOptions);
                 }
             }
@@ -3017,7 +3107,7 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public long insertRevision(RevisionInternal rev, long docNumericID, long parentSequence, boolean current, byte[] data) {
+    public long insertRevision(RevisionInternal rev, long docNumericID, long parentSequence, boolean current, boolean hasAttachments, byte[] data) {
         long rowId = 0;
         try {
             ContentValues args = new ContentValues();
@@ -3028,6 +3118,7 @@ public final class Database {
             }
             args.put("current", current);
             args.put("deleted", rev.isDeleted());
+            args.put("no_attachments",!hasAttachments);
             args.put("json", data);
             rowId = database.insert("revs", null, args);
             rev.setSequence(rowId);
@@ -3229,8 +3320,11 @@ public final class Database {
 
             //// PART III: In which the actual insertion finally takes place:
 
+            int attachmentSize = attachments.size();
+            boolean hasAttachments = attachments.size() > 0;
+
             // Now insert the rev itself:
-            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true,data);
+            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, (attachments.size() > 0), data);
             if(newSequence == 0) {
                 return null;
             }
@@ -3520,7 +3614,7 @@ public final class Database {
                     }
 
                     // Insert it:
-                    sequence = insertRevision(newRev, docNumericID, sequence, current, data);
+                    sequence = insertRevision(newRev, docNumericID, sequence, current, (getAttachmentsFromRevision(newRev).size() > 0), data);
 
                     if(sequence <= 0) {
                         throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);

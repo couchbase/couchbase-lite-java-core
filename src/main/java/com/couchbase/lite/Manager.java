@@ -257,6 +257,8 @@ public final class Manager {
             if(attachmentStreams != null) {
                 StreamUtils.copyStreamsToFolder(attachmentStreams,attachmentsFile);
             }
+
+            database.open();
             database.replaceUUIDs();
         }
         catch (FileNotFoundException e) {

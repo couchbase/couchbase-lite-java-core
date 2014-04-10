@@ -388,7 +388,7 @@ public final class View {
         Log.v(Database.TAG, "Re-indexing view " + name + " ...");
         assert (mapBlock != null);
 
-        if (getViewId() < 0) {
+        if (getViewId() <= 0) {
             String msg = String.format("getViewId() < 0");
             throw new CouchbaseLiteException(msg, new Status(Status.NOT_FOUND));
         }
@@ -406,7 +406,7 @@ public final class View {
                 String msg = String.format("lastSequence (%d) == dbMaxSequence (%d), nothing to do",
                         lastSequence, dbMaxSequence);
                 Log.d(Database.TAG, msg);
-                result.setCode(Status.OK);
+                result.setCode(Status.NOT_MODIFIED);
                 return;
             }
 
@@ -456,8 +456,8 @@ public final class View {
                         } else{
                             valueJson = Manager.getObjectMapper().writeValueAsString(value);
                         }
-                        Log.v(Database.TAG, "    emit(" + keyJson + ", "
-                                + valueJson + ")");
+                        //Log.v(Database.TAG, "    emit(" + keyJson + ", "
+                        //        + valueJson + ")");
 
                         ContentValues insertValues = new ContentValues();
                         insertValues.put("view_id", getViewId());
@@ -477,7 +477,7 @@ public final class View {
             String[] selectArgs = { Long.toString(lastSequence) };
 
             cursor = database.getDatabase().rawQuery(
-                    "SELECT revs.doc_id, sequence, docid, revid, json FROM revs, docs "
+                    "SELECT revs.doc_id, sequence, docid, revid, json, no_attachments FROM revs, docs "
                             + "WHERE sequence>? AND current!=0 AND deleted=0 "
                             + "AND revs.doc_id = docs.doc_id "
                             + "ORDER BY revs.doc_id, revid DESC", selectArgs);
@@ -503,21 +503,29 @@ public final class View {
                     }
                     String revId = cursor.getString(3);
                     byte[] json = cursor.getBlob(4);
+
+                    boolean noAttachments = cursor.getInt(5) > 0;
+
+                    EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
+
+                    if (noAttachments)
+                        contentOptions.add(TDContentOptions.TDNoAttachments);
+
                     Map<String, Object> properties = database.documentPropertiesFromJSON(
                             json,
                             docId,
                             revId,
                             false,
                             sequence,
-                            EnumSet.noneOf(Database.TDContentOptions.class)
+                            contentOptions
                     );
 
                     if (properties != null) {
                         // Call the user-defined map() to emit new key/value
                         // pairs from this revision:
-                        Log.v(Database.TAG,
-                                "  call map for sequence="
-                                        + Long.toString(sequence));
+                        //Log.v(Database.TAG,
+                        //        "  call map for sequence="
+                        //                + Long.toString(sequence));
                         emitBlock.setSequence(sequence);
                         mapBlock.map(properties, emitBlock);
                     }
