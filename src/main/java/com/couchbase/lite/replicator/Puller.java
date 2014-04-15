@@ -123,6 +123,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         pendingSequences = new SequenceMap();
         Log.w(Database.TAG, this + ": starting ChangeTracker with since=" + lastSequence);
         changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, true, lastSequence, this);
+        changeTracker.setAuthenticator(getAuthenticator());
         Log.w(Database.TAG, this + ": started ChangeTracker " + changeTracker);
 
         if(filterName != null) {

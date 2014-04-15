@@ -8,6 +8,8 @@ import com.couchbase.lite.Misc;
 import com.couchbase.lite.NetworkReachabilityListener;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
+import com.couchbase.lite.auth.Authenticator;
+import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
@@ -83,7 +85,7 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     protected Map<String, Object> filterParams;
     protected ExecutorService remoteRequestExecutor;
-    protected Authorizer authorizer;
+    protected Authenticator authenticator;
     private ReplicationStatus status = ReplicationStatus.REPLICATION_STOPPED;
     protected Map<String, Object> requestHeaders;
     private int revisionsFailed;
@@ -165,7 +167,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             if (personaAssertion != null && !personaAssertion.isEmpty()) {
                 String email = PersonaAuthorizer.registerAssertion(personaAssertion);
                 PersonaAuthorizer authorizer = new PersonaAuthorizer(email);
-                setAuthorizer(authorizer);
+                setAuthenticator(authorizer);
             }
 
             String facebookAccessToken = URIUtils.getQueryParameter(uri, FacebookAuthorizer.QUERY_PARAMETER);
@@ -179,7 +181,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                     throw new IllegalArgumentException(e);
                 }
                 authorizer.registerAccessToken(facebookAccessToken, email, remoteWithQueryRemoved.toExternalForm());
-                setAuthorizer(authorizer);
+                setAuthenticator(authorizer);
             }
 
             // we need to remove the query from the URL, since it will cause problems when
@@ -560,19 +562,19 @@ public abstract class Replication implements NetworkReachabilityListener {
     }
 
     /**
-     * @exclude
+     *
      */
-    @InterfaceAudience.Private
-    public void setAuthorizer(Authorizer authorizer) {
-        this.authorizer = authorizer;
+    @InterfaceAudience.Public
+    public void setAuthenticator(Authenticator authenticator) {
+        this.authenticator = authenticator;
     }
 
     /**
-     * @exclude
+     *
      */
-    @InterfaceAudience.Private
-    public Authorizer getAuthorizer() {
-        return authorizer;
+    @InterfaceAudience.Public
+    public Authenticator getAuthenticator() {
+        return authenticator;
     }
 
     /**
@@ -656,7 +658,8 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     @InterfaceAudience.Private
     protected void checkSession() {
-        if (getAuthorizer() != null && getAuthorizer().usesCookieBasedLogin()) {
+        // REVIEW : This is not in line with the iOS implementation
+        if (getAuthenticator() != null && ((AuthenticatorImpl)getAuthenticator()).usesCookieBasedLogin()) {
             checkSessionAtPath("/_session");
         } else {
             fetchRemoteCheckpointDoc();
@@ -748,16 +751,16 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     @InterfaceAudience.Private
     protected void login() {
-        Map<String, String> loginParameters = getAuthorizer().loginParametersForSite(remote);
+        Map<String, String> loginParameters = ((AuthenticatorImpl)getAuthenticator()).loginParametersForSite(remote);
         if (loginParameters == null) {
-            Log.d(Database.TAG, String.format("%s: %s has no login parameters, so skipping login", this, getAuthorizer()));
+            Log.d(Database.TAG, String.format("%s: %s has no login parameters, so skipping login", this, getAuthenticator()));
             fetchRemoteCheckpointDoc();
             return;
         }
 
-        final String loginPath = getAuthorizer().loginPathForSite(remote);
+        final String loginPath = ((AuthenticatorImpl)getAuthenticator()).loginPathForSite(remote);
 
-        Log.d(Database.TAG, String.format("%s: Doing login with %s at %s", this, getAuthorizer().getClass(), loginPath));
+        Log.d(Database.TAG, String.format("%s: Doing login with %s at %s", this, getAuthenticator().getClass(), loginPath));
 
         Log.d(Database.TAG, this + "|" + Thread.currentThread() + ": login() calling asyncTaskStarted()");
 
@@ -904,6 +907,8 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
 
+        request.setAuthenticator(getAuthenticator());
+
         request.setOnPreCompletion(new RemoteRequestCompletionBlock() {
             @Override
             public void onCompletion(Object result, Throwable e) {
@@ -955,6 +960,9 @@ public abstract class Replication implements NetworkReachabilityListener {
                     db,
                     getHeaders(),
                     onCompletion);
+
+            request.setAuthenticator(getAuthenticator());
+
             remoteRequestExecutor.execute(request);
         } catch (MalformedURLException e) {
             Log.e(Database.TAG, "Malformed URL for async request", e);
@@ -981,6 +989,9 @@ public abstract class Replication implements NetworkReachabilityListener {
                 multiPartEntity,
                 getHeaders(),
                 onCompletion);
+
+        request.setAuthenticator(getAuthenticator());
+
         remoteRequestExecutor.execute(request);
     }
 

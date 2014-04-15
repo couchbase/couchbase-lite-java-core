@@ -586,7 +586,7 @@ public final class Manager {
             }
 
             if (authorizer != null) {
-                repl.setAuthorizer(authorizer);
+                repl.setAuthenticator(authorizer);
             }
 
             Map<String, Object> headers = (Map) properties.get("headers");
