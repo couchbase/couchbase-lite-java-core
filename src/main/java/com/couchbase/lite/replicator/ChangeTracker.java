@@ -4,6 +4,8 @@ import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Status;
+import com.couchbase.lite.auth.Authenticator;
+import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
@@ -78,6 +80,7 @@ public class ChangeTracker implements Runnable {
     private int heartBeatSeconds;
     private int limit;
 
+    private Authenticator authenticator;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -203,6 +206,13 @@ public class ChangeTracker implements Runnable {
         return result;
     }
 
+    /**
+     *  Set Authenticator for BASIC Authentication
+     */
+    public void setAuthenticator(Authenticator authenticator) {
+        this.authenticator = authenticator;
+    }
+
     @Override
     public void run() {
 
@@ -248,39 +258,43 @@ public class ChangeTracker implements Runnable {
 
             addRequestHeaders(request);
 
-            // if the URL contains user info AND if this a DefaultHttpClient
-            // then preemptively set the auth credentials
-            if (url.getUserInfo() != null) {
-                if (url.getUserInfo().contains(":") && !url.getUserInfo().trim().equals(":")) {
-                    String[] userInfoSplit = url.getUserInfo().split(":");
-                    final Credentials creds = new UsernamePasswordCredentials(
-                            URIUtils.decode(userInfoSplit[0]), URIUtils.decode(userInfoSplit[1]));
+            // Perform BASIC Authentication if needed
+            boolean isUrlBasedUserInfo = false;
+
+            // If the URL contains user info AND if this a DefaultHttpClient then preemptively set the auth credentials
+            String userInfo = url.getUserInfo();
+            if (userInfo != null) {
+                isUrlBasedUserInfo = true;
+            } else {
+                if (authenticator != null) {
+                    AuthenticatorImpl auth = (AuthenticatorImpl) authenticator;
+                    userInfo = auth.authUserInfo();
+                }
+            }
+
+            if (userInfo != null) {
+                if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
+                    String[] userInfoElements = userInfo.split(":");
+                    String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]): userInfoElements[0];
+                    String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]): userInfoElements[1];
+                    final Credentials credentials = new UsernamePasswordCredentials(username, password);
+
                     if (httpClient instanceof DefaultHttpClient) {
                         DefaultHttpClient dhc = (DefaultHttpClient) httpClient;
-
                         HttpRequestInterceptor preemptiveAuth = new HttpRequestInterceptor() {
-
                             @Override
-                            public void process(HttpRequest request,
-                                                HttpContext context) throws HttpException,
-                                    IOException {
+                            public void process(HttpRequest request, HttpContext context) throws HttpException, IOException {
                                 AuthState authState = (AuthState) context.getAttribute(ClientContext.TARGET_AUTH_STATE);
-                                CredentialsProvider credsProvider = (CredentialsProvider) context.getAttribute(
-                                        ClientContext.CREDS_PROVIDER);
-                                HttpHost targetHost = (HttpHost) context.getAttribute(ExecutionContext.HTTP_TARGET_HOST);
-
                                 if (authState.getAuthScheme() == null) {
-                                    AuthScope authScope = new AuthScope(targetHost.getHostName(), targetHost.getPort());
                                     authState.setAuthScheme(new BasicScheme());
-                                    authState.setCredentials(creds);
+                                    authState.setCredentials(credentials);
                                 }
                             }
                         };
-
                         dhc.addRequestInterceptor(preemptiveAuth, 0);
                     }
                 } else {
-                    Log.w(Database.TAG, this + ": ChangeTracker Unable to parse user info, not setting credentials");
+                    Log.w(Database.TAG, "RemoteRequest Unable to parse user info, not setting credentials");
                 }
             }
 

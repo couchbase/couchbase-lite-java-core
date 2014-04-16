@@ -60,7 +60,6 @@ public class FacebookAuthorizer extends Authorizer {
         accessTokens.put(key, accessToken);
 
         return email;
-
     }
 
 
