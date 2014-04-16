@@ -32,6 +32,11 @@ public class BasicAuthenticator extends AuthenticatorImpl {
 
     @Override
     public Map<String, String> loginParametersForSite(URL site) {
+        // This method has different implementation from the iOS's.
+        // It is safe to return NULL as the method is not called
+        // when Basic Authenticator is used. Also theoretically, the
+        // standard Basic Auth doesn't add any additional parameters
+        // to the login url.
         return null;
     }
 }

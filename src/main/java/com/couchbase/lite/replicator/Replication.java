@@ -562,7 +562,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     }
 
     /**
-     *
+     * Set the Authenticator used for authenticating with the Sync Gateway
      */
     @InterfaceAudience.Public
     public void setAuthenticator(Authenticator authenticator) {
@@ -570,7 +570,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     }
 
     /**
-     *
+     * Get the Authenticator used for authenticating with the Sync Gateway
      */
     @InterfaceAudience.Public
     public Authenticator getAuthenticator() {
