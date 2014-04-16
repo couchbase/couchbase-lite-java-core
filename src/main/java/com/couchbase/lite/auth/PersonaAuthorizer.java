@@ -57,7 +57,7 @@ public class PersonaAuthorizer extends Authorizer {
         exp = (Date) parsedAssertion.get(ASSERTION_FIELD_EXPIRATION);
         Date now = new Date();
         if (exp.before(now)) {
-            Log.w(Database.TAG, String.format("%s assertion for %s expired: %s",
+            Log.w(Log.TAG_SYNC, String.format("%s assertion for %s expired: %s",
                     this.getClass(), this.emailAddress, exp));
             return true;
         }
@@ -68,7 +68,7 @@ public class PersonaAuthorizer extends Authorizer {
     public String assertionForSite(URL site) {
         String assertion = assertionForEmailAndSite(this.emailAddress, site);
         if (assertion == null) {
-            Log.w(Database.TAG, String.format("%s %s no assertion found for: %s",
+            Log.w(Log.TAG_SYNC, String.format("%s %s no assertion found for: %s",
                     this.getClass(), this.emailAddress, site));
             return null;
         }
@@ -117,7 +117,7 @@ public class PersonaAuthorizer extends Authorizer {
             origin = originURL.toExternalForm().toLowerCase();
         } catch (MalformedURLException e) {
             String message = "Error registering assertion: " + assertion;
-            Log.e(Database.TAG, message, e);
+            Log.e(Log.TAG_SYNC, message, e);
             throw new IllegalArgumentException(message, e);
         }
 
@@ -138,7 +138,7 @@ public class PersonaAuthorizer extends Authorizer {
         if (assertions == null) {
             assertions = new HashMap<List<String>, String>();
         }
-        Log.d(Database.TAG, "PersonaAuthorizer registering key: " + key);
+        Log.d(Log.TAG_SYNC, "PersonaAuthorizer registering key: " + key);
         assertions.put(key, assertion);
 
         return email;
@@ -171,14 +171,14 @@ public class PersonaAuthorizer extends Authorizer {
             result.put(ASSERTION_FIELD_ORIGIN, component3Json.get("aud"));
 
             Long expObject = (Long) component3Json.get("exp");
-            Log.d(Database.TAG, "PersonaAuthorizer exp: " + expObject + " class: " + expObject.getClass());
+            Log.d(Log.TAG_SYNC, "PersonaAuthorizer exp: " + expObject + " class: " + expObject.getClass());
             Date expDate = new Date(expObject.longValue());
             result.put(ASSERTION_FIELD_EXPIRATION, expDate);
 
 
         } catch (IOException e) {
             String message = "Error parsing assertion: " + assertion;
-            Log.e(Database.TAG, message, e);
+            Log.e(Log.TAG_SYNC, message, e);
             throw new IllegalArgumentException(message, e);
         }
 
@@ -189,7 +189,7 @@ public class PersonaAuthorizer extends Authorizer {
         List<String> key = new ArrayList<String>();
         key.add(email);
         key.add(site.toExternalForm().toLowerCase());
-        Log.d(Database.TAG, "PersonaAuthorizer looking up key: " + key + " from list of assertions");
+        Log.d(Log.TAG_SYNC, "PersonaAuthorizer looking up key: " + key + " from list of assertions");
         return assertions.get(key);
     }
 

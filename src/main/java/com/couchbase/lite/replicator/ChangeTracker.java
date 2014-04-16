@@ -201,7 +201,7 @@ public class ChangeTracker implements Runnable {
         try {
             result = new URL(dbURLString);
         } catch(MalformedURLException e) {
-            Log.e(Database.TAG, this + ": Changes feed ULR is malformed", e);
+            Log.e(Log.TAG_CHANGE_TRACKER, this + ": Changes feed ULR is malformed", e);
         }
         return result;
     }
@@ -223,7 +223,7 @@ public class ChangeTracker implements Runnable {
             // This is a race condition that can be reproduced by calling cbpuller.start() and cbpuller.stop()
             // directly afterwards.  What happens is that by the time the Changetracker thread fires up,
             // the cbpuller has already set this.client to null.  See issue #109
-            Log.w(Database.TAG, this + ": ChangeTracker run() loop aborting because client == null");
+            Log.w(Log.TAG_CHANGE_TRACKER, this + ": ChangeTracker run() loop aborting because client == null");
             return;
         }
 
@@ -294,18 +294,18 @@ public class ChangeTracker implements Runnable {
                         dhc.addRequestInterceptor(preemptiveAuth, 0);
                     }
                 } else {
-                    Log.w(Database.TAG, "RemoteRequest Unable to parse user info, not setting credentials");
+                    Log.w(Log.TAG_CHANGE_TRACKER, "RemoteRequest Unable to parse user info, not setting credentials");
                 }
             }
 
             try {
                 String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
                 maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-                Log.v(Database.TAG, this + ": Making request to " + maskedRemoteWithoutCredentials);
+                Log.v(Log.TAG_CHANGE_TRACKER, this + ": Making request to " + maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
                 if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
-                    Log.e(Database.TAG, this + ": Change tracker got error " + Integer.toString(status.getStatusCode()));
+                    Log.e(Log.TAG_CHANGE_TRACKER, this + ": Change tracker got error " + Integer.toString(status.getStatusCode()));
                     String msg = String.format(status.toString());
                     this.error = new CouchbaseLiteException(msg, new Status(status.getStatusCode()));
                     stop();
@@ -319,11 +319,11 @@ public class ChangeTracker implements Runnable {
                             Map<String, Object> fullBody = Manager.getObjectMapper().readValue(input, Map.class);
                             boolean responseOK = receivedPollResponse(fullBody);
                             if (mode == ChangeTrackerMode.LongPoll && responseOK) {
-                                Log.v(Database.TAG, this + ": Starting new longpoll");
+                                Log.v(Log.TAG_CHANGE_TRACKER, this + ": Starting new longpoll");
                                 backoff.resetBackoff();
                                 continue;
                             } else {
-                                Log.w(Database.TAG, this + ": Change tracker calling stop (LongPoll)");
+                                Log.w(Log.TAG_CHANGE_TRACKER, this + ": Change tracker calling stop (LongPoll)");
                                 stop();
                             }
                         } else {  // one-shot replications
@@ -338,12 +338,12 @@ public class ChangeTracker implements Runnable {
                             while (jp.nextToken() == JsonToken.START_OBJECT) {
                                 Map<String, Object> change = (Map) Manager.getObjectMapper().readValue(jp, Map.class);
                                 if (!receivedChange(change)) {
-                                    Log.w(Database.TAG, String.format("Received unparseable change line from server: %s", change));
+                                    Log.w(Log.TAG_CHANGE_TRACKER, String.format("Received unparseable change line from server: %s", change));
                                 }
 
                             }
 
-                            Log.w(Database.TAG, this + ": Change tracker calling stop (OneShot)");
+                            Log.w(Log.TAG_CHANGE_TRACKER, this + ": Change tracker calling stop (OneShot)");
                             stop();
                             break;
 
@@ -365,14 +365,14 @@ public class ChangeTracker implements Runnable {
                     // frequently happens when we're shutting down and have to
                     // close the socket underneath our read.
                 } else {
-                    Log.e(Database.TAG, this + ": Exception in change tracker", e);
+                    Log.e(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
                 }
 
                 backoff.sleepAppropriateAmountOfTime();
 
             }
         }
-        Log.v(Database.TAG, this + ": Change tracker run loop exiting");
+        Log.v(Log.TAG_CHANGE_TRACKER, this + ": Change tracker run loop exiting");
     }
 
     public boolean receivedChange(final Map<String,Object> change) {
@@ -402,7 +402,7 @@ public class ChangeTracker implements Runnable {
     }
 
     public void setUpstreamError(String message) {
-        Log.w(Database.TAG, String.format("Server error: %s", message));
+        Log.w(Log.TAG_CHANGE_TRACKER, String.format("Server error: %s", message));
         this.error = new Throwable(message);
     }
 
@@ -416,7 +416,7 @@ public class ChangeTracker implements Runnable {
     }
 
     public void stop() {
-        Log.d(Database.TAG, this + ": Changed tracker asked to stop");
+        Log.d(Log.TAG_CHANGE_TRACKER, this + ": Changed tracker asked to stop");
         running = false;
         thread.interrupt();
         if(request != null) {
@@ -427,13 +427,13 @@ public class ChangeTracker implements Runnable {
     }
 
     public void stopped() {
-        Log.d(Database.TAG, this + ": Change tracker in stopped");
+        Log.d(Log.TAG_CHANGE_TRACKER, this + ": Change tracker in stopped");
         if (client != null) {
-            Log.d(Database.TAG, this + ": posting stopped");
+            Log.d(Log.TAG_CHANGE_TRACKER, this + ": posting stopped");
             client.changeTrackerStopped(ChangeTracker.this);
         }
         client = null;
-        Log.d(Database.TAG, this + ": Change tracker client should be null now");
+        Log.d(Log.TAG_CHANGE_TRACKER, this + ": Change tracker client should be null now");
     }
 
     void setRequestHeaders(Map<String, Object> requestHeaders) {

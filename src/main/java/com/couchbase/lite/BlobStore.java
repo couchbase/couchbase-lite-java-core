@@ -63,7 +63,7 @@ public class BlobStore {
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            Log.e(Database.TAG, "Error, SHA-1 digest is unavailable.");
+            Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 digest is unavailable.");
             return null;
         }
         byte[] sha1hash = new byte[40];
@@ -78,7 +78,7 @@ public class BlobStore {
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            Log.e(Database.TAG, "Error, SHA-1 digest is unavailable.");
+            Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 digest is unavailable.");
             return null;
         }
         byte[] sha1hash = new byte[40];
@@ -93,7 +93,7 @@ public class BlobStore {
             }
             fis.close();
         } catch (IOException e) {
-            Log.e(Database.TAG, "Error readin tmp file to compute key");
+            Log.e(Log.TAG_BLOB_STORE, "Error readin tmp file to compute key");
         }
 
         sha1hash = md.digest();
@@ -130,7 +130,7 @@ public class BlobStore {
         try {
             result = getBytesFromFile(file);
         } catch (IOException e) {
-            Log.e(Database.TAG, "Error reading file", e);
+            Log.e(Log.TAG_BLOB_STORE, "Error reading file", e);
         }
         return result;
     }
@@ -142,7 +142,7 @@ public class BlobStore {
             try {
                 return new FileInputStream(file);
             } catch (FileNotFoundException e) {
-                Log.e(Database.TAG, "Unexpected file not found in blob store", e);
+                Log.e(Log.TAG_BLOB_STORE, "Unexpected file not found in blob store", e);
                 return null;
             }
         }
@@ -164,7 +164,7 @@ public class BlobStore {
             inputStream.close();
             fos.close();
         } catch (IOException e) {
-            Log.e(Database.TAG, "Error writing blog to tmp file", e);
+            Log.e(Log.TAG_BLOB_STORE, "Error writing blog to tmp file", e);
             return false;
         }
 
@@ -198,10 +198,10 @@ public class BlobStore {
             fos = new FileOutputStream(file);
             fos.write(data);
         } catch (FileNotFoundException e) {
-            Log.e(Database.TAG, "Error opening file for output", e);
+            Log.e(Log.TAG_BLOB_STORE, "Error opening file for output", e);
             return false;
         } catch(IOException ioe) {
-            Log.e(Database.TAG, "Error writing to file", ioe);
+            Log.e(Log.TAG_BLOB_STORE, "Error writing to file", ioe);
             return false;
         } finally {
             if(fos != null) {
@@ -287,7 +287,7 @@ public class BlobStore {
                     ++numDeleted;
                 }
                 else {
-                    Log.e(Database.TAG, "Error deleting attachmetn");
+                    Log.e(Log.TAG_BLOB_STORE, "Error deleting attachmetn");
                 }
             }
         }

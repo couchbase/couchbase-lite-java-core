@@ -51,7 +51,7 @@ public class URLConnection extends HttpURLConnection {
         try {
             responseOutputStream = new PipedOutputStream((PipedInputStream)responseInputStream);
         } catch (IOException e) {
-            Log.e(Database.TAG, "Exception creating piped output stream", e);
+            Log.e(Log.TAG_ROUTER, "Exception creating piped output stream", e);
         }
     }
 

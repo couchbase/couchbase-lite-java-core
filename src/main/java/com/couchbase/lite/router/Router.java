@@ -167,7 +167,7 @@ public class Router implements Database.ChangeListener {
             Map<String,Object> bodyMap = Manager.getObjectMapper().readValue(contentStream, Map.class);
             return bodyMap;
         } catch (IOException e) {
-            Log.w(Database.TAG, "WARNING: Exception parsing body into dictionary", e);
+            Log.w(Log.TAG_ROUTER, "WARNING: Exception parsing body into dictionary", e);
             return null;
         }
     }
@@ -301,7 +301,7 @@ public class Router implements Database.ChangeListener {
             try {
                 connection.getResponseOutputStream().close();
             } catch (IOException e) {
-                Log.e(Database.TAG, "Error closing empty output stream");
+                Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
             }
             sendResponse();
             return;
@@ -330,7 +330,7 @@ public class Router implements Database.ChangeListener {
                     try {
                         connection.getResponseOutputStream().close();
                     } catch (IOException e) {
-                        Log.e(Database.TAG, "Error closing empty output stream");
+                        Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
                     }
                     sendResponse();
                     return;
@@ -343,7 +343,7 @@ public class Router implements Database.ChangeListener {
                         try {
                             connection.getResponseOutputStream().close();
                         } catch (IOException e) {
-                            Log.e(Database.TAG, "Error closing empty output stream");
+                            Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
                         }
                         sendResponse();
                         return;
@@ -365,7 +365,7 @@ public class Router implements Database.ChangeListener {
                 try {
                     connection.getResponseOutputStream().close();
                 } catch (IOException e) {
-                    Log.e(Database.TAG, "Error closing empty output stream");
+                    Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
                 }
                 sendResponse();
                 return;
@@ -378,7 +378,7 @@ public class Router implements Database.ChangeListener {
                     try {
                         connection.getResponseOutputStream().close();
                     } catch (IOException e) {
-                        Log.e(Database.TAG, "Error closing empty output stream");
+                        Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
                     }
                     sendResponse();
                     return;
@@ -391,7 +391,7 @@ public class Router implements Database.ChangeListener {
                     try {
                         connection.getResponseOutputStream().close();
                     } catch (IOException e) {
-                        Log.e(Database.TAG, "Error closing empty output stream");
+                        Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
                     }
                     sendResponse();
                     return;
@@ -460,7 +460,7 @@ public class Router implements Database.ChangeListener {
         } catch (NoSuchMethodException msme) {
             try {
                 String errorMessage = "Router unable to route request to " + message;
-                Log.e(Database.TAG, errorMessage);
+                Log.e(Log.TAG_ROUTER, errorMessage);
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("error", "not_found");
                 result.put("reason", errorMessage);
@@ -469,7 +469,7 @@ public class Router implements Database.ChangeListener {
                 status = (Status)m.invoke(this, db, docID, attachmentName);
             } catch (Exception e) {
                 //default status is internal server error
-                Log.e(Database.TAG, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
+                Log.e(Log.TAG_ROUTER, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("error", "not_found");
                 result.put("reason", "Router unable to route request");
@@ -478,7 +478,7 @@ public class Router implements Database.ChangeListener {
             }
         } catch (Exception e) {
             String errorMessage = "Router unable to route request to " + message;
-            Log.e(Database.TAG, errorMessage, e);
+            Log.e(Log.TAG_ROUTER, errorMessage, e);
             Map<String, Object> result = new HashMap<String, Object>();
             result.put("error", "not_found");
             result.put("reason", errorMessage + e.toString());
@@ -508,7 +508,7 @@ public class Router implements Database.ChangeListener {
                 resHeader.add("Content-Type", "application/json");
             }
             else {
-                Log.w(Database.TAG, "Cannot add Content-Type header because getResHeader() returned null");
+                Log.w(Log.TAG_ROUTER, "Cannot add Content-Type header because getResHeader() returned null");
             }
         }
 
@@ -517,7 +517,7 @@ public class Router implements Database.ChangeListener {
         if(accept != null && !"*/*".equals(accept)) {
             String responseType = connection.getBaseContentType();
             if(responseType != null && accept.indexOf(responseType) < 0) {
-                Log.e(Database.TAG, String.format("Error 406: Can't satisfy request Accept: %s", accept));
+                Log.e(Log.TAG_ROUTER, String.format("Error 406: Can't satisfy request Accept: %s", accept));
                 status = new Status(Status.NOT_ACCEPTABLE);
             }
         }
@@ -536,7 +536,7 @@ public class Router implements Database.ChangeListener {
                 try {
                     connection.getResponseOutputStream().close();
                 } catch (IOException e) {
-                    Log.e(Database.TAG, "Error closing empty output stream");
+                    Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
                 }
             }
             sendResponse();
@@ -677,7 +677,7 @@ public class Router implements Database.ChangeListener {
                     if (replicator.getLastError() != null) {
                         String msg = String.format("Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
                                 replicator.getLastError(), replicator, source, target);
-                        Log.e(Database.TAG, msg);
+                        Log.e(Log.TAG_ROUTER, msg);
                         Throwable error = replicator.getLastError();
                         int statusCode = 400;
                         if (error instanceof HttpResponseException) {
@@ -943,14 +943,14 @@ public class Router implements Database.ChangeListener {
                     results.add(result);
                 }
             }
-            Log.w(Database.TAG, String.format("%s finished inserting %d revisions in bulk", this, docs.size()));
+            Log.w(Log.TAG_ROUTER, String.format("%s finished inserting %d revisions in bulk", this, docs.size()));
             ok = true;
         } catch (Exception e) {
-            Log.e(Database.TAG, String.format("%s: Exception inserting revisions in bulk", this), e);
+            Log.e(Log.TAG_ROUTER, String.format("%s: Exception inserting revisions in bulk", this), e);
         } finally {
             db.endTransaction(ok);
         }
-        Log.d(Database.TAG, "results: " + results.toString());
+        Log.d(Log.TAG_ROUTER, "results: " + results.toString());
         connection.setResponseBody(new Body(results));
         return new Status(Status.CREATED);
     }
@@ -975,7 +975,7 @@ public class Router implements Database.ChangeListener {
         try {
             db.findMissingRevisions(revs);
         } catch (SQLException e) {
-            Log.e(Database.TAG, "Exception", e);
+            Log.e(Log.TAG_ROUTER, "Exception", e);
             return new Status(Status.DB_ERROR);
         }
 
@@ -1056,13 +1056,13 @@ public class Router implements Database.ChangeListener {
         try {
             future.get(60, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            Log.e(Database.TAG, "Exception waiting for future", e);
+            Log.e(Log.TAG_ROUTER, "Exception waiting for future", e);
             return new Status(Status.INTERNAL_SERVER_ERROR);
         } catch (ExecutionException e) {
-            Log.e(Database.TAG, "Exception waiting for future", e);
+            Log.e(Log.TAG_ROUTER, "Exception waiting for future", e);
             return new Status(Status.INTERNAL_SERVER_ERROR);
         } catch (TimeoutException e) {
-            Log.e(Database.TAG, "Exception waiting for future", e);
+            Log.e(Log.TAG_ROUTER, "Exception waiting for future", e);
             return new Status(Status.INTERNAL_SERVER_ERROR);
         }
 
@@ -1167,7 +1167,7 @@ public class Router implements Database.ChangeListener {
                     os.write(json);
                     os.flush();
                 } catch (Exception e) {
-                    Log.e(Database.TAG, "IOException writing to internal streams", e);
+                    Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
                 }
             }
         } catch (Exception e) {
@@ -1190,7 +1190,7 @@ public class Router implements Database.ChangeListener {
             }
 
             if(longpoll) {
-                Log.w(Database.TAG, "Router: Sending longpoll response");
+                Log.w(Log.TAG_ROUTER, "Router: Sending longpoll response");
                 sendResponse();
                 List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
                 revs.add(rev);
@@ -1200,18 +1200,18 @@ public class Router implements Database.ChangeListener {
                     try {
                         data = Manager.getObjectMapper().writeValueAsBytes(body);
                     } catch (Exception e) {
-                        Log.w(Database.TAG, "Error serializing JSON", e);
+                        Log.w(Log.TAG_ROUTER, "Error serializing JSON", e);
                     }
                     OutputStream os = connection.getResponseOutputStream();
                     try {
                         os.write(data);
                         os.close();
                     } catch (IOException e) {
-                        Log.e(Database.TAG, "IOException writing to internal streams", e);
+                        Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
                     }
                 }
             } else {
-                Log.w(Database.TAG, "Router: Sending continous change chunk");
+                Log.w(Log.TAG_ROUTER, "Router: Sending continous change chunk");
                 sendContinuousChange(rev);
             }
 
@@ -1485,7 +1485,7 @@ public class Router implements Database.ChangeListener {
 
         } catch (CouchbaseLiteException e) {
             e.printStackTrace();
-            Log.e(Database.TAG, e.toString());
+            Log.e(Log.TAG_ROUTER, e.toString());
             outStatus.setCode(e.getCBLStatus().getCode());
         }
 
@@ -1617,7 +1617,7 @@ public class Router implements Database.ChangeListener {
         }
         Mapper mapBlock = View.getCompiler().compileMap(mapSource, language);
         if(mapBlock == null) {
-            Log.w(Database.TAG, String.format("View %s has unknown map function: %s", viewName, mapSource));
+            Log.w(Log.TAG_ROUTER, String.format("View %s has unknown map function: %s", viewName, mapSource));
             return null;
         }
         String reduceSource = (String)viewProps.get("reduce");
@@ -1625,7 +1625,7 @@ public class Router implements Database.ChangeListener {
         if(reduceSource != null) {
             reduceBlock = View.getCompiler().compileReduce(reduceSource, language);
             if(reduceBlock == null) {
-                Log.w(Database.TAG, String.format("View %s has unknown reduce function: %s", viewName, reduceBlock));
+                Log.w(Log.TAG_ROUTER, String.format("View %s has unknown reduce function: %s", viewName, reduceBlock));
                 return null;
             }
         }

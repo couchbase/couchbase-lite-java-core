@@ -74,11 +74,6 @@ public final class Database {
      */
     public static final String TAG = Log.TAG;
 
-    /**
-     * @exclude
-     */
-    public static final String TAG_SQL = "CBLSQL";
-
     private Map<String, View> views;
     private Map<String, ReplicationFilter> filters;
     private Map<String, Validator> validations;
@@ -1134,7 +1129,7 @@ public final class Database {
         try {
             database.beginTransaction();
             ++transactionLevel;
-            Log.i(Database.TAG_SQL, Thread.currentThread().getName() + " Begin transaction (level " + Integer.toString(transactionLevel) + ")");
+            Log.i(Log.TAG, Thread.currentThread().getName() + " Begin transaction (level " + Integer.toString(transactionLevel) + ")");
         } catch (SQLException e) {
             Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
             return false;
@@ -1154,12 +1149,12 @@ public final class Database {
         assert(transactionLevel > 0);
 
         if(commit) {
-            Log.i(Database.TAG_SQL, Thread.currentThread().getName() + " Committing transaction (level " + Integer.toString(transactionLevel) + ")");
+            Log.i(Log.TAG, Thread.currentThread().getName() + " Committing transaction (level " + Integer.toString(transactionLevel) + ")");
             database.setTransactionSuccessful();
             database.endTransaction();
         }
         else {
-            Log.i(TAG_SQL, Thread.currentThread().getName() + " CANCEL transaction (level " + Integer.toString(transactionLevel) + ")");
+            Log.i(Log.TAG, Thread.currentThread().getName() + " CANCEL transaction (level " + Integer.toString(transactionLevel) + ")");
             try {
                 database.endTransaction();
             } catch (SQLException e) {

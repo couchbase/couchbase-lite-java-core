@@ -149,7 +149,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             else if (attachment.containsKey("data") && length > 1000) {
                 String msg = String.format("Attachment '%s' sent inline (len=%d).  Large attachments " +
                         "should be sent in MIME parts for reduced memory overhead.", attachmentName);
-                Log.w(Database.TAG, msg);
+                Log.w(Log.TAG_REMOTE_REQUEST, msg);
             }
 
         }

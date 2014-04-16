@@ -129,7 +129,7 @@ public class RemoteRequest implements Runnable {
             try {
                 bodyBytes = Manager.getObjectMapper().writeValueAsBytes(body);
             } catch (Exception e) {
-                Log.e(Database.TAG, "Error serializing body of request", e);
+                Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
             }
             ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
             entity.setContentType("application/json");
@@ -159,7 +159,7 @@ public class RemoteRequest implements Runnable {
         }
         workExecutor.schedule(this, RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
         retryCount += 1;
-        Log.d(Database.TAG, "Will retry in " + RETRY_DELAY_MS + " ms");
+        Log.d(Log.TAG_REMOTE_REQUEST, "Will retry in " + RETRY_DELAY_MS + " ms");
         return true;
     }
 
@@ -179,7 +179,7 @@ public class RemoteRequest implements Runnable {
                     CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
-                Log.e(Database.TAG, "Unable to add in cookies to global store", e);
+                Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
             }
 
             StatusLine status = response.getStatusLine();
@@ -188,10 +188,10 @@ public class RemoteRequest implements Runnable {
             }
 
             if (status.getStatusCode() >= 300) {
-                Log.e(Database.TAG,
+                Log.e(Log.TAG_REMOTE_REQUEST,
                         "Got error " + Integer.toString(status.getStatusCode()));
-                Log.e(Database.TAG, "Request was for: " + request.toString());
-                Log.e(Database.TAG,
+                Log.e(Log.TAG_REMOTE_REQUEST, "Request was for: " + request.toString());
+                Log.e(Log.TAG_REMOTE_REQUEST,
                         "Status reason: " + status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
@@ -212,10 +212,10 @@ public class RemoteRequest implements Runnable {
                 }
             }
         } catch (ClientProtocolException e) {
-            Log.e(Database.TAG, "client protocol exception", e);
+            Log.e(Log.TAG_REMOTE_REQUEST, "client protocol exception", e);
             error = e;
         } catch (IOException e) {
-            Log.e(Database.TAG, "io exception", e);
+            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
             // Treat all IOExceptions as transient, per:
             // http://hc.apache.org/httpclient-3.x/exception-handling.html
@@ -261,7 +261,7 @@ public class RemoteRequest implements Runnable {
                     dhc.addRequestInterceptor(preemptiveAuth, 0);
                 }
             } else {
-                Log.w(Database.TAG, "RemoteRequest Unable to parse user info, not setting credentials");
+                Log.w(Log.TAG_REMOTE_REQUEST, "RemoteRequest Unable to parse user info, not setting credentials");
             }
         }
     }
@@ -282,14 +282,14 @@ public class RemoteRequest implements Runnable {
                         }
                     } catch (Exception e) {
                         // don't let this crash the thread
-                        Log.e(Database.TAG,
+                        Log.e(Log.TAG_REMOTE_REQUEST,
                                 "RemoteRequestCompletionBlock throw Exception",
                                 e);
                     }
                 }
             });
         } else {
-            Log.e(Database.TAG, "work executor was null!!!");
+            Log.e(Log.TAG_REMOTE_REQUEST, "work executor was null!!!");
         }
     }
 

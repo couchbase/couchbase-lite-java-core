@@ -40,6 +40,8 @@ public class Log {
     public static final String TAG_DATABASE = "Database";
     public static final String TAG_LISTENER = "Listener";
     public static final String TAG_MULTI_STREAM_WRITER = "MultistreamWriter";
+    public static final String TAG_BLOB_STORE = "BlobStore";
+
 
     /**
      * Logging levels -- values match up with android.util.Log

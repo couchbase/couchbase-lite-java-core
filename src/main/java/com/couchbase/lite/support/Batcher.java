@@ -35,7 +35,7 @@ public class Batcher<T> {
                 processNow();
             } catch (Exception e) {
                 // we don't want this to crash the batcher
-                com.couchbase.lite.util.Log.e(Database.TAG, this + ": BatchProcessor throw exception", e);
+                com.couchbase.lite.util.Log.e(Log.TAG_SYNC, this + ": BatchProcessor throw exception", e);
             }
         }
     };
@@ -61,7 +61,7 @@ public class Batcher<T> {
      */
     public synchronized void queueObjects(List<T> objects) {
 
-        Log.d(Database.TAG, this + ": queueObjects called with " + objects.size() + " objects: " + objects);
+        Log.v(Log.TAG_SYNC, this + ": queueObjects called with " + objects.size() + " objects: " + objects);
         if (objects.size() == 0) {
             return;
         }
@@ -69,27 +69,27 @@ public class Batcher<T> {
             inbox = new LinkedHashSet<T>();
         }
 
-        Log.d(Database.TAG, this + ": inbox size before adding objects: " + inbox.size());
+        Log.v(Log.TAG_SYNC, this + ": inbox size before adding objects: " + inbox.size());
 
         inbox.addAll(objects);
-        Log.d(Database.TAG, this + ": " + objects.size() + " objects added to inbox.  inbox size: " + inbox.size());
+        Log.v(Log.TAG_SYNC, this + ": " + objects.size() + " objects added to inbox.  inbox size: " + inbox.size());
 
         if (inbox.size() < capacity) {
             // Schedule the processing. To improve latency, if we haven't processed anything
             // in at least our delay time, rush these object(s) through ASAP:
-            Log.d(Database.TAG, this + ": inbox.size() < capacity, schedule processing");
+            Log.v(Log.TAG_SYNC, this + ": inbox.size() < capacity, schedule processing");
             int delayToUse = delay;
             long delta = (System.currentTimeMillis() - lastProcessedTime);
             if (delta >= delay) {
-                Log.d(Database.TAG, this + ": delta " + delta + " >= delay " + delay + " --> using delay 0");
+                Log.v(Log.TAG_SYNC, this + ": delta " + delta + " >= delay " + delay + " --> using delay 0");
                 delayToUse = 0;
             } else {
-                Log.d(Database.TAG, this + ": delta " + delta + " < delay " + delay + " --> using delay " + delayToUse);
+                Log.v(Log.TAG_SYNC, this + ": delta " + delta + " < delay " + delay + " --> using delay " + delayToUse);
             }
             scheduleWithDelay(delayToUse);
         } else {
             // If inbox fills up, process it immediately:
-            Log.d(Database.TAG, this + ": inbox.size() >= capacity, process immediately");
+            Log.v(Log.TAG_SYNC, this + ": inbox.size() >= capacity, process immediately");
             unschedule();
             processNow();
         }
@@ -130,7 +130,7 @@ public class Batcher<T> {
      * Empties the queue without processing any of the objects in it.
      */
     public void clear() {
-        Log.d(Database.TAG, this + ": clear() called, setting inbox to null");
+        Log.v(Log.TAG_SYNC, this + ": clear() called, setting inbox to null");
         unschedule();
         inbox = null;
     }
@@ -146,22 +146,22 @@ public class Batcher<T> {
 
     private void processNow() {
 
-        Log.d(Database.TAG, this + ": processNow() called");
+        Log.v(Log.TAG_SYNC, this + ": processNow() called");
 
         scheduled = false;
         List<T> toProcess = new ArrayList<T>();
 
         synchronized (this) {
             if (inbox == null || inbox.size() == 0) {
-                Log.d(Database.TAG, this + ": processNow() called, but inbox is empty");
+                Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
                 return;
             } else if (inbox.size() <= capacity) {
-                Log.d(Database.TAG, this + ": processNow() called, inbox size: " + inbox.size());
-                Log.d(Database.TAG, this + ": inbox.size() <= capacity, adding " + inbox.size() + " items to toProcess array");
+                Log.v(Log.TAG_SYNC, this + ": processNow() called, inbox size: " + inbox.size());
+                Log.v(Log.TAG_SYNC, this + ": inbox.size() <= capacity, adding " + inbox.size() + " items to toProcess array");
                 toProcess.addAll(inbox);
                 inbox = null;
             } else {
-                Log.d(Database.TAG, this + ": processNow() called, inbox size: " + inbox.size());
+                Log.v(Log.TAG_SYNC, this + ": processNow() called, inbox size: " + inbox.size());
                 int i = 0;
                 for (T item: inbox) {
                     toProcess.add(item);
@@ -172,11 +172,11 @@ public class Batcher<T> {
                 }
 
                 for (T item : toProcess) {
-                    Log.d(Database.TAG, this + ": processNow() removing " + item + " from inbox");
+                    Log.v(Log.TAG_SYNC, this + ": processNow() removing " + item + " from inbox");
                     inbox.remove(item);
                 }
 
-                Log.d(Database.TAG, this + ": inbox.size() > capacity, moving " + toProcess.size() + " items from inbox -> toProcess array");
+                Log.v(Log.TAG_SYNC, this + ": inbox.size() > capacity, moving " + toProcess.size() + " items from inbox -> toProcess array");
 
                 // There are more objects left, so schedule them Real Soon:
                 scheduleWithDelay(0);
@@ -185,39 +185,39 @@ public class Batcher<T> {
 
         }
         if(toProcess != null && toProcess.size() > 0) {
-            Log.d(Database.TAG, this + ": invoking processor with " + toProcess.size() + " items ");
+            Log.v(Log.TAG_SYNC, this + ": invoking processor with " + toProcess.size() + " items ");
             processor.process(toProcess);
         } else {
-            Log.d(Database.TAG, this + ": nothing to process");
+            Log.v(Log.TAG_SYNC, this + ": nothing to process");
         }
         lastProcessedTime = System.currentTimeMillis();
 
     }
 
     private void scheduleWithDelay(int suggestedDelay) {
-        Log.d(Database.TAG, "scheduleWithDelay called with delay: " + suggestedDelay + " ms");
+        Log.v(Log.TAG_SYNC, "scheduleWithDelay called with delay: " + suggestedDelay + " ms");
         if (scheduled && (suggestedDelay < scheduledDelay)) {
-            Log.d(Database.TAG, "already scheduled and : " + suggestedDelay + " < " + scheduledDelay + " --> unscheduling");
+            Log.v(Log.TAG_SYNC, "already scheduled and : " + suggestedDelay + " < " + scheduledDelay + " --> unscheduling");
             unschedule();
         }
         if (!scheduled) {
-            Log.d(Database.TAG, "not already scheduled");
+            Log.v(Log.TAG_SYNC, "not already scheduled");
             scheduled = true;
             scheduledDelay = suggestedDelay;
-            Log.d(Database.TAG, "workExecutor.schedule() with delay: " + suggestedDelay + " ms");
+            Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: " + suggestedDelay + " ms");
             flushFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
         }
     }
 
     private void unschedule() {
-        Log.d(Database.TAG, this + ": unschedule() called");
+        Log.v(Log.TAG_SYNC, this + ": unschedule() called");
         scheduled = false;
         if(flushFuture != null) {
             boolean didCancel = flushFuture.cancel(false);
-            Log.d(Database.TAG, "tried to cancel flushFuture, result: " + didCancel);
+            Log.v(Log.TAG_SYNC, "tried to cancel flushFuture, result: " + didCancel);
 
         } else {
-            Log.d(Database.TAG, "flushFuture was null, doing nothing");
+            Log.v(Log.TAG_SYNC, "flushFuture was null, doing nothing");
         }
     }
 

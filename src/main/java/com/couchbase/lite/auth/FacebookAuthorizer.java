@@ -38,7 +38,7 @@ public class FacebookAuthorizer extends Authorizer {
                 return null;
             }
         } catch (Exception e) {
-            Log.e(Database.TAG, "Error looking login parameters for site", e);
+            Log.e(Log.TAG_SYNC, "Error looking login parameters for site", e);
         }
         return null;
     }
@@ -56,7 +56,7 @@ public class FacebookAuthorizer extends Authorizer {
         if (accessTokens == null) {
             accessTokens = new HashMap<List<String>, String>();
         }
-        Log.d(Database.TAG, "FacebookAuthorizer registering key: " + key);
+        Log.d(Log.TAG_SYNC, "FacebookAuthorizer registering key: " + key);
         accessTokens.put(key, accessToken);
 
         return email;
@@ -68,10 +68,10 @@ public class FacebookAuthorizer extends Authorizer {
             List<String> key = new ArrayList<String>();
             key.add(email);
             key.add(site.toExternalForm().toLowerCase());
-            Log.d(Database.TAG, "FacebookAuthorizer looking up key: " + key + " from list of access tokens");
+            Log.d(Log.TAG_SYNC, "FacebookAuthorizer looking up key: " + key + " from list of access tokens");
             return accessTokens.get(key);
         } catch (Exception e) {
-            Log.e(Database.TAG, "Error looking up access token", e);
+            Log.e(Log.TAG_SYNC, "Error looking up access token", e);
         }
         return null;
     }
