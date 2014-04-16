@@ -72,7 +72,7 @@ public final class Database {
     /**
      * @exclude
      */
-    public static final String TAG = "Database";
+    public static final String TAG = Log.TAG;
 
     /**
      * @exclude
