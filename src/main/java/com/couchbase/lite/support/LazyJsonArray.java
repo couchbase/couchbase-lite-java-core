@@ -22,8 +22,9 @@ public class LazyJsonArray<T> extends AbstractList<T> {
     private Iterator<T> cacheIterator;
 
     public LazyJsonArray(byte[] json) {
-        if(json[0] != '[')
+        if(json[0] != '[') {
             throw new IllegalArgumentException("data must represent a JSON array");
+        }
         this.json = json;
     }
 
@@ -96,8 +97,9 @@ public class LazyJsonArray<T> extends AbstractList<T> {
     }
 
     private void parseJson() {
-        if(parsed)
+        if(parsed) {
             return;
+        }
 
         try {
             List<T> parsedvalues  = (List<T>) Manager.getObjectMapper().readValue(json, Object.class);

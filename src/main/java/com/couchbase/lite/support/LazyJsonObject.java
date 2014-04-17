@@ -25,8 +25,9 @@ public class LazyJsonObject<K,V> extends AbstractMap<K,V> {
     private Map<K, V> cache = new HashMap<K, V>();
 
     public LazyJsonObject(byte[] json) {
-        if(json[0] != '{')
+        if(json[0] != '{') {
             throw new IllegalArgumentException("data must represent a JSON Object");
+        }
         this.json = json;
     }
 
@@ -107,8 +108,9 @@ public class LazyJsonObject<K,V> extends AbstractMap<K,V> {
     }
 
    private void parseJson() {
-       if(parsed)
+       if(parsed) {
            return;
+       }
 
        try {
            Map<K,V> parsedprops  = (Map<K,V>)Manager.getObjectMapper().readValue(json, Object.class);

@@ -846,8 +846,8 @@ public final class View {
                 // regular query
                 cursor.moveToNext();
                 while (!cursor.isAfterLast()) {
-                    JsonDocument keyDoc = new JsonDocument(cursor.getBlob(0));  // TODO: delay parsing this for increased efficiency
-                    JsonDocument valueDoc = new JsonDocument(cursor.getBlob(1));    // TODO: ditto
+                    JsonDocument keyDoc = new JsonDocument(cursor.getBlob(0));
+                    JsonDocument valueDoc = new JsonDocument(cursor.getBlob(1));
                     String docId = cursor.getString(2);
                     int sequence =  Integer.valueOf(cursor.getString(3));
                     Map<String, Object> docContents = null;
