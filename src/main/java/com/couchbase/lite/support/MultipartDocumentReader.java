@@ -38,6 +38,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
     public void parseJsonBuffer() {
         try {
+            Log.v(Log.TAG_REMOTE_REQUEST, "About to parse json buffer %s", new String(jsonBuffer.toByteArray(), "UTF-8"));
             document = Manager.getObjectMapper().readValue(jsonBuffer.toByteArray(), Map.class);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to parse json buffer", e);
@@ -46,12 +47,17 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     }
 
     public void setContentType(String contentType) {
-        if (!contentType.startsWith("multipart/")) {
+        if (contentType.startsWith("multipart/")) {
+            multipartReader = new MultipartReader(contentType, this);
+            attachmentsByName = new HashMap<String, BlobStoreWriter>();
+            attachmentsByMd5Digest = new HashMap<String, BlobStoreWriter>();
+        } else if (contentType == null || contentType.startsWith("application/json")
+                    || contentType.startsWith("text/plain")) {
+            // No multipart, so no attachments. Body is pure JSON. (We allow text/plain because CouchDB
+            // sends JSON responses using the wrong content-type.)
+        } else {
             throw new IllegalArgumentException("contentType must start with multipart/");
         }
-        multipartReader = new MultipartReader(contentType, this);
-        attachmentsByName = new HashMap<String, BlobStoreWriter>();
-        attachmentsByMd5Digest = new HashMap<String, BlobStoreWriter>();
     }
 
     public void appendData(byte[] data) {

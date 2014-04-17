@@ -161,4 +161,6 @@ public class BlobStoreWriter {
     public BlobKey getBlobKey() {
         return blobKey;
     }
+
+    public String getFilePath() { return tempFile.getPath(); }
 }

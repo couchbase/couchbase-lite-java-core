@@ -40,6 +40,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,6 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A CouchbaseLite database.
@@ -1640,6 +1642,53 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
+    public List<String>  getPossibleAncestorRevisionIDs (
+            RevisionInternal rev,
+            int limit,
+            AtomicBoolean hasAttachment
+            ) {
+
+        List<String> matchingRevs = new ArrayList<String>();
+        int generation = rev.getGeneration();
+
+        if (generation <= 1)
+            return null;
+
+        long docNumericID = getDocNumericID(rev.getDocId());
+        if (docNumericID <= 0)
+            return null;
+
+        int sqlLimit = limit > 0 ? (int)limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
+        String sql = "SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?" +
+        " and deleted=0 and json not null" +
+        " ORDER BY sequence DESC LIMIT ?";
+        String[] args = {Long.toString(docNumericID),generation+"-",Integer.toString(sqlLimit)};
+
+            Cursor cursor = null;
+            try {
+                cursor = database.rawQuery(sql, args);
+                cursor.moveToNext();
+                if (!cursor.isAfterLast()) {
+                    if (matchingRevs.size() == 0)
+                        hasAttachment.set(sequenceHasAttachments(cursor.getLong(1)));
+                    matchingRevs.add(cursor.getString(0));
+                }
+
+            } catch (SQLException e) {
+                Log.e(Database.TAG, "Error getting all revisions of document", e);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+        return matchingRevs;
+    }
+
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     public String findCommonAncestorOf(RevisionInternal rev, List<String> revIDs) {
         String result = null;
 
@@ -2205,8 +2254,6 @@ public final class Database {
                 } else {
                     rows.add(change);
                 }
-
-
             }
 
             if (options.getKeys() != null) {
@@ -2524,6 +2571,31 @@ public final class Database {
         }
     }
 
+
+    public boolean sequenceHasAttachments(long sequence) {
+
+        Cursor cursor = null;
+
+        String args[] = { Long.toString(sequence) };
+        try {
+            cursor = database.rawQuery("SELECT 1 FROM attachments WHERE sequence=? LIMIT 1", args);
+
+            if(cursor.moveToNext()) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error getting attachments for sequence", e);
+            return false;
+        } finally {
+            if(cursor != null) {
+                cursor.close();
+            }
+        }
+    }
+
+
     /**
      * Constructs an "_attachments" dictionary for a revision, to be inserted in its JSON body.
      * @exclude
@@ -2611,6 +2683,37 @@ public final class Database {
             }
         }
     }
+
+    @InterfaceAudience.Private
+    public URL fileForAttachmentDict(Map<String,Object> attachmentDict) {
+        String digest = (String)attachmentDict.get("digest");
+        if (digest == null) {
+            return null;
+        }
+        String path = null;
+        Object pending = pendingAttachmentsByDigest.get(digest);
+        if (pending != null) {
+            if (pending instanceof BlobStoreWriter) {
+                path = ((BlobStoreWriter) pending).getFilePath();
+            } else {
+                BlobKey key = new BlobKey((byte[])pending);
+                path = attachments.pathForKey(key);
+            }
+        } else {
+            // If it's an installed attachment, ask the blob-store for it:
+            BlobKey key = new BlobKey(digest);
+            path = attachments.pathForKey(key);
+        }
+
+        URL retval = null;
+        try {
+            retval = new File(path).toURI().toURL();
+        } catch (MalformedURLException e) {
+            //NOOP: retval will be null
+        }
+        return retval;
+    }
+
 
     /**
      * Modifies a RevisionInternal's body by changing all attachments with revpos < minRevPos into stubs.

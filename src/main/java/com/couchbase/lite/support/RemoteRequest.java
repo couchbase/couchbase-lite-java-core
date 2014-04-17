@@ -32,14 +32,20 @@ import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.ClientParamsStack;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.ExecutionContext;
 import org.apache.http.protocol.HttpContext;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -124,7 +130,7 @@ public class RemoteRequest implements Runnable {
         return request;
     }
 
-    private void setBody(HttpUriRequest request) {
+    protected void setBody(HttpUriRequest request) {
         // set body if appropriate
         if (body != null && request instanceof HttpEntityEnclosingRequestBase) {
             byte[] bodyBytes = null;
@@ -171,7 +177,6 @@ public class RemoteRequest implements Runnable {
         HttpResponse response = null;
 
         try {
-
             response = httpClient.execute(request);
 
             // add in cookies to global store
