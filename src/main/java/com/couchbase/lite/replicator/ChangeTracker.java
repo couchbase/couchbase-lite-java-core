@@ -223,7 +223,7 @@ public class ChangeTracker implements Runnable {
             // This is a race condition that can be reproduced by calling cbpuller.start() and cbpuller.stop()
             // directly afterwards.  What happens is that by the time the Changetracker thread fires up,
             // the cbpuller has already set this.client to null.  See issue #109
-            Log.w(Log.TAG_CHANGE_TRACKER, this + ": ChangeTracker run() loop aborting because client == null");
+            Log.w(Log.TAG_CHANGE_TRACKER, "%s: ChangeTracker run() loop aborting because client == null", this);
             return;
         }
 
@@ -301,11 +301,11 @@ public class ChangeTracker implements Runnable {
             try {
                 String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
                 maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-                Log.v(Log.TAG_CHANGE_TRACKER, this + ": Making request to " + maskedRemoteWithoutCredentials);
+                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", maskedRemoteWithoutCredentials, this);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
                 if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
-                    Log.e(Log.TAG_CHANGE_TRACKER, this + ": Change tracker got error " + Integer.toString(status.getStatusCode()));
+                    Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d" + status.getStatusCode(), this);
                     String msg = String.format(status.toString());
                     this.error = new CouchbaseLiteException(msg, new Status(status.getStatusCode()));
                     stop();
@@ -319,11 +319,11 @@ public class ChangeTracker implements Runnable {
                             Map<String, Object> fullBody = Manager.getObjectMapper().readValue(input, Map.class);
                             boolean responseOK = receivedPollResponse(fullBody);
                             if (mode == ChangeTrackerMode.LongPoll && responseOK) {
-                                Log.v(Log.TAG_CHANGE_TRACKER, this + ": Starting new longpoll");
+                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
                                 backoff.resetBackoff();
                                 continue;
                             } else {
-                                Log.w(Log.TAG_CHANGE_TRACKER, this + ": Change tracker calling stop (LongPoll)");
+                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
                                 stop();
                             }
                         } else {  // one-shot replications
@@ -338,12 +338,12 @@ public class ChangeTracker implements Runnable {
                             while (jp.nextToken() == JsonToken.START_OBJECT) {
                                 Map<String, Object> change = (Map) Manager.getObjectMapper().readValue(jp, Map.class);
                                 if (!receivedChange(change)) {
-                                    Log.w(Log.TAG_CHANGE_TRACKER, String.format("Received unparseable change line from server: %s", change));
+                                    Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
                                 }
 
                             }
 
-                            Log.w(Log.TAG_CHANGE_TRACKER, this + ": Change tracker calling stop (OneShot)");
+                            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
                             stop();
                             break;
 
@@ -372,7 +372,7 @@ public class ChangeTracker implements Runnable {
 
             }
         }
-        Log.v(Log.TAG_CHANGE_TRACKER, this + ": Change tracker run loop exiting");
+        Log.v(Log.TAG_CHANGE_TRACKER, "%s: Change tracker run loop exiting", this);
     }
 
     public boolean receivedChange(final Map<String,Object> change) {
@@ -402,7 +402,7 @@ public class ChangeTracker implements Runnable {
     }
 
     public void setUpstreamError(String message) {
-        Log.w(Log.TAG_CHANGE_TRACKER, String.format("Server error: %s", message));
+        Log.w(Log.TAG_CHANGE_TRACKER, "Server error: %s", message);
         this.error = new Throwable(message);
     }
 
@@ -416,7 +416,7 @@ public class ChangeTracker implements Runnable {
     }
 
     public void stop() {
-        Log.d(Log.TAG_CHANGE_TRACKER, this + ": Changed tracker asked to stop");
+        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to stop", this);
         running = false;
         thread.interrupt();
         if(request != null) {
@@ -427,13 +427,11 @@ public class ChangeTracker implements Runnable {
     }
 
     public void stopped() {
-        Log.d(Log.TAG_CHANGE_TRACKER, this + ": Change tracker in stopped");
+        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped", this);
         if (client != null) {
-            Log.d(Log.TAG_CHANGE_TRACKER, this + ": posting stopped");
             client.changeTrackerStopped(ChangeTracker.this);
         }
         client = null;
-        Log.d(Log.TAG_CHANGE_TRACKER, this + ": Change tracker client should be null now");
     }
 
     void setRequestHeaders(Map<String, Object> requestHeaders) {

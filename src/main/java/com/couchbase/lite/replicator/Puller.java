@@ -85,12 +85,11 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
 
         if(changeTracker != null) {
-            Log.d(Log.TAG_SYNC, this + ": stopping changetracker " + changeTracker);
+            Log.d(Log.TAG_SYNC, "%s: stopping changetracker", this, changeTracker);
             changeTracker.setClient(null);  // stop it from calling my changeTrackerStopped()
             changeTracker.stop();
             changeTracker = null;
             if(!continuous) {
-                Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": puller.stop() calling asyncTaskFinished()");
                 asyncTaskFinished(1);  // balances asyncTaskStarted() in beginReplicating()
             }
         }
@@ -121,10 +120,10 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             });
         }
         pendingSequences = new SequenceMap();
-        Log.w(Log.TAG_SYNC, this + ": starting ChangeTracker with since=" + lastSequence);
+        Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s", this, lastSequence);
         changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, true, lastSequence, this);
         changeTracker.setAuthenticator(getAuthenticator());
-        Log.w(Log.TAG_SYNC, this + ": started ChangeTracker " + changeTracker);
+        Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
 
         if(filterName != null) {
             changeTracker.setFilterName(filterName);
@@ -135,7 +134,6 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         changeTracker.setDocIDs(documentIDs);
         changeTracker.setRequestHeaders(requestHeaders);
         if(!continuous) {
-            Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": beginReplicating() calling asyncTaskStarted()");
             asyncTaskStarted();
         }
         changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
@@ -161,7 +159,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             return;
         }
         if(!Database.isValidDocumentId(docID)) {
-            Log.w(Log.TAG_SYNC, String.format("%s: Received invalid doc ID from _changes: %s", this, change));
+            Log.w(Log.TAG_SYNC, "%s: Received invalid doc ID from _changes: %s", this, change);
             return;
         }
         boolean deleted = (change.containsKey("deleted") && ((Boolean)change.get("deleted")).equals(Boolean.TRUE));
@@ -173,9 +171,9 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             }
             PulledRevision rev = new PulledRevision(docID, revID, deleted, db);
             rev.setRemoteSequenceID(lastSequence);
-            Log.d(Log.TAG_SYNC, this + ": adding rev to inbox " + rev);
+            Log.d(Log.TAG_SYNC, "%s: adding rev to inbox %s", this, rev);
 
-            Log.v(Log.TAG_SYNC, String.format("%s: changeTrackerReceivedChange() incrementing changesCount by 1", this));
+            Log.v(Log.TAG_SYNC, "%s: changeTrackerReceivedChange() incrementing changesCount by 1", this);
 
             // this is purposefully done slightly different than the ios version
             addToChangesCount(1);
@@ -195,18 +193,16 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @Override
     @InterfaceAudience.Private
     public void changeTrackerStopped(ChangeTracker tracker) {
-        Log.w(Log.TAG_SYNC, this + ": ChangeTracker " + tracker + " stopped");
+        Log.w(Log.TAG_SYNC, "%s: ChangeTracker %s stopped", this, tracker);
         if (error == null && tracker.getLastError() != null) {
             setError(tracker.getLastError());
         }
         changeTracker = null;
         if(batcher != null) {
-            Log.d(Log.TAG_SYNC, this + ": calling batcher.flush().  batcher.count() is " + batcher.count());
+            Log.d(Log.TAG_SYNC, "%s: calling batcher.flush().  batcher.count() is %d", this, batcher.count());
             batcher.flush();
         }
         if (!isContinuous()) {
-            Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": changeTrackerStopped() calling asyncTaskFinished()");
-
             // the asyncTaskFinished needs to run on the work executor
             // in order to fix https://github.com/couchbase/couchbase-lite-java-core/issues/91
             // basically, bad things happen when this runs on ChangeTracker thread.
@@ -255,7 +251,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
 
         if(numRevisionsRemoved > 0) {
-            Log.v(Log.TAG_SYNC, String.format("%s: processInbox() setting changesCount to: %s", this, getChangesCount() - numRevisionsRemoved));
+            Log.v(Log.TAG_SYNC, "%s: processInbox() setting changesCount to: %s", this, getChangesCount() - numRevisionsRemoved);
             // May decrease the changesCount, to account for the revisions we just found out we don’t need to get.
             addToChangesCount(-1 * numRevisionsRemoved);
 
@@ -263,14 +259,14 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         if(inboxCount == 0) {
             // Nothing to do. Just bump the lastSequence.
-            Log.w(Log.TAG_SYNC, String.format("%s no new remote revisions to fetch", this));
+            Log.w(Log.TAG_SYNC, "%s no new remote revisions to fetch", this);
             long seq = pendingSequences.addValue(lastInboxSequence);
             pendingSequences.removeSequence(seq);
             setLastSequence(pendingSequences.getCheckpointedValue());
             return;
         }
 
-        Log.v(Log.TAG_SYNC, this + " fetching " + inboxCount + " remote revisions...");
+        Log.v(Log.TAG_SYNC, "%s: fetching %s remote revisions...", this, inboxCount);
 
         // Dump the revs into the queue of revs to pull from the remote db:
         synchronized (this) {
@@ -297,13 +293,13 @@ public final class Puller extends Replication implements ChangeTrackerClient {
      */
     @InterfaceAudience.Private
     public void pullRemoteRevisions() {
-        Log.d(Log.TAG_SYNC, this + ": pullRemoteRevisions() with revsToPull size: " + revsToPull.size());
+        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevisions() with revsToPull size: %d", this, revsToPull.size());
         //find the work to be done in a synchronized block
         List<RevisionInternal> workToStartNow = new ArrayList<RevisionInternal>();
         synchronized (this) {
 			while(httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS && revsToPull != null && revsToPull.size() > 0) {
 				RevisionInternal work = revsToPull.remove(0);
-                Log.d(Log.TAG_SYNC, this + ": add " + work + " to workToStartNow");
+                Log.v(Log.TAG_SYNC, "%s: add %s to workToStartNow", this, work);
                 workToStartNow.add(work);
 			}
 		}
@@ -321,9 +317,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @InterfaceAudience.Private
     public void pullRemoteRevision(final RevisionInternal rev) {
 
-        Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread().toString() + ": pullRemoteRevision with rev: " + rev);
-
-        Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": pullRemoteRevision() calling asyncTaskStarted()");
+        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision with rev: %s", this, rev);
 
         asyncTaskStarted();
         ++httpConnectionCount;
@@ -335,7 +329,6 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         List<String> knownRevs = knownCurrentRevIDs(rev);
         if(knownRevs == null) {
             //this means something is wrong, possibly the replicator has shut down
-            Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": pullRemoteRevision() calling asyncTaskFinished()");
             asyncTaskFinished(1);
             --httpConnectionCount;
             return;
@@ -358,24 +351,21 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                         Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);
                         setError(e);
                         revisionFailed();
-                        Log.d(Log.TAG_SYNC, this + " pullRemoteRevision() updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + 1 + " due to error pulling remote revision");
+                        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision() updating completedChangesCount from %d  ->  due to error pulling remote revision", this, getCompletedChangesCount(), getCompletedChangesCount() + 1);
                         addToCompletedChangesCount(1);
                     } else {
                         Map<String,Object> properties = (Map<String,Object>)result;
                         PulledRevision gotRev = new PulledRevision(properties, db);
                         gotRev.setSequence(rev.getSequence());
                         // Add to batcher ... eventually it will be fed to -insertDownloads:.
-                        Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": pullRemoteRevision() calling asyncTaskStarted() - innner");
-
                         asyncTaskStarted();
                         // TODO: [gotRev.body compact];
-                        Log.d(Log.TAG_SYNC, this + ": pullRemoteRevision add rev: " + gotRev + " to batcher");
+                        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher", this, gotRev);
                         downloadsToInsert.queueObject(gotRev);
 
                     }
 
                 } finally {
-                    Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": pullRemoteRevision.onCompletion() calling asyncTaskFinished()");
                     asyncTaskFinished(1);
                 }
 
@@ -406,22 +396,22 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                 long fakeSequence = rev.getSequence();
                 List<String> history = db.parseCouchDBRevisionHistory(rev.getProperties());
                 if (history.isEmpty() && rev.getGeneration() > 1) {
-                    Log.w(Log.TAG_SYNC, this + ": Missing revision history in response for: " + rev);
+                    Log.w(Log.TAG_SYNC, "%s: Missing revision history in response for: %s", this, rev);
                     setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));
                     revisionFailed();
                     continue;
                 }
 
-                Log.v(Log.TAG_SYNC, this + " inserting " + rev.getDocId() + " " + history);
+                Log.v(Log.TAG_SYNC, "%s: inserting %s %s", this, rev.getDocId(), history);
 
                 // Insert the revision
                 try {
                     db.forceInsert(rev, history, remote);
                 } catch (CouchbaseLiteException e) {
                     if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
-                        Log.i(Log.TAG_SYNC, this + ": Remote rev failed validation: " + rev);
+                        Log.i(Log.TAG_SYNC, "%s: Remote rev failed validation: %s", this, rev);
                     } else {
-                        Log.w(Log.TAG_SYNC, this + " failed to write " + rev + ": status=" + e.getCBLStatus().getCode());
+                        Log.w(Log.TAG_SYNC, "%s: failed to write %s: status=%s", this, rev, e.getCBLStatus().getCode());
                         revisionFailed();
                         setError(new HttpResponseException(e.getCBLStatus().getCode(), null));
                         continue;
@@ -433,14 +423,14 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
             }
 
-            Log.v(Log.TAG_SYNC, this + " finished inserting " + downloads.size() + "revisions");
+            Log.v(Log.TAG_SYNC, "%s: finished inserting %d revisions", this, downloads.size() );
             success = true;
 
         } catch(SQLException e) {
             Log.e(Log.TAG_SYNC, this + ": Exception inserting revisions", e);
         } finally {
             db.endTransaction(success);
-            Log.d(Log.TAG_SYNC, this + "|" + Thread.currentThread() + ": insertDownloads() calling asyncTaskFinished() with value: " + downloads.size());
+            Log.d(Log.TAG_SYNC, "%s|%s: insertDownloads() calling asyncTaskFinished() with value: %d", this, Thread.currentThread(), downloads.size());
             asyncTaskFinished(downloads.size());
         }
 
@@ -448,9 +438,10 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         setLastSequence(pendingSequences.getCheckpointedValue());
 
         long delta = System.currentTimeMillis() - time;
-        Log.v(Log.TAG_SYNC, this + " inserted " + downloads.size() + " revs in " + delta + " milliseconds");
+        Log.v(Log.TAG_SYNC, "%s: inserted %d revs in %d milliseconds", this, downloads.size(), delta);
 
-        Log.d(Log.TAG_SYNC, this + " insertDownloads() updating completedChangesCount from " + getCompletedChangesCount() + " -> " + getCompletedChangesCount() + downloads.size());
+        int newCompletedChangesCount = getCompletedChangesCount() + downloads.size();
+        Log.d(Log.TAG_SYNC, "%s insertDownloads() updating completedChangesCount from %d -> %d ", this, getCompletedChangesCount(), newCompletedChangesCount);
 
         addToCompletedChangesCount(downloads.size());
 
@@ -492,7 +483,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     @InterfaceAudience.Public
     public boolean goOffline() {
-        Log.d(Log.TAG_SYNC, this + " goOffline() called, stopping changeTracker: " + changeTracker);
+        Log.d(Log.TAG_SYNC, "%s: goOffline() called, stopping changeTracker: %s", this, changeTracker);
         if (!super.goOffline()) {
             return false;
         }

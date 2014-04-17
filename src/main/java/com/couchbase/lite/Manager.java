@@ -110,7 +110,7 @@ public final class Manager {
     @InterfaceAudience.Public
     public Manager(Context context, ManagerOptions options) throws IOException {
 
-        Log.v(Database.TAG, "Starting Manager version: " + VERSION);
+        Log.v(Database.TAG, "Starting Manager version: %s", VERSION);
         this.context = context;
         this.directoryFile = context.getFilesDir();
         this.options = (options != null) ? options : DEFAULT_OPTIONS;
@@ -330,8 +330,7 @@ public final class Manager {
             String newFilename = filenameWithNewExtension(oldFilename, DATABASE_SUFFIX_OLD, DATABASE_SUFFIX);
             File newFile = new File(directory, newFilename);
             if (newFile.exists()) {
-                String msg = String.format("Cannot rename %s to %s, %s already exists", oldFilename, newFilename, newFilename);
-                Log.w(Database.TAG, msg);
+                Log.w(Database.TAG, "Cannot rename %s to %s, %s already exists", oldFilename, newFilename, newFilename);
                 continue;
             }
             boolean ok = file.renameTo(newFile);
@@ -471,8 +470,7 @@ public final class Manager {
             }
             db = new Database(path, this);
             if (mustExist && !db.exists()) {
-                String msg = String.format("mustExist is true and db (%s) does not exist", name);
-                Log.w(Database.TAG, msg);
+                Log.w(Database.TAG, "mustExist is true and db (%s) does not exist", name);
                 return null;
             }
             db.setName(name);

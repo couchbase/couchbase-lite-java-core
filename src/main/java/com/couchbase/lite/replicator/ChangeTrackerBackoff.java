@@ -37,7 +37,7 @@ public class ChangeTrackerBackoff {
         try {
             int sleepMilliseconds = getSleepMilliseconds();
             if (sleepMilliseconds > 0) {
-                Log.d(Log.TAG_CHANGE_TRACKER, this.getClass().getSimpleName() + " sleeping for " + sleepMilliseconds);
+                Log.d(Log.TAG_CHANGE_TRACKER, "%s: sleeping for %d", this, sleepMilliseconds);
                 Thread.sleep(sleepMilliseconds);
             }
         } catch (InterruptedException e1) {

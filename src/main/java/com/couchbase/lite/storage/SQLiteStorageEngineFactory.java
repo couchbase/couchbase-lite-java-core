@@ -37,7 +37,7 @@ public class SQLiteStorageEngineFactory {
             InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(resource);
             byte[] bytes = TextUtils.read(inputStream);
             classname = new String(bytes);
-            Log.d(Database.TAG, "Loading storage engine: " + classname);
+            Log.d(Database.TAG, "Loading storage engine: %s", classname);
             Class clazz = Class.forName(classname);
             SQLiteStorageEngine storageEngine = (SQLiteStorageEngine) clazz.newInstance();
             return storageEngine;

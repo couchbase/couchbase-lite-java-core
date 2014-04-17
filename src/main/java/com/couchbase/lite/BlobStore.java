@@ -287,7 +287,7 @@ public class BlobStore {
                     ++numDeleted;
                 }
                 else {
-                    Log.e(Log.TAG_BLOB_STORE, "Error deleting attachmetn");
+                    Log.e(Log.TAG_BLOB_STORE, "Error deleting attachment: %s", attachment);
                 }
             }
         }

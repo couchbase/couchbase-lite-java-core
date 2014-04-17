@@ -159,7 +159,7 @@ public class RemoteRequest implements Runnable {
         }
         workExecutor.schedule(this, RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
         retryCount += 1;
-        Log.d(Log.TAG_REMOTE_REQUEST, "Will retry in " + RETRY_DELAY_MS + " ms");
+        Log.d(Log.TAG_REMOTE_REQUEST, "Will retry in %d ms", RETRY_DELAY_MS);
         return true;
     }
 
@@ -289,7 +289,7 @@ public class RemoteRequest implements Runnable {
                 }
             });
         } else {
-            Log.e(Log.TAG_REMOTE_REQUEST, "work executor was null!!!");
+            Log.e(Log.TAG_REMOTE_REQUEST, "Work executor was null!");
         }
     }
 

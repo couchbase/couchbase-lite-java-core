@@ -61,7 +61,7 @@ public class Batcher<T> {
      */
     public synchronized void queueObjects(List<T> objects) {
 
-        Log.v(Log.TAG_SYNC, this + ": queueObjects called with " + objects.size() + " objects: " + objects);
+        Log.v(Log.TAG_SYNC, "%s: queueObjects called with %d objects. ", this, objects.size());
         if (objects.size() == 0) {
             return;
         }
@@ -69,27 +69,26 @@ public class Batcher<T> {
             inbox = new LinkedHashSet<T>();
         }
 
-        Log.v(Log.TAG_SYNC, this + ": inbox size before adding objects: " + inbox.size());
+        Log.v(Log.TAG_SYNC, "%s: inbox size before adding objects: %d", this, inbox.size());
 
         inbox.addAll(objects);
-        Log.v(Log.TAG_SYNC, this + ": " + objects.size() + " objects added to inbox.  inbox size: " + inbox.size());
 
         if (inbox.size() < capacity) {
             // Schedule the processing. To improve latency, if we haven't processed anything
             // in at least our delay time, rush these object(s) through ASAP:
-            Log.v(Log.TAG_SYNC, this + ": inbox.size() < capacity, schedule processing");
+            Log.v(Log.TAG_SYNC, "%s: inbox.size() < capacity, schedule processing", this);
             int delayToUse = delay;
             long delta = (System.currentTimeMillis() - lastProcessedTime);
             if (delta >= delay) {
-                Log.v(Log.TAG_SYNC, this + ": delta " + delta + " >= delay " + delay + " --> using delay 0");
+                Log.v(Log.TAG_SYNC, "%s: delta %s >= delay %s --> using delay 0", this, delta, delay);
                 delayToUse = 0;
             } else {
-                Log.v(Log.TAG_SYNC, this + ": delta " + delta + " < delay " + delay + " --> using delay " + delayToUse);
+                Log.v(Log.TAG_SYNC, "%s: delta %s < delay --> using delay %s", this, delta, delay, delayToUse);
             }
             scheduleWithDelay(delayToUse);
         } else {
             // If inbox fills up, process it immediately:
-            Log.v(Log.TAG_SYNC, this + ": inbox.size() >= capacity, process immediately");
+            Log.v(Log.TAG_SYNC, "%s: inbox.size() >= capacity, process immediately", this);
             unschedule();
             processNow();
         }
@@ -130,7 +129,7 @@ public class Batcher<T> {
      * Empties the queue without processing any of the objects in it.
      */
     public void clear() {
-        Log.v(Log.TAG_SYNC, this + ": clear() called, setting inbox to null");
+        Log.v(Log.TAG_SYNC, "%s: clear() called, setting inbox to null", this);
         unschedule();
         inbox = null;
     }
@@ -156,12 +155,11 @@ public class Batcher<T> {
                 Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
                 return;
             } else if (inbox.size() <= capacity) {
-                Log.v(Log.TAG_SYNC, this + ": processNow() called, inbox size: " + inbox.size());
-                Log.v(Log.TAG_SYNC, this + ": inbox.size() <= capacity, adding " + inbox.size() + " items to toProcess array");
+                Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
                 toProcess.addAll(inbox);
                 inbox = null;
             } else {
-                Log.v(Log.TAG_SYNC, this + ": processNow() called, inbox size: " + inbox.size());
+                Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
                 int i = 0;
                 for (T item: inbox) {
                     toProcess.add(item);
@@ -172,11 +170,11 @@ public class Batcher<T> {
                 }
 
                 for (T item : toProcess) {
-                    Log.v(Log.TAG_SYNC, this + ": processNow() removing " + item + " from inbox");
+                    Log.v(Log.TAG_SYNC, "%s: processNow() removing %s from inbox", this, item);
                     inbox.remove(item);
                 }
 
-                Log.v(Log.TAG_SYNC, this + ": inbox.size() > capacity, moving " + toProcess.size() + " items from inbox -> toProcess array");
+                Log.v(Log.TAG_SYNC, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
 
                 // There are more objects left, so schedule them Real Soon:
                 scheduleWithDelay(0);
@@ -185,26 +183,26 @@ public class Batcher<T> {
 
         }
         if(toProcess != null && toProcess.size() > 0) {
-            Log.v(Log.TAG_SYNC, this + ": invoking processor with " + toProcess.size() + " items ");
+            Log.v(Log.TAG_SYNC, "%s: invoking processor with %d items ", this, toProcess.size());
             processor.process(toProcess);
         } else {
-            Log.v(Log.TAG_SYNC, this + ": nothing to process");
+            Log.v(Log.TAG_SYNC, "%s: nothing to process", this);
         }
         lastProcessedTime = System.currentTimeMillis();
 
     }
 
     private void scheduleWithDelay(int suggestedDelay) {
-        Log.v(Log.TAG_SYNC, "scheduleWithDelay called with delay: " + suggestedDelay + " ms");
+        Log.v(Log.TAG_SYNC, "%s: scheduleWithDelay called with delay: %d ms", this, suggestedDelay);
         if (scheduled && (suggestedDelay < scheduledDelay)) {
-            Log.v(Log.TAG_SYNC, "already scheduled and : " + suggestedDelay + " < " + scheduledDelay + " --> unscheduling");
+            Log.v(Log.TAG_SYNC, "%s: already scheduled and: %d < %d --> unscheduling", this, suggestedDelay, scheduledDelay);
             unschedule();
         }
         if (!scheduled) {
             Log.v(Log.TAG_SYNC, "not already scheduled");
             scheduled = true;
             scheduledDelay = suggestedDelay;
-            Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: " + suggestedDelay + " ms");
+            Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: %d ms", suggestedDelay);
             flushFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
         }
     }
@@ -214,7 +212,7 @@ public class Batcher<T> {
         scheduled = false;
         if(flushFuture != null) {
             boolean didCancel = flushFuture.cancel(false);
-            Log.v(Log.TAG_SYNC, "tried to cancel flushFuture, result: " + didCancel);
+            Log.v(Log.TAG_SYNC, "tried to cancel flushFuture, result: %s", didCancel);
 
         } else {
             Log.v(Log.TAG_SYNC, "flushFuture was null, doing nothing");

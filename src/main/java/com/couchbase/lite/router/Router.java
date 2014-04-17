@@ -459,7 +459,7 @@ public class Router implements Database.ChangeListener {
 
         } catch (NoSuchMethodException msme) {
             try {
-                String errorMessage = "Router unable to route request to " + message;
+                String errorMessage = String.format("Router unable to route request to %s", message);
                 Log.e(Log.TAG_ROUTER, errorMessage);
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("error", "not_found");
@@ -517,7 +517,7 @@ public class Router implements Database.ChangeListener {
         if(accept != null && !"*/*".equals(accept)) {
             String responseType = connection.getBaseContentType();
             if(responseType != null && accept.indexOf(responseType) < 0) {
-                Log.e(Log.TAG_ROUTER, String.format("Error 406: Can't satisfy request Accept: %s", accept));
+                Log.e(Log.TAG_ROUTER, "Error 406: Can't satisfy request Accept: %s", accept);
                 status = new Status(Status.NOT_ACCEPTABLE);
             }
         }
@@ -943,14 +943,13 @@ public class Router implements Database.ChangeListener {
                     results.add(result);
                 }
             }
-            Log.w(Log.TAG_ROUTER, String.format("%s finished inserting %d revisions in bulk", this, docs.size()));
+            Log.w(Log.TAG_ROUTER, "%s finished inserting %d revisions in bulk", this, docs.size());
             ok = true;
         } catch (Exception e) {
-            Log.e(Log.TAG_ROUTER, String.format("%s: Exception inserting revisions in bulk", this), e);
+            Log.e(Log.TAG_ROUTER, "%s: Exception inserting revisions in bulk", e, this);
         } finally {
             db.endTransaction(ok);
         }
-        Log.d(Log.TAG_ROUTER, "results: " + results.toString());
         connection.setResponseBody(new Body(results));
         return new Status(Status.CREATED);
     }
@@ -1485,7 +1484,7 @@ public class Router implements Database.ChangeListener {
 
         } catch (CouchbaseLiteException e) {
             e.printStackTrace();
-            Log.e(Log.TAG_ROUTER, e.toString());
+            Log.e(Log.TAG_ROUTER, "Error updating doc: %s", e, docID);
             outStatus.setCode(e.getCBLStatus().getCode());
         }
 
@@ -1617,7 +1616,7 @@ public class Router implements Database.ChangeListener {
         }
         Mapper mapBlock = View.getCompiler().compileMap(mapSource, language);
         if(mapBlock == null) {
-            Log.w(Log.TAG_ROUTER, String.format("View %s has unknown map function: %s", viewName, mapSource));
+            Log.w(Log.TAG_ROUTER, "View %s has unknown map function: %s", viewName, mapSource);
             return null;
         }
         String reduceSource = (String)viewProps.get("reduce");
@@ -1625,7 +1624,7 @@ public class Router implements Database.ChangeListener {
         if(reduceSource != null) {
             reduceBlock = View.getCompiler().compileReduce(reduceSource, language);
             if(reduceBlock == null) {
-                Log.w(Log.TAG_ROUTER, String.format("View %s has unknown reduce function: %s", viewName, reduceBlock));
+                Log.w(Log.TAG_ROUTER, "View %s has unknown reduce function: %s", viewName, reduceBlock);
                 return null;
             }
         }

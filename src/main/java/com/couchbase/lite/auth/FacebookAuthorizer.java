@@ -56,7 +56,7 @@ public class FacebookAuthorizer extends Authorizer {
         if (accessTokens == null) {
             accessTokens = new HashMap<List<String>, String>();
         }
-        Log.d(Log.TAG_SYNC, "FacebookAuthorizer registering key: " + key);
+        Log.v(Log.TAG_SYNC, "FacebookAuthorizer registering key: %s", key);
         accessTokens.put(key, accessToken);
 
         return email;
@@ -68,7 +68,7 @@ public class FacebookAuthorizer extends Authorizer {
             List<String> key = new ArrayList<String>();
             key.add(email);
             key.add(site.toExternalForm().toLowerCase());
-            Log.d(Log.TAG_SYNC, "FacebookAuthorizer looking up key: " + key + " from list of access tokens");
+            Log.v(Log.TAG_SYNC, "FacebookAuthorizer looking up key: %s from list of access tokens", key);
             return accessTokens.get(key);
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Error looking up access token", e);

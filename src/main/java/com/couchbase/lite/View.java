@@ -138,9 +138,7 @@ public final class View {
         Cursor cursor = null;
         long result = -1;
         try {
-            Log.d(Log.TAG_VIEW, Thread.currentThread().getName() + " start running query: " + sql);
             cursor = database.getDatabase().rawQuery(sql, args);
-            Log.d(Log.TAG_VIEW, Thread.currentThread().getName() + " finish running query: " + sql);
             if (cursor.moveToNext()) {
                 result = cursor.getLong(0);
             }
@@ -341,7 +339,7 @@ public final class View {
         try {
             result = Manager.getObjectMapper().writeValueAsString(object);
         } catch (Exception e) {
-            Log.w(Log.TAG_VIEW, "Exception serializing object to json: " + object, e);
+            Log.w(Log.TAG_VIEW, "Exception serializing object to json: %s", e, object);
         }
         return result;
     }
@@ -370,7 +368,7 @@ public final class View {
     @SuppressWarnings("unchecked")
     @InterfaceAudience.Private
     public void updateIndex() throws CouchbaseLiteException {
-        Log.v(Log.TAG_VIEW, "Re-indexing view " + name + " ...");
+        Log.v(Log.TAG_VIEW, "Re-indexing view: %s", name);
         assert (mapBlock != null);
 
         if (getViewId() <= 0) {
@@ -388,9 +386,8 @@ public final class View {
             long dbMaxSequence = database.getLastSequenceNumber();
             if(lastSequence == dbMaxSequence) {
                 // nothing to do (eg,  kCBLStatusNotModified)
-                String msg = String.format("lastSequence (%d) == dbMaxSequence (%d), nothing to do",
+                Log.v(Log.TAG_VIEW, "lastSequence (%d) == dbMaxSequence (%d), nothing to do",
                         lastSequence, dbMaxSequence);
-                Log.d(Log.TAG_VIEW, msg);
                 result.setCode(Status.NOT_MODIFIED);
                 return;
             }
@@ -491,9 +488,8 @@ public final class View {
 
                     boolean noAttachments = cursor.getInt(5) > 0;
 
-                    // Skip rows with the same doc_id -- these are losing conflicts.
                     while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
-                        Log.d(Log.TAG_VIEW, "skipping row for: " + docID);
+                        // Skip rows with the same doc_id -- these are losing conflicts.
                     }
 
                     if (lastSequence > 0) {
@@ -547,10 +543,6 @@ public final class View {
                     if (properties != null) {
                         // Call the user-defined map() to emit new key/value
                         // pairs from this revision:
-<<<<<<< HEAD
-=======
-                        Log.v(Log.TAG_VIEW, "  call map for sequence=" + Long.toString(sequence));
->>>>>>> Issue #151 - make a pass through code to set appropriate logging tags.
                         emitBlock.setSequence(sequence);
                         mapBlock.map(properties, emitBlock);
                     }
@@ -568,9 +560,9 @@ public final class View {
                     whereArgs);
 
             // FIXME actually count number added :)
-            Log.v(Log.TAG_VIEW, "...Finished re-indexing view " + name
-                    + " up to sequence " + Long.toString(dbMaxSequence)
-                    + " (deleted " + deleted + " added " + "?" + ")");
+            Log.v(Log.TAG_VIEW, "Finished re-indexing view: %s "
+                    + " up to sequence %s"
+                    + " (deleted %s added ?)", name, dbMaxSequence, deleted);
             result.setCode(Status.OK);
 
         } catch (SQLException e) {
@@ -580,8 +572,7 @@ public final class View {
                 cursor.close();
             }
             if (!result.isSuccessful()) {
-                Log.w(Log.TAG_VIEW, "Failed to rebuild view " + name + ": "
-                        + result.getCode());
+                Log.w(Log.TAG_VIEW, "Failed to rebuild view %s.  Result code: %d", name, result.getCode());
             }
             if(database != null) {
                 database.endTransaction(result.isSuccessful());
@@ -670,7 +661,7 @@ public final class View {
         argsList.add(Integer.toString(options.getLimit()));
         argsList.add(Integer.toString(options.getSkip()));
 
-        Log.v(Log.TAG_VIEW, "Query " + name + ": " + sql);
+        Log.v(Log.TAG_VIEW, "Query %s: %s", name, sql);
 
         Cursor cursor = database.getDatabase().rawQuery(sql,
                 argsList.toArray(new String[argsList.size()]));
@@ -838,8 +829,7 @@ public final class View {
             boolean reduce = options.isReduce() || group;
 
             if (reduce && (reduceBlock == null) && !group) {
-                String msg = "Cannot use reduce option in view " + name + " which has no reduce block defined";
-                Log.w(Log.TAG_VIEW, msg);
+                Log.w(Log.TAG_VIEW, "Cannot use reduce option in view %s which has no reduce block defined", name);
                 throw new CouchbaseLiteException(new Status(Status.BAD_REQUEST));
             }
 
@@ -912,7 +902,7 @@ public final class View {
                 Number number = (Number)object;
                 total += number.doubleValue();
             } else {
-                Log.w(Log.TAG_VIEW, "Warning non-numeric value found in totalValues: " + object);
+                Log.w(Log.TAG_VIEW, "Warning non-numeric value found in totalValues: %s", object);
             }
         }
         return total;

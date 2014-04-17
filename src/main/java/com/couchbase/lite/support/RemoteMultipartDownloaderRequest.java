@@ -69,11 +69,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
-                Log.e(Log.TAG_REMOTE_REQUEST,
-                        "Got error " + Integer.toString(status.getStatusCode()));
-                Log.e(Log.TAG_REMOTE_REQUEST, "Request was for: " + request.toString());
-                Log.e(Log.TAG_REMOTE_REQUEST,
-                        "Status reason: " + status.getReasonPhrase());
+                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
             } else {
