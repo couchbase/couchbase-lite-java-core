@@ -65,6 +65,7 @@ public class Log {
         enabledTags.put(Log.TAG_DATABASE, WARN);
         enabledTags.put(Log.TAG_LISTENER, WARN);
         enabledTags.put(Log.TAG_MULTI_STREAM_WRITER, WARN);
+        enabledTags.put(Log.TAG_BLOB_STORE, WARN);
     }
 
     /**
