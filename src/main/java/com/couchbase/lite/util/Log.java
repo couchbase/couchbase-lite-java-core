@@ -88,6 +88,9 @@ public class Log {
      * @return boolean indicating whether logging is enabled.
      */
     /* package */ static boolean isLoggingEnabled(String tag, int logLevel) {
+
+        // this hashmap lookup might be a little expensive, and so it might make
+        // sense to convert this over to a CopyOnWriteArrayList
         if (enabledTags.containsKey(tag)) {
             int logLevelForTag = enabledTags.get(tag);
             return logLevel >= logLevelForTag;
