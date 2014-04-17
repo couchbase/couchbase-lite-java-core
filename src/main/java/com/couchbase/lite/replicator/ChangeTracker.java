@@ -301,7 +301,7 @@ public class ChangeTracker implements Runnable {
             try {
                 String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
                 maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", maskedRemoteWithoutCredentials, this);
+                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
                 if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {

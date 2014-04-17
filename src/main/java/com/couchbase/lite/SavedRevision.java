@@ -189,7 +189,7 @@ public final class SavedRevision extends Revision {
         try {
             RevisionInternal loadRevision = getDatabase().loadRevisionBody(revisionInternal, EnumSet.noneOf(Database.TDContentOptions.class));
             if (loadRevision == null) {
-                Log.w(Database.TAG, "Couldn't load body/sequence of %s" + this);
+                Log.w(Database.TAG, "%s: Couldn't load body/sequence", this);
                 return false;
             }
             revisionInternal = loadRevision;

@@ -1126,7 +1126,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         lastSequenceChanged = false;
         overdueForSave = false;
 
-        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s", lastSequence, this);
+        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s", this, lastSequence);
         final Map<String, Object> body = new HashMap<String, Object>();
         if (remoteCheckpoint != null) {
             body.putAll(remoteCheckpoint);
@@ -1135,13 +1135,13 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         String remoteCheckpointDocID = remoteCheckpointDocID();
         if (remoteCheckpointDocID == null) {
-            Log.w(Log.TAG_SYNC, this + ": remoteCheckpointDocID is null, aborting saveLastSequence()");
+            Log.w(Log.TAG_SYNC, "%s: remoteCheckpointDocID is null, aborting saveLastSequence()", this);
             return;
         }
 
         savingCheckpoint = true;
         final String checkpointID = remoteCheckpointDocID;
-        Log.d(Log.TAG_SYNC, "%s: put remote _local document.  checkpointID: %s", checkpointID, this);
+        Log.d(Log.TAG_SYNC, "%s: put remote _local document.  checkpointID: %s", this, checkpointID);
         sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
@@ -1352,7 +1352,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                     if (e != null && getStatusFromError(e) != Status.NOT_FOUND) {
                         Log.e(Log.TAG_SYNC, "%s: Error refreshing remote checkpoint", e, this);
                     } else {
-                        Log.d(Log.TAG_SYNC, "%s: Refreshed remote checkpoint: %s", result, this);
+                        Log.d(Log.TAG_SYNC, "%s: Refreshed remote checkpoint: %s", this, result);
                         remoteCheckpoint = (Map<String, Object>) result;
                         lastSequenceChanged = true;
                         saveLastSequence();  // try saving again

@@ -386,7 +386,7 @@ public final class View {
             long dbMaxSequence = database.getLastSequenceNumber();
             if(lastSequence == dbMaxSequence) {
                 // nothing to do (eg,  kCBLStatusNotModified)
-                Log.v(Log.TAG_VIEW, "lastSequence (%d) == dbMaxSequence (%d), nothing to do",
+                Log.v(Log.TAG_VIEW, "lastSequence (%s) == dbMaxSequence (%s), nothing to do",
                         lastSequence, dbMaxSequence);
                 result.setCode(Status.NOT_MODIFIED);
                 return;
