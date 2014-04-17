@@ -31,17 +31,17 @@ public class LoggerFactory {
             InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(resource);
             if (inputStream == null) {
                 // Return default System logger.
-                Log.d(Database.TAG, "Unable to load " + resource + " falling back to SystemLogger");
+                Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
                 return new SystemLogger();
             }
             byte[] bytes = TextUtils.read(inputStream);
             classname = new String(bytes);
             if (classname == null || classname.isEmpty()) {
                 // Return default System logger.
-                Log.d(Database.TAG, "Unable to load " + resource + " falling back to SystemLogger");
+                Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
                 return new SystemLogger();
             }
-            Log.d(Database.TAG, "Loading logger: " + classname);
+            Log.v(Database.TAG, "Loading logger: %s", classname);
             Class clazz = Class.forName(classname);
             Logger logger = (Logger) clazz.newInstance();
             return logger;

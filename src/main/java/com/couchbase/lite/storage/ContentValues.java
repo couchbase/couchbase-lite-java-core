@@ -249,11 +249,11 @@ public final class ContentValues {
                 try {
                     return Long.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Long value for " + value + " at key " + key);
+                    Log.e(TAG, "Cannot parse Long value for %s at key %s", value, key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for " + key + " to a Long: " + value, e);
+                Log.e(TAG, "Cannot cast value for %s to a Long: %s", e, key, value);
                 return null;
             }
         }
@@ -274,11 +274,11 @@ public final class ContentValues {
                 try {
                     return Integer.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Integer value for " + value + " at key " + key);
+                    Log.e(TAG, "Cannot parse Integer value for %s at key %s", value, key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for " + key + " to a Integer: " + value, e);
+                Log.e(TAG, "Cannot cast value for %s to a Integer: %s", e, key, value);
                 return null;
             }
         }
@@ -299,11 +299,11 @@ public final class ContentValues {
                 try {
                     return Short.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Short value for " + value + " at key " + key);
+                    Log.e(TAG, "Cannot parse Short value for %s at key %s", value, key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for " + key + " to a Short: " + value, e);
+                Log.e(TAG, "Cannot cast value for %s to a Short: %s", e, key, value);
                 return null;
             }
         }
@@ -324,11 +324,11 @@ public final class ContentValues {
                 try {
                     return Byte.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Byte value for " + value + " at key " + key);
+                    Log.e(TAG, "Cannot parse Byte value for %s at key %s", value, key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for " + key + " to a Byte: " + value, e);
+                Log.e(TAG, "Cannot cast value for %s to a Byte: %s", e, key, value);
                 return null;
             }
         }
@@ -349,11 +349,11 @@ public final class ContentValues {
                 try {
                     return Double.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Double value for " + value + " at key " + key);
+                    Log.e(TAG, "Cannot parse Double value for %s at key %s", value, key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for " + key + " to a Double: " + value, e);
+                Log.e(TAG, "Cannot cast value for %s to a Double: %s", e, key, value);
                 return null;
             }
         }
@@ -374,11 +374,11 @@ public final class ContentValues {
                 try {
                     return Float.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Float value for " + value + " at key " + key);
+                    Log.e(TAG, "Cannot parse Float value for %s at key %s", value, key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for " + key + " to a Float: " + value, e);
+                Log.e(TAG, "Cannot cast value for %s to a Float: %s", e, key, value);
                 return null;
             }
         }

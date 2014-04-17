@@ -411,7 +411,7 @@ public class Query {
                     onComplete.completed(enumerator, null);
 
                 } catch (Throwable t) {
-                    Log.e(Database.TAG, "Exception caught in runAsyncInternal", t);
+                    Log.e(Log.TAG_QUERY, "Exception caught in runAsyncInternal", t);
                     onComplete.completed(null, t);
                 }
             }

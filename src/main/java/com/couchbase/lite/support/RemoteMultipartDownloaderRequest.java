@@ -64,16 +64,12 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                     CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
-                Log.e(Database.TAG, "Unable to add in cookies to global store", e);
+                Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
             }
 
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
-                Log.e(Database.TAG,
-                        "Got error " + Integer.toString(status.getStatusCode()));
-                Log.e(Database.TAG, "Request was for: " + request.toString());
-                Log.e(Database.TAG,
-                        "Status reason: " + status.getReasonPhrase());
+                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
             } else {
@@ -135,10 +131,10 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                 }
             }
         } catch (ClientProtocolException e) {
-            Log.e(Database.TAG, "client protocol exception", e);
+            Log.e(Log.TAG_REMOTE_REQUEST, "client protocol exception", e);
             error = e;
         } catch (IOException e) {
-            Log.e(Database.TAG, "io exception", e);
+            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
         }
     }

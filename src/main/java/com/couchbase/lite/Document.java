@@ -381,7 +381,7 @@ public final class Document {
         }
 
         if (newId != null && !newId.equalsIgnoreCase(getId())) {
-            Log.w(Database.TAG, String.format("Trying to put wrong _id to this: %s properties: %s", this, properties));
+            Log.w(Database.TAG, "Trying to put wrong _id to this: %s properties: %s", this, properties);
         }
 
         // Process _attachments dict, converting CBLAttachments to dicts:

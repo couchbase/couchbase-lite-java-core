@@ -72,12 +72,7 @@ public final class Database {
     /**
      * @exclude
      */
-    public static final String TAG = "Database";
-
-    /**
-     * @exclude
-     */
-    public static final String TAG_SQL = "CBLSQL";
+    public static final String TAG = Log.TAG;
 
     private Map<String, View> views;
     private Map<String, ReplicationFilter> filters;
@@ -587,7 +582,7 @@ public final class Database {
             String language = outLanguageList.get(0);
             ReplicationFilter filter = filterCompiler.compileFilterFunction(sourceCode, language);
             if (filter == null) {
-                Log.w(Database.TAG, String.format("Filter %s failed to compile", filterName));
+                Log.w(Database.TAG, "Filter %s failed to compile", filterName);
                 return null;
             }
             setFilter(filterName, filter);
@@ -896,7 +891,7 @@ public final class Database {
 
         // Incompatible version changes increment the hundreds' place:
         if(dbVersion >= 100) {
-            Log.w(Database.TAG, "Database: Database version (" + dbVersion + ") is newer than I know how to work with");
+            Log.e(Database.TAG, "Database: Database version (%d) is newer than I know how to work with", dbVersion);
             database.close();
             return false;
         }
@@ -1134,7 +1129,7 @@ public final class Database {
         try {
             database.beginTransaction();
             ++transactionLevel;
-            Log.i(Database.TAG_SQL, Thread.currentThread().getName() + " Begin transaction (level " + Integer.toString(transactionLevel) + ")");
+            Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
         } catch (SQLException e) {
             Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
             return false;
@@ -1154,12 +1149,12 @@ public final class Database {
         assert(transactionLevel > 0);
 
         if(commit) {
-            Log.i(Database.TAG_SQL, Thread.currentThread().getName() + " Committing transaction (level " + Integer.toString(transactionLevel) + ")");
+            Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
             database.setTransactionSuccessful();
             database.endTransaction();
         }
         else {
-            Log.i(TAG_SQL, Thread.currentThread().getName() + " CANCEL transaction (level " + Integer.toString(transactionLevel) + ")");
+            Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
             try {
                 database.endTransaction();
             } catch (SQLException e) {
@@ -1982,7 +1977,7 @@ public final class Database {
         outLastSequence.add(lastSequence);
 
         long delta = System.currentTimeMillis() - before;
-        Log.d(Database.TAG, String.format("Query view %s completed in %d milliseconds", viewName, delta));
+        Log.d(Database.TAG, "Query view %s completed in %d milliseconds", viewName, delta);
 
         return rows;
 
@@ -2414,7 +2409,7 @@ public final class Database {
             if(rowsUpdated == 0) {
                 // Oops. This means a glitch in our attachment-management or pull code,
                 // or else a bug in the upstream server.
-                Log.w(Database.TAG, "Can't find inherited attachment " + name + " from seq# " + Long.toString(fromSeq) + " to copy to " + Long.toString(toSeq));
+                Log.w(Database.TAG, "Can't find inherited attachment %s from seq# %s to copy to %s", name, fromSeq, toSeq);
                 throw new CouchbaseLiteException(Status.NOT_FOUND);
             }
             else {
@@ -2548,7 +2543,7 @@ public final class Database {
                             dataBase64 = Base64.encodeBytes(data);  // <-- very expensive
                         }
                         else {
-                            Log.w(Database.TAG, "Error loading attachment");
+                            Log.w(Database.TAG, "Error loading attachment.  Sequence: %s", sequence);
                         }
 
                     }
@@ -2632,7 +2627,7 @@ public final class Database {
                 editedAttachment.remove("follows");
                 editedAttachment.put("stub", true);
                 editedAttachments.put(name,editedAttachment);
-                Log.d(Database.TAG, "Stubbed out attachment" + rev + " " + name + ": revpos" + revPos + " " + minRevPos);
+                Log.v(Database.TAG, "Stubbed out attachment.  minRevPos: %s rev: %s name: %s revpos: %s", minRevPos, rev, name, revPos);
             }
         }
         if (editedProperties != null)
@@ -2709,7 +2704,7 @@ public final class Database {
                     attachment.setRevpos(generation);
                 }
                 else if (attachment.getRevpos() > generation) {
-                    Log.w(Database.TAG, String.format("Attachment %s %s has unexpected revpos %s, setting to %s", rev, name, attachment.getRevpos(), generation));
+                    Log.w(Database.TAG, "Attachment %s %s has unexpected revpos %s, setting to %s", rev, name, attachment.getRevpos(), generation);
                     attachment.setRevpos(generation);
                 }
                 // Finally insert the attachment:
@@ -2869,7 +2864,7 @@ public final class Database {
                 return new Status(Status.INTERNAL_SERVER_ERROR);
             }
 
-            Log.v(Database.TAG, "Deleted " + numDeleted + " attachments");
+            Log.v(Database.TAG, "Deleted %d attachments", numDeleted);
 
             return new Status(Status.OK);
         } catch (SQLException e) {
@@ -2999,7 +2994,7 @@ public final class Database {
         for (String key : origProps.keySet()) {
             if(key.startsWith("_")) {
                 if(!KNOWN_SPECIAL_KEYS.contains(key)) {
-                    Log.e(TAG, "Database: Invalid top-level key '" + key + "' in document to be inserted");
+                    Log.e(TAG, "Database: Invalid top-level key '%s' in document to be inserted", key);
                     return null;
                 }
             } else {
@@ -3782,7 +3777,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public boolean setLastSequence(String lastSequence, String checkpointId, boolean push) {
-        Log.d(Database.TAG, this + " setLastSequence() called with lastSequence: " + lastSequence + " checkpointId: " + checkpointId);
+        Log.v(Database.TAG, "%s: setLastSequence() called with lastSequence: %s checkpointId: %s", this, lastSequence, checkpointId);
         ContentValues values = new ContentValues();
         values.put("remote", checkpointId);
         values.put("push", push);
@@ -4103,7 +4098,7 @@ public final class Database {
                             String queryString = "SELECT revid, sequence, parent FROM revs WHERE doc_id=? ORDER BY sequence DESC";
                             cursor = database.rawQuery(queryString, args);
                             if (!cursor.moveToNext()) {
-                                Log.w(Database.TAG, "No results for query: " + queryString);
+                                Log.w(Database.TAG, "No results for query: %s", queryString);
                                 return false;
                             }
 
@@ -4133,7 +4128,7 @@ public final class Database {
                             }
 
                             seqsToPurge.removeAll(seqsToKeep);
-                            Log.i(Database.TAG, String.format("Purging doc '%s' revs (%s); asked for (%s)", docID, revsToPurge, revIDs));
+                            Log.i(Database.TAG, "Purging doc '%s' revs (%s); asked for (%s)", docID, revsToPurge, revIDs);
                             if (seqsToPurge.size() > 0) {
                                 // Now delete the sequences to be purged.
                                 String seqsToPurgeList = TextUtils.join(",", seqsToPurge);

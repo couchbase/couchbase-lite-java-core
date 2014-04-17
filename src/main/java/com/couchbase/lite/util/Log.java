@@ -16,8 +16,88 @@
 
 package com.couchbase.lite.util;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 public class Log {
+
     private static Logger logger = LoggerFactory.createLogger();
+
+    /**
+     * A map of tags and their enabled log level
+     */
+    private static ConcurrentHashMap<String, Integer> enabledTags;
+
+    /**
+     * Logging tags
+     */
+    public static final String TAG = "CBLite";  // default "catch-all" tag
+    public static final String TAG_SYNC = "Sync";
+    public static final String TAG_REMOTE_REQUEST = "RemoteRequest";
+    public static final String TAG_VIEW = "View";
+    public static final String TAG_QUERY = "Query";
+    public static final String TAG_CHANGE_TRACKER = "ChangeTracker";
+    public static final String TAG_ROUTER = "Router";
+    public static final String TAG_DATABASE = "Database";
+    public static final String TAG_LISTENER = "Listener";
+    public static final String TAG_MULTI_STREAM_WRITER = "MultistreamWriter";
+    public static final String TAG_BLOB_STORE = "BlobStore";
+
+
+    /**
+     * Logging levels -- values match up with android.util.Log
+     */
+    public static final int VERBOSE = 2;
+    public static final int DEBUG = 3;
+    public static final int INFO = 4;
+    public static final int WARN = 5;
+    public static final int ERROR = 6;
+    public static final int ASSERT = 7;
+
+    static {
+        enabledTags = new ConcurrentHashMap<String, Integer>();
+        enabledTags.put(Log.TAG, WARN);
+        enabledTags.put(Log.TAG_SYNC, WARN);
+        enabledTags.put(Log.TAG_REMOTE_REQUEST, WARN);
+        enabledTags.put(Log.TAG_VIEW, WARN);
+        enabledTags.put(Log.TAG_QUERY, WARN);
+        enabledTags.put(Log.TAG_CHANGE_TRACKER, WARN);
+        enabledTags.put(Log.TAG_ROUTER, WARN);
+        enabledTags.put(Log.TAG_DATABASE, WARN);
+        enabledTags.put(Log.TAG_LISTENER, WARN);
+        enabledTags.put(Log.TAG_MULTI_STREAM_WRITER, WARN);
+        enabledTags.put(Log.TAG_BLOB_STORE, WARN);
+    }
+
+    /**
+     * Enable logging for a particular tag / loglevel combo
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param logLevel The loglevel to enable.  Anything matching this loglevel
+     *                 or having a more urgent loglevel will be emitted.  Eg, Log.VERBOSE.
+     */
+    public static void enableLogging(String tag, int logLevel) {
+        enabledTags.put(tag, logLevel);
+    }
+
+    /**
+     * Is logging enabled for given tag / loglevel combo?
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param logLevel The loglevel to check whether it's enabled.  Will match this loglevel
+     *                 or a more urgent loglevel.  Eg, if Log.ERROR is enabled and Log.VERBOSE
+     *                 is passed as a paremeter, it will return true.
+     * @return boolean indicating whether logging is enabled.
+     */
+    /* package */ static boolean isLoggingEnabled(String tag, int logLevel) {
+
+        // this hashmap lookup might be a little expensive, and so it might make
+        // sense to convert this over to a CopyOnWriteArrayList
+        if (enabledTags.containsKey(tag)) {
+            int logLevelForTag = enabledTags.get(tag);
+            return logLevel >= logLevelForTag;
+        }
+        return false;
+    }
 
     /**
      * Send a VERBOSE message.
@@ -38,6 +118,34 @@ public class Log {
      */
     public static void v(String tag, String msg, Throwable tr) {
         if (logger != null) logger.v(tag, msg, tr);
+    }
+
+    /**
+     * Send a VERBOSE message.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void v(String tag, String formatString, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
+            logger.v(tag, String.format(formatString, args));
+        }
+
+    }
+
+    /**
+     * Send a VERBOSE message and log the exception.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param tr An exception to log
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void v(String tag, String formatString, Throwable tr, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
+            logger.v(tag, String.format(formatString, args), tr);
+        }
     }
 
     /**
@@ -62,6 +170,34 @@ public class Log {
     }
 
     /**
+     * Send a DEBUG message.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void d(String tag, String formatString, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, DEBUG)) {
+            logger.d(tag, String.format(formatString, args));
+        }
+    }
+
+    /**
+     * Send a DEBUG message and log the exception.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param tr An exception to log
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void d(String tag, String formatString, Throwable tr, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, DEBUG)) {
+            logger.d(tag, String.format(formatString, args, tr));
+        }
+    }
+
+
+    /**
      * Send an INFO message.
      * @param tag Used to identify the source of a log message.  It usually identifies
      *        the class or activity where the log call occurs.
@@ -83,6 +219,33 @@ public class Log {
     }
 
     /**
+     * Send an INFO message.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void i(String tag, String formatString, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, INFO)) {
+            logger.i(tag, String.format(formatString, args));
+        }
+    }
+
+    /**
+     * Send a INFO message and log the exception.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param tr An exception to log
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void i(String tag, String formatString, Throwable tr, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, INFO)) {
+            logger.i(tag, String.format(formatString, args, tr));
+        }
+    }
+
+    /**
      * Send a WARN message.
      * @param tag Used to identify the source of a log message.  It usually identifies
      *        the class or activity where the log call occurs.
@@ -92,7 +255,7 @@ public class Log {
         if (logger != null) logger.w(tag, msg);
     }
 
-    /*
+    /**
      * Send a WARN message and log the exception.
      * @param tag Used to identify the source of a log message.  It usually identifies
      *        the class or activity where the log call occurs.
@@ -112,6 +275,36 @@ public class Log {
     public static void w(String tag, String msg, Throwable tr) {
         if (logger != null) logger.w(tag, msg, tr);
     }
+
+
+    /**
+     * Send a WARN message.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void w(String tag, String formatString, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, WARN)) {
+            logger.w(tag, String.format(formatString, args));
+        }
+    }
+
+
+    /**
+     * Send a WARN message and log the exception.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param tr An exception to log
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void w(String tag, String formatString, Throwable tr, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, WARN)) {
+            logger.w(tag, String.format(formatString, args));
+        }
+    }
+
 
     /**
      * Send an ERROR message.
@@ -133,4 +326,34 @@ public class Log {
     public static void e(String tag, String msg, Throwable tr) {
         if (logger != null) logger.e(tag, msg, tr);
     }
+
+
+    /**
+     * Send a ERROR message and log the exception.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param tr An exception to log
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void e(String tag, String formatString, Throwable tr, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, ERROR)) {
+            logger.e(tag, String.format(formatString, args));
+        }
+    }
+
+    /**
+     * Send a ERROR message.
+     * @param tag Used to identify the source of a log message.  It usually identifies
+     *        the class or activity where the log call occurs.
+     * @param formatString The string you would like logged plus format specifiers.
+     * @param args Variable number of Object args to be used as params to formatString.
+     */
+    public static void e(String tag, String formatString, Object... args) {
+        if (logger != null && isLoggingEnabled(tag, ERROR)) {
+            logger.e(tag, String.format(formatString, args));
+        }
+    }
+
+
 }
