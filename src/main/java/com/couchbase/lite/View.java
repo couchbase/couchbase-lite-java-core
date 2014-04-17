@@ -25,6 +25,7 @@ import com.couchbase.lite.storage.ContentValues;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
+import com.couchbase.lite.support.JsonDocument;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 
@@ -349,23 +350,6 @@ public final class View {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Object fromJSON(byte[] json) {
-        if (json == null) {
-            return null;
-        }
-        Object result = null;
-        try {
-            result = Manager.getObjectMapper().readValue(json, Object.class);
-        } catch (Exception e) {
-            Log.w(Database.TAG, "Exception parsing json", e);
-        }
-        return result;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
     public TDViewCollation getCollation() {
         return collation;
     }
@@ -563,7 +547,6 @@ public final class View {
                     if (properties != null) {
                         // Call the user-defined map() to emit new key/value
                         // pairs from this revision:
-                        Log.v(Database.TAG, "  call map for sequence=" + Long.toString(sequence));
                         emitBlock.setSequence(sequence);
                         mapBlock.map(properties, emitBlock);
                     }
@@ -788,11 +771,12 @@ public final class View {
 
         cursor.moveToNext();
         while (!cursor.isAfterLast()) {
-            Object keyData = fromJSON(cursor.getBlob(0));
-            Object value = fromJSON(cursor.getBlob(1));
-            assert(keyData != null);
+            JsonDocument keyDoc = new JsonDocument(cursor.getBlob(0));
+            JsonDocument valueDoc = new JsonDocument(cursor.getBlob(1));
+            assert(keyDoc != null);
 
-            if(group && !groupTogether(keyData, lastKey, groupLevel)) {
+            Object keyObject = keyDoc.jsonObject();
+            if(group && !groupTogether(keyObject, lastKey, groupLevel)) {
                 if (lastKey != null) {
                     // This pair starts a new group, so reduce & record the last one:
                     Object reduced = (reduceBlock != null) ? reduceBlock.reduce(keysToReduce, valuesToReduce, false) : null;
@@ -804,10 +788,10 @@ public final class View {
                     valuesToReduce.clear();
 
                 }
-                lastKey = keyData;
+                lastKey = keyObject;
             }
-            keysToReduce.add(keyData);
-            valuesToReduce.add(value);
+            keysToReduce.add(keyObject);
+            valuesToReduce.add(valueDoc.jsonObject());
 
             cursor.moveToNext();
 
@@ -862,15 +846,16 @@ public final class View {
                 // regular query
                 cursor.moveToNext();
                 while (!cursor.isAfterLast()) {
-                    Object keyData = fromJSON(cursor.getBlob(0));  // TODO: delay parsing this for increased efficiency
-                    Object value = fromJSON(cursor.getBlob(1));    // TODO: ditto
+                    JsonDocument keyDoc = new JsonDocument(cursor.getBlob(0));  // TODO: delay parsing this for increased efficiency
+                    JsonDocument valueDoc = new JsonDocument(cursor.getBlob(1));    // TODO: ditto
                     String docId = cursor.getString(2);
                     int sequence =  Integer.valueOf(cursor.getString(3));
                     Map<String, Object> docContents = null;
                     if (options.isIncludeDocs()) {
+                        Object valueObject = valueDoc.jsonObject();
                         // http://wiki.apache.org/couchdb/Introduction_to_CouchDB_views#Linked_documents
-                        if (value instanceof Map && ((Map) value).containsKey("_id")) {
-                            String linkedDocId = (String) ((Map) value).get("_id");
+                        if (valueObject instanceof Map && ((Map) valueObject).containsKey("_id")) {
+                            String linkedDocId = (String) ((Map) valueObject).get("_id");
                             RevisionInternal linkedDoc = database.getDocumentWithIDAndRev(
                                     linkedDocId,
                                     null,
@@ -888,7 +873,7 @@ public final class View {
                             );
                         }
                     }
-                    QueryRow row = new QueryRow(docId, sequence, keyData, value, docContents);
+                    QueryRow row = new QueryRow(docId, sequence, keyDoc.jsonObject(), valueDoc.jsonObject(), docContents);
                     row.setDatabase(database);
                     rows.add(row);
                     cursor.moveToNext();
