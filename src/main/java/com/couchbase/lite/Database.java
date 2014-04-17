@@ -1640,6 +1640,54 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
+    public Boolean getPossibleAncestorRevisionIDs (
+            RevisionInternal rev,
+            int limit,
+            List<String> matchingRevs) {
+
+        boolean hasAttachment = false;
+
+        int generation = rev.getGeneration();
+
+        //TODO: We are overloading hasAttachments here, fix method signature
+        if (generation <= 1)
+            return null;
+
+        long docNumericID = getDocNumericID(rev.getDocId());
+        if (docNumericID <= 0)
+            return null;
+
+        int sqlLimit = limit > 0 ? (int)limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
+        String sql = "SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?" +
+        " and deleted=0 and json not null" +
+        " ORDER BY sequence DESC LIMIT ?";
+        String[] args = {Long.toString(docNumericID),generation+"-",Integer.toString(sqlLimit)};
+
+            Cursor cursor = null;
+            try {
+                cursor = database.rawQuery(sql, args);
+                cursor.moveToNext();
+                if (!cursor.isAfterLast()) {
+                    if (matchingRevs.size() == 0)
+                        hasAttachment = sequenceHasAttachments(cursor.getLong(1));
+                    matchingRevs.add(cursor.getString(0));
+                }
+
+            } catch (SQLException e) {
+                Log.e(Database.TAG, "Error getting all revisions of document", e);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+        return hasAttachment;
+    }
+
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     public String findCommonAncestorOf(RevisionInternal rev, List<String> revIDs) {
         String result = null;
 
@@ -2523,6 +2571,31 @@ public final class Database {
             }
         }
     }
+
+
+    public boolean sequenceHasAttachments(long sequence) {
+
+        Cursor cursor = null;
+
+        String args[] = { Long.toString(sequence) };
+        try {
+            cursor = database.rawQuery("SELECT 1 FROM attachments WHERE sequence=? LIMIT 1", args);
+
+            if(cursor.moveToNext()) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error getting attachments for sequence", e);
+            return false;
+        } finally {
+            if(cursor != null) {
+                cursor.close();
+            }
+        }
+    }
+
 
     /**
      * Constructs an "_attachments" dictionary for a revision, to be inserted in its JSON body.

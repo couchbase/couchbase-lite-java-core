@@ -4,7 +4,9 @@ import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Misc;
+import com.couchbase.lite.Revision;
 import com.couchbase.lite.RevisionList;
+import com.couchbase.lite.SavedRevision;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
@@ -20,6 +22,7 @@ import com.couchbase.lite.util.Log;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -37,9 +40,18 @@ import java.util.concurrent.ScheduledExecutorService;
 public final class Puller extends Replication implements ChangeTrackerClient {
 
     private static final int MAX_OPEN_HTTP_CONNECTIONS = 16;
+    // Maximum number of revs to fetch in a single bulk request
+    private static final int MAX_REVS_TO_GET_IN_BULK = 50;
 
+    // Maximum number of revision IDs to pass in an "?atts_since=" query param
+    public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
+
+    protected Boolean canBulkGet;
+    protected Boolean caughtUp;
     protected Batcher<RevisionInternal> downloadsToInsert;
     protected List<RevisionInternal> revsToPull;
+    protected List<RevisionInternal> deletedRevsToPull;
+    protected List<RevisionInternal> bulkRevsToPull;
     protected ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
     protected volatile int httpConnectionCount;
@@ -74,13 +86,14 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     @Override
     @InterfaceAudience.Public
-    public void setCreateTarget(boolean createTarget) { }
+    public void setCreateTarget(boolean createTarget) {
+    }
 
     @Override
     @InterfaceAudience.Public
     public void stop() {
 
-        if(!running) {
+        if (!running) {
             return;
         }
 
@@ -90,17 +103,18 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             changeTracker.stop();
             changeTracker = null;
             if(!continuous) {
+                Log.d(Log.TAG_SYNC, "%s | %s : puller.stop() calling asyncTaskFinished()", this, Thread.currentThread());
                 asyncTaskFinished(1);  // balances asyncTaskStarted() in beginReplicating()
             }
         }
 
-        synchronized(this) {
+        synchronized (this) {
             revsToPull = null;
         }
 
         super.stop();
 
-        if(downloadsToInsert != null) {
+        if (downloadsToInsert != null) {
             downloadsToInsert.flush();
         }
     }
@@ -109,7 +123,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @Override
     @InterfaceAudience.Private
     public void beginReplicating() {
-        if(downloadsToInsert == null) {
+        if (downloadsToInsert == null) {
             int capacity = 200;
             int delay = 1000;
             downloadsToInsert = new Batcher<RevisionInternal>(workExecutor, capacity, delay, new BatchProcessor<RevisionInternal>() {
@@ -125,15 +139,17 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         changeTracker.setAuthenticator(getAuthenticator());
         Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
 
-        if(filterName != null) {
+        if (filterName != null) {
             changeTracker.setFilterName(filterName);
-            if(filterParams != null) {
+            if (filterParams != null) {
                 changeTracker.setFilterParams(filterParams);
             }
         }
         changeTracker.setDocIDs(documentIDs);
         changeTracker.setRequestHeaders(requestHeaders);
-        if(!continuous) {
+
+        if (!continuous) {
+            Log.d(Log.TAG_SYNC, "%s | %s: beginReplicating() calling asyncTaskStarted()",this,Thread.currentThread());
             asyncTaskStarted();
         }
         changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
@@ -154,19 +170,20 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     public void changeTrackerReceivedChange(Map<String, Object> change) {
 
         String lastSequence = change.get("seq").toString();
-        String docID = (String)change.get("id");
-        if(docID == null) {
+        String docID = (String) change.get("id");
+        if (docID == null) {
             return;
         }
+
         if(!Database.isValidDocumentId(docID)) {
             Log.w(Log.TAG_SYNC, "%s: Received invalid doc ID from _changes: %s", this, change);
             return;
         }
-        boolean deleted = (change.containsKey("deleted") && ((Boolean)change.get("deleted")).equals(Boolean.TRUE));
-        List<Map<String,Object>> changes = (List<Map<String,Object>>)change.get("changes");
+        boolean deleted = (change.containsKey("deleted") && ((Boolean) change.get("deleted")).equals(Boolean.TRUE));
+        List<Map<String, Object>> changes = (List<Map<String, Object>>) change.get("changes");
         for (Map<String, Object> changeDict : changes) {
-            String revID = (String)changeDict.get("rev");
-            if(revID == null) {
+            String revID = (String) changeDict.get("rev");
+            if (revID == null) {
                 continue;
             }
             PulledRevision rev = new PulledRevision(docID, revID, deleted, db);
@@ -181,10 +198,10 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             addToInbox(rev);
         }
 
-        while(revsToPull != null && revsToPull.size() > 1000) {
+        while (revsToPull != null && revsToPull.size() > 1000) {
             try {
                 Thread.sleep(500);  // <-- TODO: why is this here?
-            } catch(InterruptedException e) {
+            } catch (InterruptedException e) {
 
             }
         }
@@ -198,6 +215,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             setError(tracker.getLastError());
         }
         changeTracker = null;
+
         if(batcher != null) {
             Log.d(Log.TAG_SYNC, "%s: calling batcher.flush().  batcher.count() is %d", this, batcher.count());
             batcher.flush();
@@ -219,7 +237,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @Override
     @InterfaceAudience.Private
     public HttpClient getHttpClient() {
-    	HttpClient httpClient = this.clientFactory.getHttpClient();
+        HttpClient httpClient = this.clientFactory.getHttpClient();
 
         return httpClient;
     }
@@ -230,14 +248,17 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @Override
     @InterfaceAudience.Private
     protected void processInbox(RevisionList inbox) {
+        if (canBulkGet == null)
+            canBulkGet = serverIsSyncGatewayVersion("0.81");
+
         // Ask the local database which of the revs are not known to it:
-        String lastInboxSequence = ((PulledRevision)inbox.get(inbox.size()-1)).getRemoteSequenceID();
+        String lastInboxSequence = ((PulledRevision) inbox.get(inbox.size() - 1)).getRemoteSequenceID();
 
         int numRevisionsRemoved = 0;
         try {
-             // findMissingRevisions is the local equivalent of _revs_diff. it looks at the
-             // array of revisions in ‘inbox’ and removes the ones that already exist. So whatever’s left in ‘inbox’
-             // afterwards are the revisions that need to be downloaded.
+            // findMissingRevisions is the local equivalent of _revs_diff. it looks at the
+            // array of revisions in ‘inbox’ and removes the ones that already exist. So whatever’s left in ‘inbox’
+            // afterwards are the revisions that need to be downloaded.
             numRevisionsRemoved = db.findMissingRevisions(inbox);
         } catch (SQLException e) {
             Log.e(Log.TAG_SYNC, String.format("%s failed to look up local revs", this), e);
@@ -246,18 +267,16 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         //introducing this to java version since inbox may now be null everywhere
         int inboxCount = 0;
-        if(inbox != null) {
+        if (inbox != null)
             inboxCount = inbox.size();
-        }
 
         if(numRevisionsRemoved > 0) {
             Log.v(Log.TAG_SYNC, "%s: processInbox() setting changesCount to: %s", this, getChangesCount() - numRevisionsRemoved);
             // May decrease the changesCount, to account for the revisions we just found out we don’t need to get.
             addToChangesCount(-1 * numRevisionsRemoved);
-
         }
 
-        if(inboxCount == 0) {
+        if (inboxCount == 0) {
             // Nothing to do. Just bump the lastSequence.
             Log.w(Log.TAG_SYNC, "%s no new remote revisions to fetch", this);
             long seq = pendingSequences.addValue(lastInboxSequence);
@@ -270,24 +289,54 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         // Dump the revs into the queue of revs to pull from the remote db:
         synchronized (this) {
-	        if(revsToPull == null) {
-	            revsToPull = new ArrayList<RevisionInternal>(200);
-	        }
+            int numBulked = 0;
 
-	        for(int i=0; i < inbox.size(); i++) {
-	            PulledRevision rev = (PulledRevision)inbox.get(i);
-				// FIXME add logic here to pull initial revs in bulk
-	            rev.setSequence(pendingSequences.addValue(rev.getRemoteSequenceID()));
-	            revsToPull.add(rev);
-	        }
-		}
 
+            for (int i = 0; i < inbox.size(); i++) {
+                PulledRevision rev = (PulledRevision) inbox.get(i);
+
+                //TODO: add test for isConflicted
+                if (canBulkGet || rev.getGeneration() == 1 && !rev.isDeleted()) { // &&!rev.isConflicted)
+
+                    //optimistically pull 1st-gen revs in bulk
+                    if (bulkRevsToPull == null)
+                        bulkRevsToPull = new ArrayList<RevisionInternal>(100);
+
+                    bulkRevsToPull.add(rev);
+
+                    ++numBulked;
+                } else {
+                    queueRemoteRevision(rev);
+                }
+
+                rev.setSequence(pendingSequences.addValue(rev.getRemoteSequenceID()));
+            }
+        }
         pullRemoteRevisions();
     }
 
+
+    /**
+     * Add a revision to the appropriate queue of revs to individually GET
+     */
+    @InterfaceAudience.Private
+    protected void queueRemoteRevision(RevisionInternal rev) {
+        if (rev.isDeleted()) {
+            if (deletedRevsToPull == null)
+                deletedRevsToPull = new ArrayList<RevisionInternal>(100);
+
+            deletedRevsToPull.add(rev);
+        } else {
+            if (revsToPull == null)
+                revsToPull = new ArrayList<RevisionInternal>(100);
+            revsToPull.add(rev);
+        }
+    }
+
+
     /**
      * Start up some HTTP GETs, within our limit on the maximum simultaneous number
-     *
+     * <p/>
      * The entire method is not synchronized, only the portion pulling work off the list
      * Important to not hold the synchronized block while we do network access
      */
@@ -297,18 +346,214 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         //find the work to be done in a synchronized block
         List<RevisionInternal> workToStartNow = new ArrayList<RevisionInternal>();
         synchronized (this) {
-			while(httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS && revsToPull != null && revsToPull.size() > 0) {
-				RevisionInternal work = revsToPull.remove(0);
+            while (httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS) {
+                int nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
+                if (nBulk == 1) {
+                    // Rather than pulling a single revision in 'bulk', just pull it normally:
+                    queueRemoteRevision(bulkRevsToPull.get(0));
+                    bulkRevsToPull.remove(0);
+                    nBulk = 0;
+                }
+                if (nBulk > 0) {
+                    // Prefer to pull bulk revisions:
+                    pullBulkRevisions(bulkRevsToPull.subList(0, nBulk));
+                    bulkRevsToPull.subList(0, nBulk).clear();
+                } else {
+                    // Prefer to pull an existing revision over a deleted one:
+                    List<RevisionInternal> queue = revsToPull;
+                    if (queue.size() == 0) {
+                        queue = deletedRevsToPull;
+                        if (queue.size() == 0)
+                            break;  // both queues are empty
+                    }
+                    pullRemoteRevision(queue.get(0));
+                    queue.remove(0);
+                }
+
+                RevisionInternal work = revsToPull.remove(0);
                 Log.v(Log.TAG_SYNC, "%s: add %s to workToStartNow", this, work);
                 workToStartNow.add(work);
-			}
-		}
+            }
+        }
 
+        //TODO: Extend to support bulk get
         //actually run it outside the synchronized block
-        for(RevisionInternal work : workToStartNow) {
+        for (RevisionInternal work : workToStartNow) {
             pullRemoteRevision(work);
         }
     }
+
+    // Get a bunch of revisions in one bulk request. Will use _bulk_get if possible.
+    protected void pullBulkRevisions(List<RevisionInternal> bulkRevs) {
+
+        int nRevs = bulkRevs.size();
+        if (nRevs == 0)
+            return;
+        Log.v(Database.TAG, this + " bulk-fetching " + nRevs + " remote revisions...");
+        Log.v(Database.TAG, this + " bulk-fetching remote revisions: " + bulkRevs);
+
+        if (!canBulkGet) {
+            // _bulk_get is not supported, so fall back to _all_docs:
+            pullBulkWithAllDocs(bulkRevs);
+            return;
+        }
+
+        Log.v(Database.TAG, this + ": POST _bulk_get");
+        final List<RevisionInternal> remainingRevs = new ArrayList<RevisionInternal>(bulkRevs);
+        asyncTaskStarted();
+        ++httpConnectionCount;
+
+        try {
+        final BulkDownloader dl = new BulkDownloader(remote,
+                db,
+                this.requestHeaders,
+                bulkRevs,
+                new BulkDownloader.BulkDownloaderDocumentBlock() {
+                    public void onDocument(Map<String, Object> props) {
+                        // Got a revision!
+                        // Find the matching revision in 'remainingRevs' and get its sequence:
+                        RevisionInternal rev;
+                        if (props.get("_id") != null)
+                            rev = new RevisionInternal(props, db);
+                        else
+                            rev = new RevisionInternal((String)props.get("id"), (String)props.get("rev"), false, db);
+                        int pos = remainingRevs.indexOf(rev);
+                        if (pos > -1) {
+                            rev.setSequence(remainingRevs.get(pos).getSequence());
+                            remainingRevs.remove(pos);
+                        } else {
+                            Log.w(Database.TAG, this + ": Received unexpected rev rev");
+                        }
+
+                        if (props.get("_id") != null) {
+                            // Add to batcher ... eventually it will be fed to -insertRevisions:.
+                            queueDownloadedRevision(rev);
+                        } else {
+                            Status status = statusFromBulkDocsResponseItem(props);
+                            error = new CouchbaseLiteException(status);
+                            revisionFailed();
+
+                            //TODO: validate iOS changesProcessed should map to completedChangesCount or changesCount
+                            completedChangesCount.getAndIncrement();
+                        }
+                    }
+                },
+                new RemoteRequestCompletionBlock() {
+
+                    public void onCompletion(Object result, Throwable e) {
+                        // The entire _bulk_get is finished:
+
+                        if (e != null) {
+                            error = e;
+                            revisionFailed();
+                            completedChangesCount.addAndGet(remainingRevs.size());
+                        }
+                        // Note that we've finished this task:
+                        //TODO: validate whether this needs to be supported on Android
+                        //asyncTasksFinished(1);
+                        --httpConnectionCount;
+                        // Start another task if there are still revisions waiting to be pulled:
+                        pullRemoteRevisions();
+                    }
+
+                }
+        );
+        } catch (Exception e) {
+            return;
+        }
+
+
+        //TODO: validate whether this needs to be supported on Android
+        //addRemoteRequest(dl);
+        //dl.timeoutInterval = requestTimeout;
+        //dl.authorizer = _authorizer;
+
+        //if (canSendCompressedRequests())
+        //    dl.compressBody();
+
+        //dl.start();
+
+    }
+
+
+
+
+    // Get as many revisions as possible in one _all_docs request.
+    // This is compatible with CouchDB, but it only works for revs of generation 1 without attachments.
+
+    protected void pullBulkWithAllDocs(final List<RevisionInternal> bulkRevs) {
+        // http://wiki.apache.org/couchdb/HTTP_Bulk_Document_API
+        asyncTaskStarted();
+        ++httpConnectionCount;
+        final List<RevisionInternal> remainingRevs = new ArrayList<RevisionInternal>(bulkRevs);
+        /*
+        List<String> keys =[bulkRevs my_map:^(CBL_Revision * rev) {
+            return rev.docID;
+        }];
+        */
+                        /*
+        path:
+        @ "_all_docs?include_docs=true"
+        body:
+        $dict({ @ "keys", keys})
+        */
+        try {
+            sendAsyncRequest("POST",
+
+                    new URL(""), null,
+
+                    new RemoteRequestCompletionBlock() {
+
+                        public void onCompletion(Object result, Throwable e) {
+
+                            Map<String, Object> res = (Map<String, Object>) result;
+
+                            if (e != null) {
+                                error = e;
+                                revisionFailed();
+                                completedChangesCount.addAndGet(bulkRevs.size());
+                            } else {
+                                // Process the resulting rows' documents.
+                                // We only add a document if it doesn't have attachments, and if its
+                                // revID matches the one we asked for.
+                                List<Map<String, Object>> rows = (List<Map<String, Object>>) res.get("rows");
+                                Log.v(Database.TAG, this + " checking " + rows.size() + " bulk-fetched remote revisions");
+                                for (Map<String, Object> row : rows) {
+                                    Map<String, Object> doc = (Map<String, Object>) row.get("doc");
+                                    if (doc != null && doc.get("_attachments") == null) {
+                                        RevisionInternal rev = new RevisionInternal(doc, db);
+                                        int pos = remainingRevs.indexOf(rev);
+                                        if (pos > -1) {
+                                            rev.setSequence(remainingRevs.get(pos).getSequence());
+                                            remainingRevs.remove(pos);
+                                            queueDownloadedRevision(rev);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Any leftover revisions that didn't get matched will be fetched individually:
+                            if (remainingRevs.size() > 0) {
+                                Log.v(Database.TAG, this + " bulk-fetch didn't work for " + remainingRevs.size() + " of " + bulkRevs.size() + " revs; getting individually");
+                                for (RevisionInternal rev : remainingRevs) {
+                                    queueRemoteRevision(rev);
+                                }
+                                pullRemoteRevisions();
+                            }
+
+                            // Note that we've finished this task:
+                            //TODO: validate this should be mapped to Android
+                            //asyncTasksFinished(1);
+                            --httpConnectionCount;
+                            // Start another task if there are still revisions waiting to be pulled:
+                            pullRemoteRevisions();
+                        }
+                    });
+        } catch (MalformedURLException e) {
+
+        }
+    }
+
 
     /**
      * Fetches the contents of a revision from the remote db, including its parent revision ID.
@@ -327,13 +572,13 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         // See: http://wiki.apache.org/couchdb/HTTP_Document_API#Getting_Attachments_With_a_Document
         StringBuilder path = new StringBuilder("/" + URLEncoder.encode(rev.getDocId()) + "?rev=" + URLEncoder.encode(rev.getRevId()) + "&revs=true&attachments=true");
         List<String> knownRevs = knownCurrentRevIDs(rev);
-        if(knownRevs == null) {
+        if (knownRevs == null) {
             //this means something is wrong, possibly the replicator has shut down
             asyncTaskFinished(1);
             --httpConnectionCount;
             return;
         }
-        if(knownRevs.size() > 0) {
+        if (knownRevs.size() > 0) {
             path.append("&atts_since=");
             path.append(joinQuotedEscaped(knownRevs));
         }
@@ -354,7 +599,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                         Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision() updating completedChangesCount from %d  ->  due to error pulling remote revision", this, getCompletedChangesCount(), getCompletedChangesCount() + 1);
                         addToCompletedChangesCount(1);
                     } else {
-                        Map<String,Object> properties = (Map<String,Object>)result;
+                        Map<String, Object> properties = (Map<String, Object>) result;
                         PulledRevision gotRev = new PulledRevision(properties, db);
                         gotRev.setSequence(rev.getSequence());
                         // Add to batcher ... eventually it will be fed to -insertDownloads:.
@@ -378,6 +623,46 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         });
 
     }
+
+    // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
+    private void queueDownloadedRevision(RevisionInternal rev) {
+        /*
+    }
+            if (self.revisionBodyTransformationBlock) {
+                // Add 'file' properties to attachments pointing to their bodies:
+                [rev[@"_attachments"] enumerateKeysAndObjectsUsingBlock:^(NSString* name,
+                        NSMutableDictionary* attachment,
+                        BOOL *stop) {
+                    [attachment removeObjectForKey: @"file"];
+                    if (attachment[@"follows"] && !attachment[@"data"]) {
+                        NSString* filePath = [[_db fileForAttachmentDict: attachment] path];
+                        if (filePath)
+                            attachment[@"file"] = filePath;
+                    }
+                }];
+
+                CBL_Revision* xformed = [self transformRevision: rev];
+                if (xformed == nil) {
+                    LogTo(Sync, @"%@: Transformer rejected revision %@", self, rev);
+                    [_pendingSequences removeSequence: rev.sequence];
+                    self.lastSequence = _pendingSequences.checkpointedValue;
+                    return;
+                }
+                rev = xformed;
+
+                // Clean up afterwards
+                [rev[@"_attachments"] enumerateKeysAndObjectsUsingBlock:^(NSString* name,
+                        NSMutableDictionary* attachment,
+                        BOOL *stop) {
+                    [attachment removeObjectForKey: @"file"];
+                }];
+            }
+            [rev.body compact];
+            [self asyncTaskStarted];
+            [_downloadsToInsert queueObject: rev];
+            */
+    }
+
 
     /**
      * This will be called when _revsToInsert fills up:
@@ -459,8 +744,9 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     }
 
     @InterfaceAudience.Private
-    /* package */ List<String> knownCurrentRevIDs(RevisionInternal rev) {
-        if(db != null) {
+    /* package */
+    List<String> knownCurrentRevIDs(RevisionInternal rev) {
+        if (db != null) {
             return db.getAllRevisionsOfDocumentID(rev.getDocId(), true).getAllRevIds();
         }
         return null;
@@ -468,7 +754,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     @InterfaceAudience.Private
     public String joinQuotedEscaped(List<String> strings) {
-        if(strings.size() == 0) {
+        if (strings.size() == 0) {
             return "[]";
         }
         byte[] json = null;
@@ -495,7 +781,43 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         return true;
     }
 
+    //TODO: this is duplicate of method in Pusher, refactor somewher else
+    @InterfaceAudience.Private
+    private Status statusFromBulkDocsResponseItem(Map<String, Object> item) {
 
+        try {
+            if (!item.containsKey("error")) {
+                return new Status(Status.OK);
+            }
+            String errorStr = (String) item.get("error");
+            if (errorStr == null || errorStr.isEmpty()) {
+                return new Status(Status.OK);
+            }
+
+            // 'status' property is nonstandard; TouchDB returns it, others don't.
+            String statusString = (String) item.get("status");
+            int status = Integer.parseInt(statusString);
+            if (status >= 400) {
+                return new Status(status);
+            }
+            // If no 'status' present, interpret magic hardcoded CouchDB error strings:
+            if (errorStr.equalsIgnoreCase("unauthorized")) {
+                return new Status(Status.UNAUTHORIZED);
+            } else if (errorStr.equalsIgnoreCase("forbidden")) {
+                return new Status(Status.FORBIDDEN);
+            } else if (errorStr.equalsIgnoreCase("conflict")) {
+                return new Status(Status.CONFLICT);
+            } else {
+                return new Status(Status.UPSTREAM_ERROR);
+            }
+
+        } catch (Exception e) {
+            Log.e(Database.TAG, "Exception getting status from " + item, e);
+        }
+        return new Status(Status.OK);
+
+
+    }
 
 }
 
