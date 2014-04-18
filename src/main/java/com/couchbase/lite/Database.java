@@ -2253,8 +2253,6 @@ public final class Database {
                 } else {
                     rows.add(change);
                 }
-
-
             }
 
             if (options.getKeys() != null) {

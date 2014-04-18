@@ -53,7 +53,7 @@ public BulkDownloader (URL dbURL,
     }
 
 
-/*
+
     private void setupRequest: (NSMutableURLRequest*)request withBody: (id)body {
         request.HTTPBody = [CBLJSON dataWithJSONObject: body options: 0 error: NULL];
         [request addValue: @"application/json" forHTTPHeaderField: @"Content-Type"];
@@ -104,7 +104,7 @@ public BulkDownloader (URL dbURL,
         clearConnection();
         respondWithResult();
     }
-    */
+
 
 
     //MULTIPART CALLBACKS:
@@ -113,31 +113,31 @@ public BulkDownloader (URL dbURL,
 /** This method is called when a part's headers have been parsed, before its data is parsed. */
 
      public void  startedPart(Map headers) {
-/*
-        Log.v("", this+": Starting new document; ID=\""+headers.get("X-Doc-ID")+"\"");
+
+        Log.v(Manager., this+": Starting new document; ID=\""+headers.get("X-Doc-ID")+"\"");
         _docReader = new MultipartDocumentReader(_db);
         _docReader.headers = headers;
-*/
+
     }
 
 
 /** This method is called to append data to a part's body. */
 
     public void appendToPart(byte [] data) {
-    /*
+
        try {
         _docReader.appendData(data);
        } catch (IllegalStateException e) {
             cancelWithStatus(_docReader.status);
         }
-        */
+
     }
 
 
 /** This method is called when a part is complete. */
 
     public void finishedPart() {
-/*
+
         Log.v("", this + ": Finished document");
         try {
             _docReader.finish();
@@ -145,7 +145,7 @@ public BulkDownloader (URL dbURL,
             cancelWithStatus(_docReader status);
         }
         ++_docCount;
-        */
+
     }
 
 
@@ -157,7 +157,7 @@ public BulkDownloader (URL dbURL,
    // private static Map<String,Object> helperMethod(Collection<T> revs, final Database database) {
 
         // Build up a JSON body describing what revisions we want:
-        /*
+
         List<String> keys = [revs my_map: ^(CBL_Revision* rev) {
             BOOL hasAttachment;
             NSArray* attsSince = [_db getPossibleAncestorRevisionIDs: rev
@@ -169,10 +169,10 @@ public BulkDownloader (URL dbURL,
             {@"rev", rev.revID},
             {@"atts_since", attsSince});
         }];
-        */
+
 
    //     Map<String, Object> body = new HashMap<String, Object>();
-/*
+
         Collection keys = CollectionUtils.filter(revs, new CollectionUtils.Predicate() {
             @Override
             public boolean apply(Object type) {
@@ -188,7 +188,7 @@ public BulkDownloader (URL dbURL,
                 return false;
             }
         });
-        */
+
         //body.put("docs",keys);
  //       return body;
   //  }
