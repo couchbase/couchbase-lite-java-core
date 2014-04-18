@@ -18,6 +18,7 @@
 package com.couchbase.lite.internal;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.util.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,7 +26,7 @@ import java.util.StringTokenizer;
 
 /**
  * Stores information about a revision -- its docID, revID, and whether it's deleted.
- *
+ * <p/>
  * It can also store the sequence number and document contents (they can be added after creation).
  */
 public class RevisionInternal {
@@ -46,10 +47,10 @@ public class RevisionInternal {
     }
 
     public RevisionInternal(Body body, Database database) {
-        this((String)body.getPropertyForKey("_id"),
-                (String)body.getPropertyForKey("_rev"),
-                (((Boolean)body.getPropertyForKey("_deleted") != null)
-                        && ((Boolean)body.getPropertyForKey("_deleted") == true)), database);
+        this((String) body.getPropertyForKey("_id"),
+                (String) body.getPropertyForKey("_rev"),
+                (((Boolean) body.getPropertyForKey("_deleted") != null)
+                        && ((Boolean) body.getPropertyForKey("_deleted") == true)), database);
         this.body = body;
     }
 
@@ -59,7 +60,7 @@ public class RevisionInternal {
 
     public Map<String, Object> getProperties() {
         Map<String, Object> result = null;
-        if(body != null) {
+        if (body != null) {
             Map<String, Object> prop;
             try {
                 prop = body.getProperties();
@@ -67,7 +68,7 @@ public class RevisionInternal {
                 // handle when both object and json are null for this body
                 return null;
             }
-            if (result == null){
+            if (result == null) {
                 result = new HashMap<String, Object>();
             }
             result.putAll(prop);
@@ -76,20 +77,20 @@ public class RevisionInternal {
     }
 
     public Object getPropertyForKey(String key) {
-        Map<String,Object> prop = getProperties();
+        Map<String, Object> prop = getProperties();
         if (prop == null) {
             return null;
         }
         return prop.get(key);
     }
 
-    public void setProperties(Map<String,Object> properties) {
+    public void setProperties(Map<String, Object> properties) {
         this.body = new Body(properties);
     }
 
     public byte[] getJson() {
         byte[] result = null;
-        if(body != null) {
+        if (body != null) {
             result = body.getJson();
         }
         return result;
@@ -102,9 +103,9 @@ public class RevisionInternal {
     @Override
     public boolean equals(Object o) {
         boolean result = false;
-        if(o instanceof RevisionInternal) {
-            RevisionInternal other = (RevisionInternal)o;
-            if(docId.equals(other.docId) && revId.equals(other.revId)) {
+        if (o instanceof RevisionInternal) {
+            RevisionInternal other = (RevisionInternal) o;
+            if (docId.equals(other.docId) && revId.equals(other.revId)) {
                 result = true;
             }
         }
@@ -158,12 +159,12 @@ public class RevisionInternal {
 
     public RevisionInternal copyWithDocID(String docId, String revId) {
         //assert((docId != null) && (revId != null));
-        assert(docId != null);
-        assert((this.docId == null) || (this.docId.equals(docId)));
+        assert (docId != null);
+        assert ((this.docId == null) || (this.docId.equals(docId)));
         RevisionInternal result = new RevisionInternal(docId, revId, deleted, database);
         Map<String, Object> unmodifiableProperties = getProperties();
         Map<String, Object> properties = new HashMap<String, Object>();
-        if(unmodifiableProperties !=null) {
+        if (unmodifiableProperties != null) {
             properties.putAll(unmodifiableProperties);
         }
         properties.put("_id", docId);
@@ -196,7 +197,7 @@ public class RevisionInternal {
     public static int generationFromRevID(String revID) {
         int generation = 0;
         int dashPos = revID.indexOf("-");
-        if(dashPos > 0) {
+        if (dashPos > 0) {
             generation = Integer.parseInt(revID.substring(0, dashPos));
         }
         return generation;
@@ -242,12 +243,10 @@ public class RevisionInternal {
         // Compare generation numbers; if they match, compare suffixes:
         if (rev1Generation.compareTo(rev2Generation) != 0) {
             return rev1Generation.compareTo(rev2Generation);
-        }
-        else if (rev1Hash != null && rev2Hash != null) {
+        } else if (rev1Hash != null && rev2Hash != null) {
             // compare suffixes if possible
             return rev1Hash.compareTo(rev2Hash);
-        }
-        else {
+        } else {
             // just compare as plain text:
             return revId1.compareToIgnoreCase(revId2);
         }
@@ -255,9 +254,43 @@ public class RevisionInternal {
     }
 
     public static int CBLCompareRevIDs(String revId1, String revId2) {
-        assert(revId1 != null);
-        assert(revId2 != null);
+        assert (revId1 != null);
+        assert (revId2 != null);
         return CBLCollateRevIDs(revId1, revId2);
+    }
+
+    // Calls the block on every attachment dictionary. The block can return a different dictionary,
+// which will be replaced in the rev's properties. If it returns nil, the operation aborts.
+// Returns YES if any changes were made.
+    public boolean mutateAttachments(CollectionUtils.Functor<Map<String, Object>, Map<String, Object>> functor) { //(: (NSDictionary*(^)(NSString*, NSDictionary*))block
+        {
+            Map<String, Object> properties = getProperties();
+            Map<String, Object> editedProperties = null;
+            Map<String, Object> attachments = (Map<String, Object>) properties.get("_attachments");
+            Map<String, Object> editedAttachments = null;
+            for (String name : attachments.keySet()) {
+
+                Map<String, Object> attachment = (Map<String, Object>) attachments.get(name);
+                Map<String, Object> editedAttachment = functor.invoke(attachment);
+                if (editedAttachment == null) {
+                    return false;  // block canceled
+                }
+                if (editedAttachment != attachment) {
+                    if (editedProperties == null) {
+                        // Make the document properties and _attachments dictionary mutable:
+                        editedProperties = new HashMap<String, Object>(properties);
+                        editedAttachments = new HashMap<String, Object>(attachments);
+                        editedProperties.put("_attachments", editedAttachments);
+                    }
+                    editedAttachments.put(name, editedAttachment);
+                }
+            }
+            if (editedProperties != null) {
+                setProperties(editedProperties);
+                return true;
+            }
+            return false;
+        }
     }
 
 }

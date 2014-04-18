@@ -18,8 +18,19 @@ public class CollectionUtils {
         return result;
     }
 
+    public static <T,U> Collection<U> transform(Collection<T> target, Functor<T,U> functor) {
+        Collection<U> result = new ArrayList<U>();
+        for (T element: target) {
+            U mapped = functor.invoke(element);
+            if (mapped != null) {
+                result.add(mapped);
+            }
+        }
+        return result;
+    }
+
     public interface Predicate<T> { boolean apply(T type); }
 
-    public interface Functor { Object invoke(Object a1); }
+    public interface Functor<T,U> { U invoke(T source); }
 
 }

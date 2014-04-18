@@ -24,6 +24,7 @@ import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
 import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
+import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
@@ -98,6 +99,10 @@ public abstract class Replication implements NetworkReachabilityListener {
     private final Map<RemoteRequest, Future> requests;
     private String serverType;
     private String remoteCheckpointDocID;
+
+    private CollectionUtils.Functor<Map<String,Object>,Map<String,Object>> propertiesTransformationBlock;
+
+    protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
 
     protected static final int PROCESSOR_DELAY = 500;
     protected static final int INBOX_CAPACITY = 100;
@@ -465,6 +470,28 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         db.addReplication(this);
         db.addActiveReplication(this);
+
+        final CollectionUtils.Functor<Map<String,Object>,Map<String,Object>> xformer = propertiesTransformationBlock;
+        if (xformer != null) {
+            revisionBodyTransformationBlock = new CollectionUtils.Functor<RevisionInternal, RevisionInternal>() {
+                @Override
+                public RevisionInternal invoke(RevisionInternal rev) {
+                    Map<String,Object> properties = rev.getProperties();
+                    Map<String, Object> xformedProperties = xformer.invoke(properties);
+                    if (xformedProperties == null) {
+                        rev = null;
+                    } else if (xformedProperties != properties) {
+                        assert(xformedProperties != null);
+                        assert(xformedProperties.get("_id").equals(properties.get("_id")));
+                        assert(xformedProperties.get("_rev").equals(properties.get("_rev")));
+                        RevisionInternal nuRev = new RevisionInternal(rev.getProperties(), db);
+                        nuRev.setProperties(xformedProperties);
+                        rev = nuRev;
+                    }
+                    return rev;
+                }
+            };
+        }
 
 
         this.sessionID = String.format("repl%03d", ++lastSessionID);
@@ -1344,6 +1371,44 @@ public abstract class Replication implements NetworkReachabilityListener {
     protected void revisionFailed() {
         // Remember that some revisions failed to transfer, so we can later retry.
         ++revisionsFailed;
+    }
+
+
+    protected RevisionInternal transformRevision(final RevisionInternal rev) {
+        RevisionInternal xformed = rev;
+        if(revisionBodyTransformationBlock != null) {
+            try {
+                xformed = revisionBodyTransformationBlock.invoke(rev);
+                if (xformed == null)
+                    return null;
+                if (xformed != rev) {
+                    assert(xformed.getDocId().equals(rev.getDocId()));
+                    assert(xformed.getRevId().equals(rev.getRevId()));
+                    assert(xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
+                    if (xformed.getProperties().get("_attachments") != null) {
+                        // Insert 'revpos' properties into any attachments added by the callback:
+                        RevisionInternal mx = new RevisionInternal(xformed.getProperties(), db);
+                        xformed = mx;
+                        mx.mutateAttachments(new CollectionUtils.Functor<Map<String,Object>,Map<String,Object>>() {
+                            public Map<String, Object> invoke(Map<String, Object> info) {
+                                if (info.get("revpos") != null) {
+                                    return info;
+                                }
+                                if(info.get("data") == null) {
+                                    throw new IllegalStateException("Transformer added attachment without adding data");
+                                }
+                                Map<String,Object> nuInfo = new HashMap<String, Object>(info);
+                                nuInfo.put("revpos",rev.getGeneration());
+                                return nuInfo;
+                            }
+                        });
+                    }
+                }
+            }catch (Exception e) {
+                Log.w(Log.TAG_SYNC,"%s: Exception transforming a revision of doc '%s", e, this, rev.getDocId());
+            }
+        }
+        return xformed;
     }
 
     /**

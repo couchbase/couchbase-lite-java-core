@@ -40,6 +40,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,6 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A CouchbaseLite database.
@@ -1640,16 +1642,15 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Boolean getPossibleAncestorRevisionIDs (
+    public List<String>  getPossibleAncestorRevisionIDs (
             RevisionInternal rev,
             int limit,
-            List<String> matchingRevs) {
+            AtomicBoolean hasAttachment
+            ) {
 
-        boolean hasAttachment = false;
-
+        List<String> matchingRevs = new ArrayList<String>();
         int generation = rev.getGeneration();
 
-        //TODO: We are overloading hasAttachments here, fix method signature
         if (generation <= 1)
             return null;
 
@@ -1669,7 +1670,7 @@ public final class Database {
                 cursor.moveToNext();
                 if (!cursor.isAfterLast()) {
                     if (matchingRevs.size() == 0)
-                        hasAttachment = sequenceHasAttachments(cursor.getLong(1));
+                        hasAttachment.set(sequenceHasAttachments(cursor.getLong(1)));
                     matchingRevs.add(cursor.getString(0));
                 }
 
@@ -1680,7 +1681,7 @@ public final class Database {
                     cursor.close();
                 }
             }
-        return hasAttachment;
+        return matchingRevs;
     }
 
 
@@ -2682,6 +2683,37 @@ public final class Database {
             }
         }
     }
+
+    @InterfaceAudience.Private
+    public URL fileForAttachmentDict(Map<String,Object> attachmentDict) {
+        String digest = (String)attachmentDict.get("digest");
+        if (digest == null) {
+            return null;
+        }
+        String path = null;
+        Object pending = pendingAttachmentsByDigest.get(digest);
+        if (pending != null) {
+            if (pending instanceof BlobStoreWriter) {
+                path = ((BlobStoreWriter) pending).getFilePath();
+            } else {
+                BlobKey key = new BlobKey((byte[])pending);
+                path = attachments.pathForKey(key);
+            }
+        } else {
+            // If it's an installed attachment, ask the blob-store for it:
+            BlobKey key = new BlobKey(digest);
+            path = attachments.pathForKey(key);
+        }
+
+        URL retval = null;
+        try {
+            retval = new File(path).toURI().toURL();
+        } catch (MalformedURLException e) {
+            //NOOP: retval will be null
+        }
+        return retval;
+    }
+
 
     /**
      * Modifies a RevisionInternal's body by changing all attachments with revpos < minRevPos into stubs.

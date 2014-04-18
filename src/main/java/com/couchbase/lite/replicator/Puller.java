@@ -17,6 +17,7 @@ import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.SequenceMap;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 
 import org.apache.http.client.HttpClient;
@@ -26,8 +27,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -248,8 +251,9 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @Override
     @InterfaceAudience.Private
     protected void processInbox(RevisionList inbox) {
-        if (canBulkGet == null)
+        if (canBulkGet == null) {
             canBulkGet = serverIsSyncGatewayVersion("0.81");
+        }
 
         // Ask the local database which of the revs are not known to it:
         String lastInboxSequence = ((PulledRevision) inbox.get(inbox.size() - 1)).getRemoteSequenceID();
@@ -486,22 +490,22 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         asyncTaskStarted();
         ++httpConnectionCount;
         final List<RevisionInternal> remainingRevs = new ArrayList<RevisionInternal>(bulkRevs);
-        /*
-        List<String> keys =[bulkRevs my_map:^(CBL_Revision * rev) {
-            return rev.docID;
-        }];
-        */
-                        /*
-        path:
-        @ "_all_docs?include_docs=true"
-        body:
-        $dict({ @ "keys", keys})
-        */
+
+        Collection<String> keys = CollectionUtils.transform(bulkRevs,
+                new CollectionUtils.Functor<RevisionInternal, String>() {
+                    public String invoke(RevisionInternal rev) {
+                        return rev.getDocId();
+                    }
+                }
+        );
+
+        Map<String, Object> body = new HashMap<String, Object>();
+        body.put("keys", keys);
+
         try {
             sendAsyncRequest("POST",
-
-                    new URL(""), null,
-
+                    new URL(remote,"_all_docs?include_docs=true"),
+                    body,
                     new RemoteRequestCompletionBlock() {
 
                         public void onCompletion(Object result, Throwable e) {
@@ -626,41 +630,43 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
     private void queueDownloadedRevision(RevisionInternal rev) {
-        /*
-    }
-            if (self.revisionBodyTransformationBlock) {
-                // Add 'file' properties to attachments pointing to their bodies:
-                [rev[@"_attachments"] enumerateKeysAndObjectsUsingBlock:^(NSString* name,
-                        NSMutableDictionary* attachment,
-                        BOOL *stop) {
-                    [attachment removeObjectForKey: @"file"];
-                    if (attachment[@"follows"] && !attachment[@"data"]) {
-                        NSString* filePath = [[_db fileForAttachmentDict: attachment] path];
-                        if (filePath)
-                            attachment[@"file"] = filePath;
-                    }
-                }];
 
-                CBL_Revision* xformed = [self transformRevision: rev];
-                if (xformed == nil) {
-                    LogTo(Sync, @"%@: Transformer rejected revision %@", self, rev);
-                    [_pendingSequences removeSequence: rev.sequence];
-                    self.lastSequence = _pendingSequences.checkpointedValue;
+            if (revisionBodyTransformationBlock != null) {
+                // Add 'file' properties to attachments pointing to their bodies:
+
+                for(Map.Entry<String, Map<String, Object>> entry : ((Map<String, Map<String,Object>>)rev.getProperties().get("_attachments")).entrySet()) {
+                    String name = entry.getKey();
+                    Map<String, Object> attachment = entry.getValue();
+                    attachment.remove("file");
+                    if (attachment.get("follows") != null && attachment.get("data") == null) {
+                        String filePath = db.fileForAttachmentDict(attachment).getPath();
+                        if (filePath != null)
+                            attachment.put("file",filePath);
+                    }
+                }
+
+                RevisionInternal xformed = transformRevision(rev);
+                if (xformed == null) {
+                    Log.v(Log.TAG_SYNC, "%s: Transformer rejected revision %s", this, rev);
+                    pendingSequences.removeSequence(rev.getSequence());
+                    lastSequence = pendingSequences.getCheckpointedValue();
                     return;
                 }
                 rev = xformed;
 
                 // Clean up afterwards
-                [rev[@"_attachments"] enumerateKeysAndObjectsUsingBlock:^(NSString* name,
-                        NSMutableDictionary* attachment,
-                        BOOL *stop) {
-                    [attachment removeObjectForKey: @"file"];
-                }];
+                Map<String,Object> attachments = (Map<String,Object>)rev.getProperties().get("_attachments");
+
+                for(Map.Entry<String, Map<String, Object>> entry : ((Map<String, Map<String,Object>>)rev.getProperties().get("_attachments")).entrySet()) {
+                    Map<String, Object> attachment = entry.getValue();
+                    attachment.remove("file");
+                }
             }
-            [rev.body compact];
-            [self asyncTaskStarted];
-            [_downloadsToInsert queueObject: rev];
-            */
+
+            //TODO: rev.getBody().compact();
+            asyncTaskStarted();
+            downloadsToInsert.queueObject(rev);
+
     }
 
 
