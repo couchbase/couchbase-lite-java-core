@@ -1,5 +1,7 @@
 package com.couchbase.lite.support;
 
+import com.couchbase.lite.internal.InterfaceAudience;
+
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.HttpClient;
 import org.apache.http.conn.ClientConnectionManager;
@@ -16,6 +18,7 @@ import org.apache.http.params.HttpConnectionParams;
 
 import java.util.List;
 
+@InterfaceAudience.Private
 public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     INSTANCE;
@@ -33,6 +36,7 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
      * @param sslSocketFactoryFromUser This is to open up the system for end user to inject the sslSocket factories with their
      *                                 custom KeyStore
      */
+    @InterfaceAudience.Private
     public void setSSLSocketFactory(SSLSocketFactory sslSocketFactoryFromUser) {
         if (sslSocketFactory != null) {
             throw new RuntimeException("SSLSocketFactory already set");
@@ -40,11 +44,13 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         sslSocketFactory = sslSocketFactoryFromUser;
     }
 
+    @InterfaceAudience.Private
     public void setBasicHttpParams(BasicHttpParams basicHttpParams) {
         this.basicHttpParams = basicHttpParams;
     }
 
     @Override
+    @InterfaceAudience.Private
     public HttpClient getHttpClient() {
 
         // workaround attempt for issue #81
@@ -76,6 +82,7 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     }
 
+    @InterfaceAudience.Private
     public void addCookies(List<Cookie> cookies) {
         synchronized (this) {
             if (cookieStore == null) {
@@ -85,6 +92,11 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
                 cookieStore.addCookie(cookie);
             }
         }
+    }
+
+    @InterfaceAudience.Private
+    public CookieStore getCookieStore() {
+        return cookieStore;
     }
 
 
