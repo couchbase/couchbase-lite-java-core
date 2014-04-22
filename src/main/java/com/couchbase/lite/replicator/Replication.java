@@ -530,12 +530,30 @@ public abstract class Replication implements NetworkReachabilityListener {
         return name;
     }
 
+
     /**
      * Sets an HTTP cookie for the Replication.
      *
      * @param name The name of the cookie.
      * @param value The value of the cookie.
-     * @param path (ignored) The path attribute of the cookie.
+     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param maxAge The maxAge, in milliseconds, that this cookie should be valid for.
+     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     */
+    @InterfaceAudience.Public
+    public void setCookie(String name, String value, String path, long maxAge, boolean secure, boolean httpOnly) {
+        Date now = new Date();
+        Date expirationDate = new Date(now.getTime() + maxAge);
+        setCookie(name, value, path, expirationDate, secure, httpOnly);
+    }
+
+    /**
+     * Sets an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     * @param value The value of the cookie.
+     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
      * @param expirationDate The expiration date of the cookie.
      * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
      * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
@@ -547,7 +565,12 @@ public abstract class Replication implements NetworkReachabilityListener {
         }
         BasicClientCookie2 cookie = new BasicClientCookie2(name, value);
         cookie.setDomain(remote.getHost());
-        cookie.setPath(remote.getPath());
+        if (path != null && path.length() > 0) {
+            cookie.setPath(path);
+        } else {
+            cookie.setPath(remote.getPath());
+        }
+
         cookie.setExpiryDate(expirationDate);
         cookie.setSecure(secure);
         List<Cookie> cookies = Arrays.asList((Cookie)cookie);
@@ -562,7 +585,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Public
     public void deleteCookie(String name) {
 
-        // since CookieStore does not have a way to delete an individual cookie
+        // since CookieStore does not have a way to delete an individual cookie, do workaround:
         // 1. get all cookies
         // 2. filter list to strip out the one we want to delete
         // 3. clear cookie store
