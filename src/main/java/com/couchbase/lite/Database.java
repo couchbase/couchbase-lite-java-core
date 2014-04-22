@@ -32,12 +32,14 @@ import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
 import com.couchbase.lite.support.Base64;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,6 +90,26 @@ public final class Database {
     private Cache<String, Document> docCache;
     private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
+
+    /**
+     * Each database can have an associated PersistentCookieStore,
+     * where the persistent cookie store uses the database to store
+     * its cookies.
+     *
+     * There are two reasons this has been made an instance variable
+     * of the Database, rather than of the Replication:
+     *
+     * - The PersistentCookieStore needs to span multiple replications.
+     * For example, if there is a "push" and a "pull" replication for
+     * the same DB, they should share a cookie store.
+     *
+     * - PersistentCookieStore lifecycle should be tied to the Database
+     * lifecycle, since it needs to cease to exist if the underlying
+     * Database ceases to exist.
+     *
+     * REF: https://github.com/couchbase/couchbase-lite-android/issues/269
+     */
+    private PersistentCookieStore persistentCookieStore;
 
     private int maxRevTreeDepth = DEFAULT_MAX_REVS;
 
@@ -4404,7 +4426,19 @@ public final class Database {
 
     }
 
+    /**
+     * Get the PersistentCookieStore associated with this database.
+     * Will lazily create one if none exists.
+     *
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public PersistentCookieStore getPersistentCookieStore() {
 
-
+        if (persistentCookieStore == null) {
+            persistentCookieStore = new PersistentCookieStore(this);
+        }
+        return persistentCookieStore;
+    }
 
 }

@@ -19,6 +19,7 @@ import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
 import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
@@ -209,7 +210,6 @@ public abstract class Replication implements NetworkReachabilityListener {
         });
 
         setClientFactory(clientFactory);
-        // this.clientFactory = clientFactory != null ? clientFactory : CouchbaseLiteHttpClientFactory.INSTANCE;
 
     }
 
@@ -234,10 +234,12 @@ public abstract class Replication implements NetworkReachabilityListener {
             if (managerClientFactory != null) {
                 this.clientFactory = managerClientFactory;
             } else {
-                this.clientFactory = CouchbaseLiteHttpClientFactory.INSTANCE;
+                PersistentCookieStore cookieStore = db.getPersistentCookieStore();
+                this.clientFactory = new CouchbaseLiteHttpClientFactory(cookieStore);
             }
         }
     }
+
 
     /**
      * Get the local database which is the source or target of this replication
@@ -574,7 +576,8 @@ public abstract class Replication implements NetworkReachabilityListener {
         cookie.setExpiryDate(expirationDate);
         cookie.setSecure(secure);
         List<Cookie> cookies = Arrays.asList((Cookie)cookie);
-        CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(cookies);
+        this.clientFactory.addCookies(cookies);
+
     }
 
     /**
@@ -584,25 +587,7 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Public
     public void deleteCookie(String name) {
-
-        // since CookieStore does not have a way to delete an individual cookie, do workaround:
-        // 1. get all cookies
-        // 2. filter list to strip out the one we want to delete
-        // 3. clear cookie store
-        // 4. re-add all cookies except the one we want to delete
-        CookieStore cookieStore = CouchbaseLiteHttpClientFactory.INSTANCE.getCookieStore();
-        List<Cookie> cookies = cookieStore.getCookies();
-        List<Cookie> retainedCookies = new ArrayList<Cookie>();
-        for (Cookie cookie : cookies) {
-            if (!cookie.getName().equals(name)) {
-                retainedCookies.add(cookie);
-            }
-        }
-        cookieStore.clear();
-        for (Cookie retainedCookie : retainedCookies) {
-            cookieStore.addCookie(retainedCookie);
-        }
-
+        this.clientFactory.deleteCookie(name);
     }
 
 
@@ -972,7 +957,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     public void sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
 
-        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
+        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getLocalDatabase(), getHeaders(), onCompletion);
 
         request.setAuthenticator(getAuthenticator());
 
@@ -1054,6 +1039,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 method,
                 url,
                 multiPartEntity,
+                getLocalDatabase(),
                 getHeaders(),
                 onCompletion);
 
@@ -1317,6 +1303,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         Log.v(Log.TAG_SYNC, "%s: stopRemoteRequests() cancelling: %d requests", this, requests.size());
         for (RemoteRequest request : requests.keySet()) {
             Future future = requests.get(request);
+            // TODO: this is broken!  plus, underlying code needs try catch
             Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s isCancelled: %s isDone: ", this, future, request, future.isCancelled(), future.isDone());
             boolean result = future.cancel(true);
             Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
@@ -1475,5 +1462,10 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     /* package */ void setServerType(String serverType) {
         this.serverType = serverType;
+    }
+
+    @InterfaceAudience.Private
+    /* package */ HttpClientFactory getClientFactory() {
+        return clientFactory;
     }
 }

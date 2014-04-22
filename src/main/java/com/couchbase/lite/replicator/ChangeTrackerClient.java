@@ -3,15 +3,20 @@ package com.couchbase.lite.replicator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.HttpClientFactory;
 
+import org.apache.http.client.HttpClient;
+
 import java.util.Map;
 
 /**
  * @exclude
  */
 @InterfaceAudience.Private
-public interface ChangeTrackerClient extends HttpClientFactory {
+public interface ChangeTrackerClient {
+
+    HttpClient getHttpClient();
 
     void changeTrackerReceivedChange(Map<String,Object> change);
 
     void changeTrackerStopped(ChangeTracker tracker);
+
 }
