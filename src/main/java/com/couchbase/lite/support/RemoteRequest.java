@@ -59,12 +59,13 @@ public class RemoteRequest implements Runnable {
     protected RemoteRequestCompletionBlock onCompletion;
     protected RemoteRequestCompletionBlock onPostCompletion;
     private int retryCount;
+    private Database db;
 
     protected Map<String, Object> requestHeaders;
 
     public RemoteRequest(ScheduledExecutorService workExecutor,
                          HttpClientFactory clientFactory, String method, URL url,
-                         Object body, Map<String, Object> requestHeaders, RemoteRequestCompletionBlock onCompletion) {
+                         Object body, Database db, Map<String, Object> requestHeaders, RemoteRequestCompletionBlock onCompletion) {
         this.clientFactory = clientFactory;
         this.method = method;
         this.url = url;
@@ -72,6 +73,7 @@ public class RemoteRequest implements Runnable {
         this.onCompletion = onCompletion;
         this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
+        this.db = db;
 
     }
 
@@ -176,7 +178,7 @@ public class RemoteRequest implements Runnable {
             try {
                 if (httpClient instanceof DefaultHttpClient) {
                     DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
-                    CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
+                    CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(db, defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);

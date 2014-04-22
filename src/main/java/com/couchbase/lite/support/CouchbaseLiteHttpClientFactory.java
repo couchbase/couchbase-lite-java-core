@@ -1,5 +1,8 @@
 package com.couchbase.lite.support;
 
+import com.couchbase.lite.Database;
+import com.couchbase.lite.internal.InterfaceAudience;
+
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.HttpClient;
 import org.apache.http.conn.ClientConnectionManager;
@@ -8,7 +11,6 @@ import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.cookie.Cookie;
-import org.apache.http.impl.client.trunk.BasicCookieStore;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.params.BasicHttpParams;
@@ -16,6 +18,7 @@ import org.apache.http.params.HttpConnectionParams;
 
 import java.util.List;
 
+@InterfaceAudience.Private
 public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     INSTANCE;
@@ -33,6 +36,7 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
      * @param sslSocketFactoryFromUser This is to open up the system for end user to inject the sslSocket factories with their
      *                                 custom KeyStore
      */
+    @InterfaceAudience.Private
     public void setSSLSocketFactory(SSLSocketFactory sslSocketFactoryFromUser) {
         if (sslSocketFactory != null) {
             throw new RuntimeException("SSLSocketFactory already set");
@@ -40,11 +44,13 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         sslSocketFactory = sslSocketFactoryFromUser;
     }
 
+    @InterfaceAudience.Private
     public void setBasicHttpParams(BasicHttpParams basicHttpParams) {
         this.basicHttpParams = basicHttpParams;
     }
 
     @Override
+    @InterfaceAudience.Private
     public HttpClient getHttpClient() {
 
         // workaround attempt for issue #81
@@ -76,14 +82,25 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     }
 
-    public void addCookies(List<Cookie> cookies) {
+    @InterfaceAudience.Private
+    public void addCookies(Database db, List<Cookie> cookies) {
         synchronized (this) {
-            if (cookieStore == null) {
-                cookieStore = new BasicCookieStore();
-            }
+            initCookieStore(db);
             for (Cookie cookie : cookies) {
                 cookieStore.addCookie(cookie);
             }
+        }
+    }
+
+    @InterfaceAudience.Private
+    public CookieStore getCookieStore() {
+        return cookieStore;
+    }
+
+    @InterfaceAudience.Private
+    public synchronized void initCookieStore(Database db) {
+        if (cookieStore == null) {
+            cookieStore = new PersistentCookieStore(db);
         }
     }
 

@@ -24,6 +24,7 @@ import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -307,7 +308,7 @@ public class ChangeTracker implements Runnable {
                 if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
                     Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
                     String msg = String.format(status.toString());
-                    this.error = new CouchbaseLiteException(msg, new Status(status.getStatusCode()));
+                    this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     stop();
                 }
                 HttpEntity entity = response.getEntity();
