@@ -1,5 +1,6 @@
 package com.couchbase.lite.support;
 
+import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 
 import org.apache.http.client.CookieStore;
@@ -10,7 +11,6 @@ import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.cookie.Cookie;
-import org.apache.http.impl.client.trunk.BasicCookieStore;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.params.BasicHttpParams;
@@ -83,11 +83,9 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     }
 
     @InterfaceAudience.Private
-    public void addCookies(List<Cookie> cookies) {
+    public void addCookies(Database db, List<Cookie> cookies) {
         synchronized (this) {
-            if (cookieStore == null) {
-                cookieStore = new BasicCookieStore();
-            }
+            initCookieStore(db);
             for (Cookie cookie : cookies) {
                 cookieStore.addCookie(cookie);
             }
@@ -97,6 +95,13 @@ public enum CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     @InterfaceAudience.Private
     public CookieStore getCookieStore() {
         return cookieStore;
+    }
+
+    @InterfaceAudience.Private
+    public synchronized void initCookieStore(Database db) {
+        if (cookieStore == null) {
+            cookieStore = new PersistentCookieStore(db);
+        }
     }
 
 

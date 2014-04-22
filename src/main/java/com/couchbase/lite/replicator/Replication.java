@@ -209,7 +209,6 @@ public abstract class Replication implements NetworkReachabilityListener {
         });
 
         setClientFactory(clientFactory);
-        // this.clientFactory = clientFactory != null ? clientFactory : CouchbaseLiteHttpClientFactory.INSTANCE;
 
     }
 
@@ -234,6 +233,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             if (managerClientFactory != null) {
                 this.clientFactory = managerClientFactory;
             } else {
+                CouchbaseLiteHttpClientFactory.INSTANCE.initCookieStore(getLocalDatabase());
                 this.clientFactory = CouchbaseLiteHttpClientFactory.INSTANCE;
             }
         }
@@ -574,7 +574,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         cookie.setExpiryDate(expirationDate);
         cookie.setSecure(secure);
         List<Cookie> cookies = Arrays.asList((Cookie)cookie);
-        CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(cookies);
+        CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(getLocalDatabase(), cookies);
     }
 
     /**
@@ -972,7 +972,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     public void sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
 
-        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
+        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getLocalDatabase(), getHeaders(), onCompletion);
 
         request.setAuthenticator(getAuthenticator());
 
@@ -1054,6 +1054,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 method,
                 url,
                 multiPartEntity,
+                getLocalDatabase(),
                 getHeaders(),
                 onCompletion);
 
