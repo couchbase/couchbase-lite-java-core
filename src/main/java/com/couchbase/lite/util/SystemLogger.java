@@ -20,7 +20,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 
 public class SystemLogger implements Logger {
-    private final static java.util.logging.Logger logger = java.util.logging.Logger.getLogger("com.couchbase.cblite");
+    private final static java.util.logging.Logger logger = java.util.logging.Logger.getLogger("com.couchbase.lite");
 
     @Override
     public void v(String tag, String msg) {
