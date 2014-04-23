@@ -1,9 +1,9 @@
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.MultipartDocumentReader;
-import com.couchbase.lite.support.MultipartReader;
 import com.couchbase.lite.support.MultipartReaderDelegate;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
@@ -20,13 +20,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Created by andy on 14/04/2014.
- */
 public class BulkDownloader extends RemoteRequest implements Runnable, MultipartReaderDelegate {
 
     private Database _db;
-    private MultipartReader _topReader;
     private MultipartDocumentReader _docReader;
     private int _docCount;
     private BulkDownloaderDocumentBlock _onDocument;
@@ -39,11 +35,10 @@ public class BulkDownloader extends RemoteRequest implements Runnable, Multipart
                           BulkDownloaderDocumentBlock onDocument,
                           RemoteRequestCompletionBlock onCompletion) throws Exception {
 
-
         super(null,
                 null,
                 "POST",
-                new URL(dbURL, "_bulk_get?revs=true&attachments=true"),
+                new URL(buildRelativeURLString(dbURL, "/_bulk_get?revs=true&attachments=true")),
                 helperMethod(revs,database),
                 requestHeaders,
                 onCompletion);
@@ -78,71 +73,6 @@ public class BulkDownloader extends RemoteRequest implements Runnable, Multipart
             request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
         }
     }
-
-
-    // URL CONNECTION CALLBACKS:
-
-/*
-    private void connection
-    :(NSURLConnection*)
-    connection didReceiveResponse
-    :(NSURLResponse*)response
-
-    {
-        CBLStatus status = (CBLStatus) ((NSHTTPURLResponse *) response).statusCode;
-        if (status < 300) {
-            // Check the content type to see whether it's a multipart response:
-            NSDictionary * headers =[(NSHTTPURLResponse *) response allHeaderFields];
-            NSString * contentType = headers[ @ "Content-Type"];
-            _topReader =[[CBLMultipartReader alloc]initWithContentType:
-            contentType
-            delegate:
-            self];
-            if (!_topReader) {
-                Warn( @ "%@ got invalid Content-Type '%@'", self, contentType);
-                [self cancelWithStatus:kCBLStatusUpstreamError];
-                return;
-            }
-        }
-
-        [super connection:
-    connection didReceiveResponse:response];
-    }
-
-
-    private void connection
-    :(NSURLConnection*)
-    connection didReceiveData
-    :(NSData*)data
-
-    {
-        [super connection:
-    connection didReceiveData:data];
-        [_topReader appendData:data];
-        if (_topReader.error) {
-            [self cancelWithStatus:kCBLStatusUpstreamError];
-        }
-    }
-
-
-    private void connectionDidFinishLoading
-    :(NSURLConnection*)connection
-
-    {
-        LogTo(SyncVerbose, @ "%@: Finished loading (%u documents)", self, _docCount);
-        if (!_topReader.finished) {
-            Warn( @ "%@ got unexpected EOF", self);
-            [self cancelWithStatus:kCBLStatusUpstreamError];
-            return;
-        }
-
-        clearConnection();
-        respondWithResult();
-    }
-*/
-
-    //MULTIPART CALLBACKS:
-
 
     /**
      * This method is called when a part's headers have been parsed, before its data is parsed.
@@ -196,7 +126,6 @@ public class BulkDownloader extends RemoteRequest implements Runnable, Multipart
     private static Map<String, Object> helperMethod(List<RevisionInternal> revs, final Database database) {
 
         // Build up a JSON body describing what revisions we want:
-
         Collection<Map<String, Object>> keys = CollectionUtils.transform(revs, new CollectionUtils.Functor<RevisionInternal, Map<String, Object>>() {
 
             public Map<String, Object> invoke(RevisionInternal source) {
@@ -216,7 +145,20 @@ public class BulkDownloader extends RemoteRequest implements Runnable, Multipart
 
         Map<String, Object> retval = new HashMap<String, Object>();
         retval.put("docs", keys);
-
         return retval;
+    }
+
+    @InterfaceAudience.Private
+    private static String buildRelativeURLString(URL remote, String relativePath) {
+
+        // the following code is a band-aid for a system problem in the codebase
+        // where it is appending "relative paths" that start with a slash, eg:
+        //     http://dotcom/db/ + /relpart == http://dotcom/db/relpart
+        // which is not compatible with the way the java url concatonation works.
+        String remoteUrlString = remote.toExternalForm();
+        if (remoteUrlString.endsWith("/") && relativePath.startsWith("/")) {
+            remoteUrlString = remoteUrlString.substring(0, remoteUrlString.length() - 1);
+        }
+        return remoteUrlString + relativePath;
     }
 }

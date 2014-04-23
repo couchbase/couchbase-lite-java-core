@@ -430,43 +430,6 @@ public final class Pusher extends Replication implements Database.ChangeListener
     }
 
     @InterfaceAudience.Private
-    private Status statusFromBulkDocsResponseItem(Map<String, Object> item) {
-
-        try {
-            if (!item.containsKey("error")) {
-                return new Status(Status.OK);
-            }
-            String errorStr = (String) item.get("error");
-            if (errorStr == null || errorStr.isEmpty()) {
-                return new Status(Status.OK);
-            }
-
-            // 'status' property is nonstandard; TouchDB returns it, others don't.
-            String statusString = (String) item.get("status");
-            int status = Integer.parseInt(statusString);
-            if (status >= 400) {
-                return new Status(status);
-            }
-            // If no 'status' present, interpret magic hardcoded CouchDB error strings:
-            if (errorStr.equalsIgnoreCase("unauthorized")) {
-                return new Status(Status.UNAUTHORIZED);
-            } else if (errorStr.equalsIgnoreCase("forbidden")) {
-                return new Status(Status.FORBIDDEN);
-            } else if (errorStr.equalsIgnoreCase("conflict")) {
-                return new Status(Status.CONFLICT);
-            } else {
-                return new Status(Status.UPSTREAM_ERROR);
-            }
-
-        } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "Exception getting status from " + item, e);
-        }
-        return new Status(Status.OK);
-
-
-    }
-
-    @InterfaceAudience.Private
     private boolean uploadMultipartRevision(final RevisionInternal revision) {
 
         MultipartEntity multiPart = null;
