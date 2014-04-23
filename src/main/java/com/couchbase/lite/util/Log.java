@@ -129,7 +129,11 @@ public class Log {
      */
     public static void v(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
-            logger.v(tag, String.format(formatString, args));
+            try {
+                logger.v(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.v(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
 
     }
@@ -144,7 +148,11 @@ public class Log {
      */
     public static void v(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
-            logger.v(tag, String.format(formatString, args), tr);
+            try {
+                logger.v(tag, String.format(formatString, args), tr);
+            } catch (Exception e) {
+                logger.v(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -178,7 +186,11 @@ public class Log {
      */
     public static void d(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, DEBUG)) {
-            logger.d(tag, String.format(formatString, args));
+            try {
+                logger.d(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.d(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -192,7 +204,11 @@ public class Log {
      */
     public static void d(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, DEBUG)) {
-            logger.d(tag, String.format(formatString, args, tr));
+            try {
+                logger.d(tag, String.format(formatString, args, tr));
+            } catch (Exception e) {
+                logger.d(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -227,7 +243,11 @@ public class Log {
      */
     public static void i(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, INFO)) {
-            logger.i(tag, String.format(formatString, args));
+            try {
+                logger.i(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.i(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -241,7 +261,11 @@ public class Log {
      */
     public static void i(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, INFO)) {
-            logger.i(tag, String.format(formatString, args, tr));
+            try {
+                logger.i(tag, String.format(formatString, args, tr));
+            } catch (Exception e) {
+                logger.i(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -286,7 +310,11 @@ public class Log {
      */
     public static void w(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, WARN)) {
-            logger.w(tag, String.format(formatString, args));
+            try {
+                logger.w(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.w(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -301,7 +329,11 @@ public class Log {
      */
     public static void w(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, WARN)) {
-            logger.w(tag, String.format(formatString, args));
+            try {
+                logger.w(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.w(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -338,7 +370,11 @@ public class Log {
      */
     public static void e(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, ERROR)) {
-            logger.e(tag, String.format(formatString, args));
+            try {
+                logger.e(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.e(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
@@ -351,7 +387,11 @@ public class Log {
      */
     public static void e(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, ERROR)) {
-            logger.e(tag, String.format(formatString, args));
+            try {
+                logger.e(tag, String.format(formatString, args));
+            } catch (Exception e) {
+                logger.e(tag, String.format("Unable to format log: %s", formatString), e);
+            }
         }
     }
 
