@@ -9,12 +9,19 @@ import com.couchbase.lite.replicator.Pusher;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
-
 import com.couchbase.lite.util.StreamUtils;
+
 import org.codehaus.jackson.map.ObjectMapper;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -34,8 +41,6 @@ import java.util.regex.Pattern;
  * Top-level CouchbaseLite object; manages a collection of databases as a CouchDB server does.
  */
 public final class Manager {
-
-    public static final String VERSION =  "1.0.0-beta2";
 
     /**
      * @exclude
@@ -110,7 +115,8 @@ public final class Manager {
     @InterfaceAudience.Public
     public Manager(Context context, ManagerOptions options) throws IOException {
 
-        Log.v(Database.TAG, "Starting Manager version: %s", VERSION);
+        Log.i(Database.TAG, "Starting Manager version: %s", Version.getVersion());
+
         this.context = context;
         this.directoryFile = context.getFilesDir();
         this.options = (options != null) ? options : DEFAULT_OPTIONS;

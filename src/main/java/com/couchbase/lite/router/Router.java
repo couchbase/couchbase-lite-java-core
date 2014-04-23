@@ -10,12 +10,12 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.Database.TDContentOptions;
 import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.Mapper;
 import com.couchbase.lite.Misc;
 import com.couchbase.lite.QueryOptions;
 import com.couchbase.lite.QueryRow;
 import com.couchbase.lite.Reducer;
 import com.couchbase.lite.ReplicationFilter;
-import com.couchbase.lite.Mapper;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.View;
@@ -27,6 +27,7 @@ import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 
@@ -54,8 +55,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import sun.misc.IOUtils;
-
 
 public class Router implements Database.ChangeListener {
 
@@ -71,7 +70,7 @@ public class Router implements Database.ChangeListener {
     private boolean longpoll = false;
 
     public static String getVersionString() {
-        return Manager.VERSION;
+        return Version.getVersion();
     }
 
     public Router(Manager manager, URLConnection connection) {
