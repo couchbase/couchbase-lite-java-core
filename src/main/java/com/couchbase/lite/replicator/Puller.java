@@ -484,10 +484,13 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         final BulkDownloader dl;
         try {
-            dl = new BulkDownloader(remote,
+
+            dl = new BulkDownloader(workExecutor,
+                    clientFactory,
+                    remote,
+                    bulkRevs,
                     db,
                     this.requestHeaders,
-                    bulkRevs,
                     new BulkDownloader.BulkDownloaderDocumentBlock() {
                         public void onDocument(Map<String, Object> props) {
                             // Got a revision!

@@ -1,78 +1,186 @@
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.Manager;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
+import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.MultipartDocumentReader;
+import com.couchbase.lite.support.MultipartReader;
 import com.couchbase.lite.support.MultipartReaderDelegate;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.StatusLine;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.impl.client.DefaultHttpClient;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class BulkDownloader extends RemoteRequest implements Runnable, MultipartReaderDelegate {
+public class BulkDownloader extends RemoteRequest implements MultipartReaderDelegate {
 
     private Database _db;
+    private MultipartReader _topReader;
     private MultipartDocumentReader _docReader;
     private int _docCount;
     private BulkDownloaderDocumentBlock _onDocument;
-    private HttpResponse response;
+    //private HttpResponse response;
 
-    public BulkDownloader(URL dbURL,
+    public BulkDownloader(ScheduledExecutorService workExecutor,
+                          HttpClientFactory clientFactory,
+                          URL dbURL,
+                          List<RevisionInternal> revs,
                           Database database,
                           Map<String, Object> requestHeaders,
-                          List<RevisionInternal> revs,
                           BulkDownloaderDocumentBlock onDocument,
                           RemoteRequestCompletionBlock onCompletion) throws Exception {
 
-        super(null,
-                null,
+        super(workExecutor,
+                clientFactory,
                 "POST",
                 new URL(buildRelativeURLString(dbURL, "/_bulk_get?revs=true&attachments=true")),
                 helperMethod(revs,database),
                 requestHeaders,
                 onCompletion);
 
-        response = null;
-
-        setOnPreCompletion(new RemoteRequestCompletionBlock() {
-            @Override
-            public void onCompletion(Object result, Throwable e) {
-                response = (HttpResponse) result;
-            }
-        });
-
         _db = database;
         _onDocument = onDocument;
 
     }
+
+    @Override
+    public void run() {
+
+        HttpClient httpClient = clientFactory.getHttpClient();
+
+        preemptivelySetAuthCredentials(httpClient);
+
+        HttpUriRequest request = createConcreteRequest();
+
+        request.addHeader("Content-Type", "application/json");
+        request.addHeader("Accept", "multipart/related");
+        request.addHeader("X-Accept-Part-Encoding", "gzip");
+
+        addRequestHeaders(request);
+
+        executeRequest(httpClient, request);
+
+    }
+
 
 
     private String description() {
         return this.getClass().getName() + "[" + url.getPath() + "]";
     }
 
+
     @Override
-    protected void addRequestHeaders(HttpUriRequest request) {
+    protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
+        Object fullBody = null;
+        Throwable error = null;
 
-        requestHeaders.put("Content-Type", "application/json");
-        requestHeaders.put("Accept", "multipart/related");
-        requestHeaders.put("X-Accept-Part-Encoding", "gzip");
+        try {
 
-        for (String requestHeaderKey : requestHeaders.keySet()) {
-            request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+            HttpResponse response = httpClient.execute(request);
+
+            try {
+                // add in cookies to global store
+                if (httpClient instanceof DefaultHttpClient) {
+                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                    CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
+                }
+            } catch (Exception e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
+            }
+
+            StatusLine status = response.getStatusLine();
+            if (status.getStatusCode() >= 300) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
+                error = new HttpResponseException(status.getStatusCode(),
+                        status.getReasonPhrase());
+            } else {
+                HttpEntity entity = response.getEntity();
+                Header contentTypeHeader = entity.getContentType();
+                InputStream inputStream = null;
+
+                if (contentTypeHeader != null
+                        && contentTypeHeader.getValue().contains("multipart/related")) {
+
+                    try {
+
+                        _topReader = new MultipartReader(contentTypeHeader.getValue(),this);
+
+                        inputStream = entity.getContent();
+
+                        int bufLen = 1024;
+                        byte[] buffer = new byte[bufLen];
+                        int numBytesRead = 0;
+                        while ( (numBytesRead = inputStream.read(buffer))!= -1 ) {
+                            if (numBytesRead != bufLen) {
+                                byte[] bufferToAppend = Arrays.copyOfRange(buffer, 0, numBytesRead);
+                                _topReader.appendData(bufferToAppend);
+                            }
+                            else {
+                                _topReader.appendData(buffer);
+                            }
+                        }
+
+                        _topReader.finished();
+
+                        respondWithResult(fullBody, error, response);
+
+                    } finally {
+                        try {
+                            inputStream.close();
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+                else {
+                    if (entity != null) {
+                        try {
+                            inputStream = entity.getContent();
+                            fullBody = Manager.getObjectMapper().readValue(inputStream,
+                                    Object.class);
+                            respondWithResult(fullBody, error, response);
+                        } finally {
+                            try {
+                                inputStream.close();
+                            } catch (IOException e) {
+                            }
+                        }
+                    }
+
+                }
+            }
+        } catch (ClientProtocolException e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "client protocol exception", e);
+            error = e;
+        } catch (IOException e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
+            error = e;
         }
     }
+
+
 
     /**
      * This method is called when a part's headers have been parsed, before its data is parsed.
@@ -83,9 +191,8 @@ public class BulkDownloader extends RemoteRequest implements Runnable, Multipart
             throw new IllegalStateException("_docReader is already defined");
         }
         Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", headers.get("X-Doc-ID"), this);
-        _docReader = new MultipartDocumentReader(response, _db);
-        _docReader.startedPart(headers);
-
+        _docReader = new MultipartDocumentReader(null, _db);
+        _docReader.setContentType((String)headers.get("\"Content-Type\""));
     }
 
 
