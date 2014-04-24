@@ -58,6 +58,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 "POST",
                 new URL(buildRelativeURLString(dbURL, "/_bulk_get?revs=true&attachments=true")),
                 helperMethod(revs,database),
+                database,
                 requestHeaders,
                 onCompletion);
 
@@ -107,7 +108,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 // add in cookies to global store
                 if (httpClient instanceof DefaultHttpClient) {
                     DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
-                    CouchbaseLiteHttpClientFactory.INSTANCE.addCookies(defaultHttpClient.getCookieStore().getCookies());
+                    clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
