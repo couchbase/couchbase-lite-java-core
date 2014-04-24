@@ -35,13 +35,16 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
+import com.couchbase.lite.util.Utils;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.ref.WeakReference;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -3036,17 +3039,64 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public String generateNextRevisionID(String revisionId) {
+    public String generateIDForRevision(RevisionInternal rev, byte[] json, Map<String, AttachmentInternal> attachments, String previousRevisionId) {
+
+        MessageDigest md5Digest;
+
         // Revision IDs have a generation count, a hyphen, and a UUID.
+
         int generation = 0;
-        if(revisionId != null) {
-            generation = RevisionInternal.generationFromRevID(revisionId);
+        if(previousRevisionId != null) {
+            generation = RevisionInternal.generationFromRevID(previousRevisionId);
             if(generation == 0) {
                 return null;
             }
         }
-        String digest = Misc.TDCreateUUID();  // TODO: Generate canonical digest of body
-        return Integer.toString(generation + 1) + "-" + digest;
+
+        // Generate a digest for this revision based on the previous revision ID, document JSON,
+        // and attachment digests. This doesn't need to be secure; we just need to ensure that this
+        // code consistently generates the same ID given equivalent revisions.
+
+        try {
+            md5Digest = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+
+        int length = 0;
+        if (previousRevisionId != null) {
+            byte[] prevIDUTF8 = previousRevisionId.getBytes(Charset.forName("UTF-8"));
+            length = prevIDUTF8.length;
+        }
+        if (length > 0xFF) {
+            return null;
+        }
+        byte lengthByte = (byte) (length & 0xFF);
+        byte[] lengthBytes = new byte[] { lengthByte };
+
+        md5Digest.update(lengthBytes);
+
+        int isDeleted = ((rev.isDeleted() != false) ? 1 : 0);
+        byte[] deletedByte = new byte[] { (byte) isDeleted };
+        md5Digest.update(deletedByte);
+
+        List<String> attachmentKeys = new ArrayList<String>(attachments.keySet());
+        Collections.sort(attachmentKeys);
+        for (String key : attachmentKeys) {
+            AttachmentInternal attachment = attachments.get(key);
+            md5Digest.update(attachment.getBlobKey().getBytes());
+        }
+
+        if (json != null) {
+            md5Digest.update(json);
+        }
+        byte[] md5DigestResult = md5Digest.digest();
+
+        String digestAsHex = Utils.bytesToHex(md5DigestResult);
+
+        int generationIncremented = generation + 1;
+        return String.format("%d-%s", generationIncremented, digestAsHex);
+
     }
 
     /**
@@ -3415,29 +3465,29 @@ public final class Database {
             Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(oldRev);
 
             // Bump the revID and update the JSON:
-            byte[] data = null;
+            byte[] json = null;
             if(!oldRev.isDeleted()) {
-                data = encodeDocumentJSON(oldRev);
-                if(data == null) {
+                json = encodeDocumentJSON(oldRev);
+                if(json == null) {
                     // bad or missing json
                     throw new CouchbaseLiteException(Status.BAD_REQUEST);
                 }
 
-                if(data.length == 2 && data[0] == '{' && data[1] == '}') {
-                    data = null;
+                if(json.length == 2 && json[0] == '{' && json[1] == '}') {
+                    json = null;
                 }
 
             }
 
-            String newRevId = generateNextRevisionID(prevRevId);
+            String newRevId = generateIDForRevision(oldRev, json, attachments, prevRevId);
             newRev = oldRev.copyWithDocID(docId, newRevId);
             stubOutAttachmentsInRevision(attachments, newRev);
 
             // Don't store a SQL null in the 'json' column -- I reserve it to mean that the revision data
             // is missing due to compaction or replication.
             // Instead, store an empty zero-length blob.
-            if(data == null)
-                data = new byte[0];
+            if(json == null)
+                json = new byte[0];
 
             //// PART III: In which the actual insertion finally takes place:
 
@@ -3445,7 +3495,7 @@ public final class Database {
             boolean hasAttachments = attachments.size() > 0;
 
             // Now insert the rev itself:
-            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, (attachments.size() > 0), data);
+            long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, (attachments.size() > 0), json);
             if(newSequence == 0) {
                 return null;
             }
