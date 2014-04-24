@@ -78,7 +78,8 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");
-        request.addHeader("X-Accept-Part-Encoding", "gzip");
+        //TODO: implement gzip support for server response see issue #172
+        //request.addHeader("X-Accept-Part-Encoding", "gzip");
 
         addRequestHeaders(request);
 
@@ -199,6 +200,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
         _docReader = new MultipartDocumentReader(null, _db);
         _docReader.setContentType((String) headers.get("Content-Type"));
+        _docReader.startedPart(headers);
     }
 
 
