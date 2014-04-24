@@ -307,7 +307,6 @@ public class ChangeTracker implements Runnable {
                 StatusLine status = response.getStatusLine();
                 if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
                     Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
-                    String msg = String.format(status.toString());
                     this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     stop();
                 }
