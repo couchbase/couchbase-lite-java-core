@@ -78,6 +78,12 @@ public class PersistentCookieStore implements CookieStore {
                 return;
             }
             for (String name : cookiesDoc.keySet()) {
+
+                // ignore special couchbase lite fields like _id and _rev
+                if (name.startsWith("_")) {
+                    continue;
+                }
+
                 String encodedCookie = (String) cookiesDoc.get(name);
                 if (encodedCookie == null) {
                     continue;
@@ -119,6 +125,8 @@ public class PersistentCookieStore implements CookieStore {
         if (cookiesDoc == null) {
             cookiesDoc = new HashMap<String, Object>();
         }
+
+        Log.v(Log.TAG_SYNC, "Saving cookie: %s w/ encoded value: %s", name, encodedCookie);
 
         cookiesDoc.put(name, encodedCookie);
 
