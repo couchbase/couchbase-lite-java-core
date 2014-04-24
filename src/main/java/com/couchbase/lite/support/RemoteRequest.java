@@ -130,7 +130,7 @@ public class RemoteRequest implements Runnable {
         return request;
     }
 
-    private void setBody(HttpUriRequest request) {
+    protected void setBody(HttpUriRequest request) {
         // set body if appropriate
         if (body != null && request instanceof HttpEntityEnclosingRequestBase) {
             byte[] bodyBytes = null;

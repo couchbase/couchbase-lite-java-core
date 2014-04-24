@@ -81,6 +81,8 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
         addRequestHeaders(request);
 
+        setBody(request);
+
         executeRequest(httpClient, request);
 
     }
@@ -124,6 +126,8 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 if (contentTypeHeader != null
                         && contentTypeHeader.getValue().contains("multipart/related")) {
 
+                    Log.v(Log.TAG_SYNC, "contentTypeHeader = %s",contentTypeHeader.getValue());
+
                     try {
 
                         _topReader = new MultipartReader(contentTypeHeader.getValue(),this);
@@ -155,6 +159,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                     }
                 }
                 else {
+                    Log.v(Log.TAG_SYNC, "contentTypeHeader is not multipart = %s",contentTypeHeader.getValue());
                     if (entity != null) {
                         try {
                             inputStream = entity.getContent();
@@ -190,9 +195,10 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         if (_docReader != null) {
             throw new IllegalStateException("_docReader is already defined");
         }
-        Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", headers.get("X-Doc-ID"), this);
+        Log.v(Log.TAG_SYNC, "%s: Starting new document; headers =%s", this, headers);
+        Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
         _docReader = new MultipartDocumentReader(null, _db);
-        _docReader.setContentType((String)headers.get("\"Content-Type\""));
+        _docReader.setContentType((String) headers.get("Content-Type"));
     }
 
 
@@ -204,6 +210,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         if (_docReader == null) {
             throw new IllegalStateException("_docReader is not defined");
         }
+        Log.v(Log.TAG_SYNC, "%s: appending data to document", this);
         _docReader.appendData(data);
     }
 

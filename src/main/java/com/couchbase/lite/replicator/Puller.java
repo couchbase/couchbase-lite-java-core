@@ -261,7 +261,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @InterfaceAudience.Private
     protected void processInbox(RevisionList inbox) {
         if (canBulkGet == null) {
-            canBulkGet = !serverIsSyncGatewayVersion("0.81");
+            canBulkGet = serverIsSyncGatewayVersion("0.81");
         }
 
         // Ask the local database which of the revs are not known to it:
@@ -390,7 +390,9 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
 
         //actually run it outside the synchronized block
-        pullBulkRevisions(bulkWorkToStartNow);
+        if(bulkWorkToStartNow.size() > 0) {
+            pullBulkRevisions(bulkWorkToStartNow);
+        }
 
         for (RevisionInternal work : workToStartNow) {
             pullRemoteRevision(work);
@@ -542,6 +544,11 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         } catch (Exception e) {
             return;
         }
+
+        dl.setAuthenticator(getAuthenticator());
+
+        remoteRequestExecutor.execute(dl);
+
     }
 
 
