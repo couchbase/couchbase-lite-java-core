@@ -125,7 +125,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 InputStream inputStream = null;
 
                 if (contentTypeHeader != null
-                        && contentTypeHeader.getValue().contains("multipart/related")) {
+                        && contentTypeHeader.getValue().contains("multipart/")) {
 
                     Log.v(Log.TAG_SYNC, "contentTypeHeader = %s",contentTypeHeader.getValue());
 
@@ -174,7 +174,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                             }
                         }
                     }
-
                 }
             }
         } catch (ClientProtocolException e) {
