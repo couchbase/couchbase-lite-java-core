@@ -42,7 +42,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     private MultipartDocumentReader _docReader;
     private int _docCount;
     private BulkDownloaderDocumentBlock _onDocument;
-    //private HttpResponse response;
 
     public BulkDownloader(ScheduledExecutorService workExecutor,
                           HttpClientFactory clientFactory,
