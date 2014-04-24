@@ -38,7 +38,6 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
     public void parseJsonBuffer() {
         try {
-            Log.v(Log.TAG_REMOTE_REQUEST, "About to parse json buffer %s", new String(jsonBuffer.toByteArray(), "UTF-8"));
             document = Manager.getObjectMapper().readValue(jsonBuffer.toByteArray(), Map.class);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to parse json buffer", e);
