@@ -444,6 +444,8 @@ public class Query {
         queryOptions.setInclusiveEnd(true);
         queryOptions.setStale(getIndexUpdateMode());
         queryOptions.setAllDocsMode(getAllDocsMode());
+        queryOptions.setStartKeyDocId(getStartKeyDocId());
+        queryOptions.setEndKeyDocId(getEndKeyDocId());
         return queryOptions;
     }
 

@@ -231,6 +231,13 @@ public class Router implements Database.ChangeListener {
         else {
             options.setStartKey(getJSONQuery("startkey"));
             options.setEndKey(getJSONQuery("endkey"));
+            if (getJSONQuery("startkey_docid") != null) {
+                options.setStartKeyDocId(getJSONQuery("startkey_docid").toString());
+            }
+            if (getJSONQuery("endkey_docid") != null) {
+                options.setEndKeyDocId(getJSONQuery("endkey_docid").toString());
+            }
+
         }
 
         return true;
