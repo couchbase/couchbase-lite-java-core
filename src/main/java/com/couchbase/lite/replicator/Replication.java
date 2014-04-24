@@ -19,6 +19,7 @@ import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
 import com.couchbase.lite.support.RemoteMultipartRequest;
 import com.couchbase.lite.support.RemoteRequest;
@@ -29,8 +30,11 @@ import com.couchbase.lite.util.URIUtils;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.CookieStore;
 import org.apache.http.client.HttpResponseException;
+import org.apache.http.cookie.Cookie;
 import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -39,6 +43,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -205,7 +210,6 @@ public abstract class Replication implements NetworkReachabilityListener {
         });
 
         setClientFactory(clientFactory);
-        // this.clientFactory = clientFactory != null ? clientFactory : CouchbaseLiteHttpClientFactory.INSTANCE;
 
     }
 
@@ -230,10 +234,12 @@ public abstract class Replication implements NetworkReachabilityListener {
             if (managerClientFactory != null) {
                 this.clientFactory = managerClientFactory;
             } else {
-                this.clientFactory = CouchbaseLiteHttpClientFactory.INSTANCE;
+                PersistentCookieStore cookieStore = db.getPersistentCookieStore();
+                this.clientFactory = new CouchbaseLiteHttpClientFactory(cookieStore);
             }
         }
     }
+
 
     /**
      * Get the local database which is the source or target of this replication
@@ -525,6 +531,65 @@ public abstract class Replication implements NetworkReachabilityListener {
         String name = getClass().getSimpleName() + "@" + Integer.toHexString(hashCode()) + "[" + maskedRemoteWithoutCredentials + "]";
         return name;
     }
+
+
+    /**
+     * Sets an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     * @param value The value of the cookie.
+     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param maxAge The maxAge, in milliseconds, that this cookie should be valid for.
+     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     */
+    @InterfaceAudience.Public
+    public void setCookie(String name, String value, String path, long maxAge, boolean secure, boolean httpOnly) {
+        Date now = new Date();
+        Date expirationDate = new Date(now.getTime() + maxAge);
+        setCookie(name, value, path, expirationDate, secure, httpOnly);
+    }
+
+    /**
+     * Sets an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     * @param value The value of the cookie.
+     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param expirationDate The expiration date of the cookie.
+     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     */
+    @InterfaceAudience.Public
+    public void setCookie(String name, String value, String path, Date expirationDate, boolean secure, boolean httpOnly) {
+        if (remote == null) {
+            throw new IllegalStateException("Cannot setCookie since remote == null");
+        }
+        BasicClientCookie2 cookie = new BasicClientCookie2(name, value);
+        cookie.setDomain(remote.getHost());
+        if (path != null && path.length() > 0) {
+            cookie.setPath(path);
+        } else {
+            cookie.setPath(remote.getPath());
+        }
+
+        cookie.setExpiryDate(expirationDate);
+        cookie.setSecure(secure);
+        List<Cookie> cookies = Arrays.asList((Cookie)cookie);
+        this.clientFactory.addCookies(cookies);
+
+    }
+
+    /**
+     * Deletes an HTTP cookie for the Replication.
+     *
+     * @param name The name of the cookie.
+     */
+    @InterfaceAudience.Public
+    public void deleteCookie(String name) {
+        this.clientFactory.deleteCookie(name);
+    }
+
 
     /**
      * The type of event raised by a Replication when any of the following
@@ -892,7 +957,7 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     public void sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
 
-        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getHeaders(), onCompletion);
+        final RemoteRequest request = new RemoteRequest(workExecutor, clientFactory, method, url, body, getLocalDatabase(), getHeaders(), onCompletion);
 
         request.setAuthenticator(getAuthenticator());
 
@@ -974,6 +1039,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 method,
                 url,
                 multiPartEntity,
+                getLocalDatabase(),
                 getHeaders(),
                 onCompletion);
 
@@ -1094,7 +1160,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                         }
                         if (remoteLastSequence != null && remoteLastSequence.equals(localLastSequence)) {
                             lastSequence = localLastSequence;
-                            Log.d(Log.TAG_SYNC,"%s: Replicating from lastSequence=%s", this, lastSequence);
+                            Log.d(Log.TAG_SYNC, "%s: Replicating from lastSequence=%s", this, lastSequence);
                         } else {
                             Log.d(Log.TAG_SYNC, "%s: lastSequence mismatch: I had: %s, remote had: %s", this, localLastSequence, remoteLastSequence);
                         }
@@ -1237,7 +1303,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         Log.v(Log.TAG_SYNC, "%s: stopRemoteRequests() cancelling: %d requests", this, requests.size());
         for (RemoteRequest request : requests.keySet()) {
             Future future = requests.get(request);
-            Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s isCancelled: %s isDone: ", this, future, request, future.isCancelled(), future.isDone());
+            Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s isCancelled: %s isDone: %s", this, future, request, future.isCancelled(), future.isDone());
             boolean result = future.cancel(true);
             Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
         }
@@ -1395,5 +1461,10 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Private
     /* package */ void setServerType(String serverType) {
         this.serverType = serverType;
+    }
+
+    @InterfaceAudience.Private
+    /* package */ HttpClientFactory getClientFactory() {
+        return clientFactory;
     }
 }
