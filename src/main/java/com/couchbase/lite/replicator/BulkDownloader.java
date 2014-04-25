@@ -219,7 +219,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     /**
      * This method is called when a part is complete.
      */
-
     public void finishedPart() {
         Log.v(Log.TAG_SYNC, "%s: Finished document", this);
         if (_docReader == null) {

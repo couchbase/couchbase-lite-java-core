@@ -260,9 +260,9 @@ public class RevisionInternal {
     }
 
     // Calls the block on every attachment dictionary. The block can return a different dictionary,
-// which will be replaced in the rev's properties. If it returns nil, the operation aborts.
-// Returns YES if any changes were made.
-    public boolean mutateAttachments(CollectionUtils.Functor<Map<String, Object>, Map<String, Object>> functor) { //(: (NSDictionary*(^)(NSString*, NSDictionary*))block
+    // which will be replaced in the rev's properties. If it returns nil, the operation aborts.
+    // Returns YES if any changes were made.
+    public boolean mutateAttachments(CollectionUtils.Functor<Map<String, Object>, Map<String, Object>> functor) {
         {
             Map<String, Object> properties = getProperties();
             Map<String, Object> editedProperties = null;
