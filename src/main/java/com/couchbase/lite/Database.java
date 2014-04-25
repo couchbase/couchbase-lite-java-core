@@ -33,6 +33,7 @@ import com.couchbase.lite.support.Base64;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieStore;
+import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.Utils;
@@ -1883,6 +1884,25 @@ public final class Database {
     }
 
     /**
+     * Returns the revision history as a _revisions dictionary, as returned by the REST API's ?revs=true option.
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public Map<String,Object> getRevisionHistoryDictStartingFromAnyAncestor(RevisionInternal rev, List<String>ancestorRevIDs) {
+        List<RevisionInternal> history = getRevisionHistory(rev); // (this is in reverse order, newest..oldest
+        if (ancestorRevIDs != null && ancestorRevIDs.size() > 0) {
+            int n = history.size();
+            for (int i = 0; i < n; ++i) {
+                if (ancestorRevIDs.contains(history.get(i).getRevId())) {
+                    history = history.subList(0, i+1);
+                    break;
+                }
+            }
+        }
+        return makeRevisionHistoryDict(getRevisionHistory(rev));
+    }
+
+    /**
      * @exclude
      */
     @InterfaceAudience.Private
@@ -2796,6 +2816,46 @@ public final class Database {
             }
         }
 
+    }
+
+    // Replaces attachment data whose revpos is < minRevPos with stubs.
+    // If attachmentsFollow==YES, replaces data with "follows" key.
+    public static void stubOutAttachmentsInRevBeforeRevPos(final RevisionInternal rev, final int minRevPos, final boolean attachmentsFollow) {
+        if (minRevPos <= 1 && !attachmentsFollow) {
+            return;
+        }
+
+        rev.mutateAttachments(new CollectionUtils.Functor<Map<String,Object>,Map<String,Object>>() {
+            public Map<String, Object> invoke(Map<String, Object> attachment) {
+                int revPos = 0;
+                if (attachment.get("revpos") != null) {
+                    revPos = (Integer)attachment.get("revpos");
+                }
+
+                boolean includeAttachment = (revPos == 0 || revPos >= minRevPos);
+                boolean stubItOut = !includeAttachment && attachment.get("stub") == null;
+                boolean addFollows = includeAttachment && attachmentsFollow && attachment.get("follows") == null;
+
+                if (!stubItOut && !addFollows) {
+                    return attachment;  // no change
+                }
+
+                // Need to modify attachment entry:
+                Map<String, Object> editedAttachment = new HashMap<String, Object>(attachment);
+                editedAttachment.remove("data");
+                if (stubItOut) {
+                    // ...then remove the 'data' and 'follows' key:
+                    editedAttachment.remove("follows");
+                    editedAttachment.put("stub",true);
+                    Log.v(Log.TAG_SYNC, "Stubbed out attachment %s: revpos %d < %d", rev, revPos, minRevPos);
+                } else if (addFollows) {
+                    editedAttachment.remove("stub");
+                    editedAttachment.put("follows",true);
+                    Log.v(Log.TAG_SYNC, "Added 'follows' for attachment %s: revpos %d >= %d",rev, revPos, minRevPos);
+                }
+                return editedAttachment;
+            }
+        });
     }
 
 

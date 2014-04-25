@@ -307,18 +307,22 @@ public final class Pusher extends Replication implements Database.ChangeListener
                                 revisionFailed();
                                 continue;
                             }
-                            properties = new HashMap<String,Object>(rev.getProperties());
+
+                            RevisionInternal populatedRev = transformRevision(rev);
+
+                            List<String> possibleAncestors = (List<String>)revResults.get("possible_ancestors");
+                            properties = new HashMap<String,Object>(populatedRev.getProperties());
+                            populatedRev.getProperties().put("_revisions", db.getRevisionHistoryDictStartingFromAnyAncestor(populatedRev, possibleAncestors));
 
                             // Strip any attachments already known to the target db:
                             if (properties.containsKey("_attachments")) {
-                                /* TODO: port this ios code
-                                 // Look for the latest common ancestor and stub out older attachments:
-                                    NSArray* possible = revResults[@"possible_ancestors"];
-                                    int minRevPos = findCommonAncestor(rev, possible);
-                                    [CBLDatabase stubOutAttachmentsIn: rev beforeRevPos: minRevPos + 1
-                                                   attachmentsFollow: NO];
-                                    properties = rev.properties;
-                                 */
+                                // Look for the latest common ancestor and stub out older attachments:
+                                int minRevPos = findCommonAncestor(rev, possibleAncestors);
+
+                                Database.stubOutAttachmentsInRevBeforeRevPos(rev,minRevPos + 1,false);
+
+                                properties = rev.getProperties();
+
                                 if (uploadMultipartRevision(rev)) {
                                     continue;
                                 }
@@ -535,5 +539,23 @@ public final class Pusher extends Replication implements Database.ChangeListener
     }
 
 
+    // Given a revision and an array of revIDs, finds the latest common ancestor revID
+    // and returns its generation #. If there is none, returns 0.
+    private static int findCommonAncestor(RevisionInternal rev, List<String> possibleRevIDs) {
+        if (possibleRevIDs == null || possibleRevIDs.size() == 0) {
+            return 0;
+        }
+        List<String> history = Database.parseCouchDBRevisionHistory(rev.getProperties());
+        boolean changed = history.retainAll(possibleRevIDs);
+        String ancestorID = history.size() == 0 ? null : history.get(0);
+
+        if (ancestorID == null) {
+            return 0;
+        }
+
+        int generation = Database.parseRevIDNumber(ancestorID);
+
+        return generation;
+    }
 }
 
