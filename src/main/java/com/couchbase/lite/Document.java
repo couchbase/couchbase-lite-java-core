@@ -231,7 +231,10 @@ public final class Document {
      */
     @InterfaceAudience.Public
     public Object getProperty(String key) {
-        return getCurrentRevision().getProperties().get(key);
+        if (getCurrentRevision().getProperties().containsKey(key)){
+            return getCurrentRevision().getProperties().get(key);
+        }
+        return null;
     }
 
     /**
