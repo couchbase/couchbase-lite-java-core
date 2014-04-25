@@ -46,6 +46,9 @@ public class QueryOptions {
     private Query.IndexUpdateMode stale = Query.IndexUpdateMode.BEFORE;
     private Query.AllDocsMode allDocsMode;
 
+    private String startKeyDocId;
+    private String endKeyDocId;
+
 
     public Object getStartKey() {
         return startKey;
@@ -174,4 +177,21 @@ public class QueryOptions {
     public void setAllDocsMode(Query.AllDocsMode allDocsMode) {
         this.allDocsMode = allDocsMode;
     }
+
+    public String getStartKeyDocId() {
+        return startKeyDocId;
+    }
+
+    public void setStartKeyDocId(String startKeyDocId) {
+        this.startKeyDocId = startKeyDocId;
+    }
+
+    public String getEndKeyDocId() {
+        return endKeyDocId;
+    }
+
+    public void setEndKeyDocId(String endKeyDocId) {
+        this.endKeyDocId = endKeyDocId;
+    }
+
 }

@@ -620,15 +620,23 @@ public final class View {
             sql += ")";
         }
 
-        Object minKey = options.getStartKey();
-        Object maxKey = options.getEndKey();
+        String startKey = toJSONString(options.getStartKey());
+        String endKey = toJSONString(options.getEndKey());
+        String minKey = startKey;
+        String maxKey = endKey;
+        String minKeyDocId = options.getStartKeyDocId();
+        String maxKeyDocId = options.getEndKeyDocId();
+
         boolean inclusiveMin = true;
         boolean inclusiveMax = options.isInclusiveEnd();
         if (options.isDescending()) {
+            String min = minKey;
             minKey = maxKey;
-            maxKey = options.getStartKey();
+            maxKey = min;
             inclusiveMin = inclusiveMax;
             inclusiveMax = true;
+            minKeyDocId = options.getEndKeyDocId();
+            maxKeyDocId = options.getStartKeyDocId();
         }
 
         if (minKey != null) {
@@ -638,7 +646,13 @@ public final class View {
                 sql += " AND key > ?";
             }
             sql += collationStr;
-            argsList.add(toJSONString(minKey));
+            argsList.add(minKey);
+            if (minKeyDocId != null && inclusiveMin) {
+                //OPT: This calls the JSON collator a 2nd time unnecessarily.
+                sql += String.format(" AND (key > ? %s OR docid >= ?)", collationStr);
+                argsList.add(minKey);
+                argsList.add(minKeyDocId);
+            }
         }
 
         if (maxKey != null) {
@@ -648,20 +662,27 @@ public final class View {
                 sql += " AND key < ?";
             }
             sql += collationStr;
-            argsList.add(toJSONString(maxKey));
+            argsList.add(maxKey);
+            if (maxKeyDocId != null && inclusiveMax) {
+                sql += String.format(" AND (key < ? %s OR docid <= ?)", collationStr);
+                argsList.add(maxKey);
+                argsList.add(maxKeyDocId);
+            }
         }
 
         sql = sql
                 + " AND revs.sequence = maps.sequence AND docs.doc_id = revs.doc_id ORDER BY key";
         sql += collationStr;
+
         if (options.isDescending()) {
             sql = sql + " DESC";
         }
+
         sql = sql + " LIMIT ? OFFSET ?";
         argsList.add(Integer.toString(options.getLimit()));
         argsList.add(Integer.toString(options.getSkip()));
 
-        Log.v(Log.TAG_VIEW, "Query %s: %s", name, sql);
+        Log.v(Log.TAG_VIEW, "Query %s: %s | args: %s", name, sql, argsList);
 
         Cursor cursor = database.getDatabase().rawQuery(sql,
                 argsList.toArray(new String[argsList.size()]));
