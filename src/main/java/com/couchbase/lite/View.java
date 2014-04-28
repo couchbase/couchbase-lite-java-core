@@ -480,7 +480,7 @@ public final class View {
                     sequence = cursor.getLong(1);
                     String docId = cursor.getString(2);
                     if(docId.startsWith("_design/")) {  // design docs don't get indexed!
-                        cursor.moveToNext();
+                        keepGoing = cursor.moveToNext();
                         continue;
                     }
                     String revId = cursor.getString(3);
