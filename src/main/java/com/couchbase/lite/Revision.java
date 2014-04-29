@@ -192,6 +192,21 @@ public abstract class Revision {
     public abstract List<SavedRevision> getRevisionHistory() throws CouchbaseLiteException;
 
     /**
+     * Does this revision mark the deletion or removal (from available channels) of its document?
+     * (In other words, does it have a "_deleted_ or "_removed" property?)
+     */
+    @InterfaceAudience.Public
+    public boolean isGone() {
+        boolean wasRemovedFromChannel = false;
+        Object removed = getProperty("_removed");
+        if (removed != null) {
+            Boolean removedBoolean = (Boolean) removed;
+            wasRemovedFromChannel = removedBoolean.booleanValue();
+        }
+        return isDeletion() || wasRemovedFromChannel;
+    }
+
+    /**
      * Compare this revision to the given revision to check for equality.
      * The comparison makes sure that both revisions have the same revision ID.
      *

@@ -46,6 +46,7 @@ import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -147,6 +148,7 @@ public final class Database {
         KNOWN_SPECIAL_KEYS.add("_conflicts");
         KNOWN_SPECIAL_KEYS.add("_deleted_conflicts");
         KNOWN_SPECIAL_KEYS.add("_local_seq");
+        KNOWN_SPECIAL_KEYS.add("_removed");
     }
 
     /**
@@ -3164,15 +3166,28 @@ public final class Database {
             return null;
         }
 
+        List<String> specialKeysToLeave = Arrays.asList(
+                "_removed",
+                "_replication_id",
+                "_replication_state",
+                "_replication_state_time");
+
         // Don't allow any "_"-prefixed keys. Known ones we'll ignore, unknown ones are an error.
         Map<String,Object> properties = new HashMap<String,Object>(origProps.size());
         for (String key : origProps.keySet()) {
+            boolean shouldAdd = false;
             if(key.startsWith("_")) {
                 if(!KNOWN_SPECIAL_KEYS.contains(key)) {
                     Log.e(TAG, "Database: Invalid top-level key '%s' in document to be inserted", key);
                     return null;
                 }
+                if (specialKeysToLeave.contains(key)) {
+                    shouldAdd = true;
+                }
             } else {
+                shouldAdd = true;
+            }
+            if (shouldAdd) {
                 properties.put(key, origProps.get(key));
             }
         }
