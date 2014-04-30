@@ -164,8 +164,8 @@ public final class Manager {
      * The root directory of this manager (as specified at initialization time.)
      */
     @InterfaceAudience.Public
-    public String getDirectory() {
-        return directoryFile.getAbsolutePath();
+    public File getDirectory() {
+        return directoryFile;
     }
 
     /**
