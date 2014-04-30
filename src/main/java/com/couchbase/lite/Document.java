@@ -180,18 +180,16 @@ public final class Document {
      * Purges this document from the database; this is more than deletion, it forgets entirely about it.
      * The purge will NOT be replicated to other databases.
      *
-     * @return boolean to indicate whether purged or not
      * @throws CouchbaseLiteException
      */
     @InterfaceAudience.Public
-    public boolean purge() throws CouchbaseLiteException {
+    public void purge() throws CouchbaseLiteException {
         Map<String, List<String>> docsToRevs = new HashMap<String, List<String>>();
         List<String> revs = new ArrayList<String>();
         revs.add("*");
         docsToRevs.put(documentId, revs);
         database.purgeRevisions(docsToRevs);
         database.removeDocumentFromCache(this);
-        return true;
     }
 
     /**
