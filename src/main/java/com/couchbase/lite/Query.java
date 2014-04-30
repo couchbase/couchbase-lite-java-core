@@ -196,10 +196,10 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setLimit(int limit) {
+    public void setLimit(int limit) {
         this.limit = limit;
-        return this;
     }
+
 
     @InterfaceAudience.Public
     public int getSkip() {
@@ -207,9 +207,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setSkip(int skip) {
+    public void setSkip(int skip) {
         this.skip = skip;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -218,9 +217,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setDescending(boolean descending) {
+    public void setDescending(boolean descending) {
         this.descending = descending;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -229,9 +227,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setStartKey(Object startKey) {
+    public void setStartKey(Object startKey) {
         this.startKey = startKey;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -240,9 +237,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setEndKey(Object endKey) {
+    public void setEndKey(Object endKey) {
         this.endKey = endKey;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -251,9 +247,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setStartKeyDocId(String startKeyDocId) {
+    public void setStartKeyDocId(String startKeyDocId) {
         this.startKeyDocId = startKeyDocId;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -262,9 +257,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setEndKeyDocId(String endKeyDocId) {
+    public void setEndKeyDocId(String endKeyDocId) {
         this.endKeyDocId = endKeyDocId;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -273,9 +267,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setIndexUpdateMode(IndexUpdateMode indexUpdateMode) {
+    public void setIndexUpdateMode(IndexUpdateMode indexUpdateMode) {
         this.indexUpdateMode = indexUpdateMode;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -284,9 +277,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setAllDocsMode(AllDocsMode allDocsMode) {
+    public void setAllDocsMode(AllDocsMode allDocsMode) {
         this.allDocsMode = allDocsMode;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -295,9 +287,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setKeys(List<Object> keys) {
+    public void setKeys(List<Object> keys) {
         this.keys = keys;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -306,9 +297,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setMapOnly(boolean mapOnly) {
+    public void setMapOnly(boolean mapOnly) {
         this.mapOnly = mapOnly;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -317,9 +307,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setGroupLevel(int groupLevel) {
+    public void setGroupLevel(int groupLevel) {
         this.groupLevel = groupLevel;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -328,9 +317,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setPrefetch(boolean prefetch) {
+    public void setPrefetch(boolean prefetch) {
         this.prefetch = prefetch;
-        return this;
     }
 
     @InterfaceAudience.Public
@@ -339,9 +327,8 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public Query setIncludeDeleted(boolean includeDeletedParam) {
+    public void setIncludeDeleted(boolean includeDeletedParam) {
         allDocsMode = (includeDeletedParam == true) ? AllDocsMode.INCLUDE_DELETED : AllDocsMode.ALL_DOCS;
-        return this;
     }
 
     /**
@@ -416,6 +403,7 @@ public class Query {
                 }
             }
         });
+
     }
 
     /**
@@ -457,4 +445,8 @@ public class Query {
             view.delete();
         }
     }
+
+
+
+
 }
