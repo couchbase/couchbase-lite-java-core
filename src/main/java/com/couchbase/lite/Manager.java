@@ -68,6 +68,8 @@ public final class Manager {
      */
     public static final String LEGAL_CHARACTERS = "[^a-z]{1,}[^a-z0-9_$()/+-]*$";
 
+    public static final String VERSION = Version.VERSION;
+
     private static final ObjectMapper mapper = new ObjectMapper();
     private ManagerOptions options;
     private File directoryFile;
@@ -116,7 +118,7 @@ public final class Manager {
     @InterfaceAudience.Public
     public Manager(Context context, ManagerOptions options) throws IOException {
 
-        Log.i(Database.TAG, "Starting Manager version: %s", Version.getVersion());
+        Log.i(Database.TAG, "Starting Manager version: %s", Manager.VERSION);
 
         this.context = context;
         this.directoryFile = context.getFilesDir();
