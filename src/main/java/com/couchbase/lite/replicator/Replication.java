@@ -1253,6 +1253,10 @@ public abstract class Replication implements NetworkReachabilityListener {
                     Log.w(Log.TAG_SYNC, "%s: Database is null, ignoring remote checkpoint response", this);
                     return;
                 }
+                if (!db.isOpen()) {
+                    Log.w(Log.TAG_SYNC, "%s: Database is closed, ignoring remote checkpoint response", this);
+                    return;
+                }
                 if (e != null) {
                     // Failed to save checkpoint:
                     switch (getStatusFromError(e)) {
