@@ -531,7 +531,6 @@ public final class Pusher extends Replication implements Database.ChangeListener
                             }
                         }
 
-                        dontSendMultipart = true;
                         Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
                         setError(e);
                         revisionFailed();
