@@ -1380,11 +1380,11 @@ public abstract class Replication implements NetworkReachabilityListener {
     }
 
 
-    protected RevisionInternal transformRevision(final RevisionInternal rev) {
-        RevisionInternal xformed = rev;
+    protected RevisionInternal transformRevision(RevisionInternal rev) {
         if(revisionBodyTransformationBlock != null) {
             try {
-                xformed = revisionBodyTransformationBlock.invoke(rev);
+                final int generation = rev.getGeneration();
+                RevisionInternal xformed = revisionBodyTransformationBlock.invoke(rev);
                 if (xformed == null)
                     return null;
                 if (xformed != rev) {
@@ -1404,17 +1404,18 @@ public abstract class Replication implements NetworkReachabilityListener {
                                     throw new IllegalStateException("Transformer added attachment without adding data");
                                 }
                                 Map<String,Object> nuInfo = new HashMap<String, Object>(info);
-                                nuInfo.put("revpos",rev.getGeneration());
+                                nuInfo.put("revpos",generation);
                                 return nuInfo;
                             }
                         });
                     }
+                    rev = xformed;
                 }
             }catch (Exception e) {
                 Log.w(Log.TAG_SYNC,"%s: Exception transforming a revision of doc '%s", e, this, rev.getDocId());
             }
         }
-        return xformed;
+        return rev;
     }
 
     /**
