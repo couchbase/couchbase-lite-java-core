@@ -1336,9 +1336,11 @@ public abstract class Replication implements NetworkReachabilityListener {
         Log.v(Log.TAG_SYNC, "%s: stopRemoteRequests() cancelling: %d requests", this, requests.size());
         for (RemoteRequest request : requests.keySet()) {
             Future future = requests.get(request);
-            Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s isCancelled: %s isDone: %s", this, future, request, future.isCancelled(), future.isDone());
-            boolean result = future.cancel(true);
-            Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
+            if (future != null) {
+                Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s isCancelled: %s isDone: %s", this, future, request, future.isCancelled(), future.isDone());
+                boolean result = future.cancel(true);
+                Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
+            }
         }
     }
 
