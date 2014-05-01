@@ -47,7 +47,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
     private boolean creatingTarget;
     private boolean observing;
     private ReplicationFilter filter;
-
+    private boolean dontSendMultipart = false;
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
 
@@ -281,6 +281,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                         // Go through the list of local changes again, selecting the ones the destination server
                         // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
                         final List<Object> docsToSend = new ArrayList<Object>();
+                        RevisionList revsToSend = new RevisionList();
                         for(RevisionInternal rev : changes) {
                             // Is this revision in the server's 'missing' list?
                             Map<String,Object> properties = null;
@@ -296,54 +297,67 @@ public final class Pusher extends Replication implements Database.ChangeListener
 
                             // Get the revision's properties:
                             EnumSet<Database.TDContentOptions> contentOptions = EnumSet.of(
-                                    Database.TDContentOptions.TDIncludeAttachments,
-                                    Database.TDContentOptions.TDBigAttachmentsFollow
+                                    Database.TDContentOptions.TDIncludeAttachments
                             );
 
+                            if (!dontSendMultipart && revisionBodyTransformationBlock==null) {
+                                contentOptions.add(Database.TDContentOptions.TDBigAttachmentsFollow);
+                            }
+
+                            RevisionInternal loadedRev;
                             try {
-                                db.loadRevisionBody(rev, contentOptions);
+                                loadedRev = db.loadRevisionBody(rev, contentOptions);
+                                properties = new HashMap<String,Object>(rev.getProperties());
                             } catch (CouchbaseLiteException e1) {
                                 Log.w(Log.TAG_SYNC, "%s Couldn't get local contents of %s", rev, Pusher.this);
                                 revisionFailed();
                                 continue;
                             }
 
-                            RevisionInternal populatedRev = transformRevision(rev);
+                            RevisionInternal populatedRev = transformRevision(loadedRev);
 
                             List<String> possibleAncestors = (List<String>)revResults.get("possible_ancestors");
+
                             properties = new HashMap<String,Object>(populatedRev.getProperties());
-                            populatedRev.getProperties().put("_revisions", db.getRevisionHistoryDictStartingFromAnyAncestor(populatedRev, possibleAncestors));
+                            Map<String,Object> revisions = db.getRevisionHistoryDictStartingFromAnyAncestor(populatedRev, possibleAncestors);
+                            properties.put("_revisions",revisions);
+                            populatedRev.setProperties(properties);
 
                             // Strip any attachments already known to the target db:
                             if (properties.containsKey("_attachments")) {
                                 // Look for the latest common ancestor and stub out older attachments:
-                                int minRevPos = findCommonAncestor(rev, possibleAncestors);
+                                int minRevPos = findCommonAncestor(populatedRev, possibleAncestors);
 
-                                Database.stubOutAttachmentsInRevBeforeRevPos(rev,minRevPos + 1,false);
+                                Database.stubOutAttachmentsInRevBeforeRevPos(populatedRev,minRevPos + 1,false);
 
-                                properties = rev.getProperties();
+                                properties = populatedRev.getProperties();
 
-                                if (uploadMultipartRevision(rev)) {
+                                if (!dontSendMultipart && uploadMultipartRevision(populatedRev)) {
                                     continue;
                                 }
                             }
 
-                            if(properties != null) {
+                            if(properties != null && properties.containsKey("_id")) {
 
-                                // TODO: ios code does not call db.getRevisionHistoryDict() here
-                                // Add the _revisions list:
-                                properties.put("_revisions", db.getRevisionHistoryDict(rev));
-
+                                revsToSend.add(rev);
                                 //now add it to the docs to send
                                 docsToSend.add(properties);
 
-                                assert properties.get("_id") != null;
+                                //TODO: port this code from iOS
+                                /*
+                                bufferedSize += [CBLJSON estimateMemorySize: properties];
+                                if (bufferedSize > kMaxBulkDocsObjectSize) {
+                                    [self uploadBulkDocs: docsToSend changes: revsToSend];
+                                    docsToSend = $marray();
+                                    revsToSend = [[CBL_RevisionList alloc] init];
+                                    bufferedSize = 0;
+                                }
+                                */
                             }
-
                         }
 
                         // Post the revisions to the destination:
-                        uploadBulkDocs(docsToSend, changes);
+                        uploadBulkDocs(docsToSend, revsToSend);
 
                     } else {
                         // None of the revisions are new to the remote
@@ -439,7 +453,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
         MultipartEntity multiPart = null;
 
         Map<String, Object> revProps = revision.getProperties();
-        revProps.put("_revisions", db.getRevisionHistoryDict(revision));
+        //revProps.put("_revisions", db.getRevisionHistoryDict(revision));
 
         // TODO: refactor this to
         /*
@@ -519,6 +533,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                               [self uploadJSONRevision: rev];
                           }
                          */
+                        dontSendMultipart = true;
                         Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
                         setError(e);
                         revisionFailed();
@@ -546,6 +561,10 @@ public final class Pusher extends Replication implements Database.ChangeListener
             return 0;
         }
         List<String> history = Database.parseCouchDBRevisionHistory(rev.getProperties());
+
+        //rev is missing _revisions property
+        assert(history != null);
+
         boolean changed = history.retainAll(possibleRevIDs);
         String ancestorID = history.size() == 0 ? null : history.get(0);
 

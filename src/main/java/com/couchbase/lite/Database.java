@@ -1899,7 +1899,7 @@ public final class Database {
                 }
             }
         }
-        return makeRevisionHistoryDict(getRevisionHistory(rev));
+        return makeRevisionHistoryDict(history);
     }
 
     /**
@@ -2671,7 +2671,7 @@ public final class Database {
 
 
 
-                if(dataBase64 == null || dataSuppressed == true) {
+                if(!(dataBase64 != null || dataSuppressed)) {
                     attachment.put("stub", true);
                 }
 
@@ -2833,8 +2833,8 @@ public final class Database {
                 }
 
                 boolean includeAttachment = (revPos == 0 || revPos >= minRevPos);
-                boolean stubItOut = !includeAttachment && attachment.get("stub") == null;
-                boolean addFollows = includeAttachment && attachmentsFollow && attachment.get("follows") == null;
+                boolean stubItOut = !includeAttachment && (attachment.get("stub") == null || (Boolean)attachment.get("stub") == false);
+                boolean addFollows = includeAttachment && attachmentsFollow && (attachment.get("follows") == null || (Boolean)attachment.get("follows") == false);
 
                 if (!stubItOut && !addFollows) {
                     return attachment;  // no change
@@ -3197,7 +3197,7 @@ public final class Database {
         if(revisions == null) {
             return new ArrayList<String>();
         }
-        List<String> revIDs = (List<String>)revisions.get("ids");
+        List<String> revIDs = new ArrayList<String>((List<String>)revisions.get("ids"));
         if (revIDs == null || revIDs.isEmpty()) {
             return new ArrayList<String>();
         }
