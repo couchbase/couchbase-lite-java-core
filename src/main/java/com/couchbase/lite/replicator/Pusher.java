@@ -15,6 +15,7 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.URIUtils;
 
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.entity.mime.MultipartEntity;
@@ -337,13 +338,14 @@ public final class Pusher extends Replication implements Database.ChangeListener
                                 }
                             }
 
-                            if(properties != null && properties.containsKey("_id")) {
+                            if(properties == null || !properties.containsKey("_id")) {
+                                throw new IllegalStateException("properties must contain a document _id");
+                            }
 
-                                revsToSend.add(rev);
-                                //now add it to the docs to send
-                                docsToSend.add(properties);
+                            revsToSend.add(rev);
+                            docsToSend.add(properties);
 
-                                //TODO: port this code from iOS
+                            //TODO: port this code from iOS
                                 /*
                                 bufferedSize += [CBLJSON estimateMemorySize: properties];
                                 if (bufferedSize > kMaxBulkDocsObjectSize) {
@@ -353,7 +355,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                                     bufferedSize = 0;
                                 }
                                 */
-                            }
+
                         }
 
                         // Post the revisions to the destination:
@@ -523,17 +525,18 @@ public final class Pusher extends Replication implements Database.ChangeListener
             public void onCompletion(Object result, Throwable e) {
                 try {
                     if(e != null) {
-                        // Server doesn't like multipart, eh? Fall back to JSON.
                         if(e instanceof HttpResponseException) {
-                            //status 415 = "bad_content_type"
+                            // Server doesn't like multipart, eh? Fall back to JSON.
                             if (((HttpResponseException) e).getStatusCode() == 415) {
+                                //status 415 = "bad_content_type"
                                 dontSendMultipart = true;
+                                uploadJsonRevision(revision);
                             }
+                        } else {
+                            Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
+                            setError(e);
+                            revisionFailed();
                         }
-
-                        Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
-                        setError(e);
-                        revisionFailed();
                     } else {
                         Log.v(Log.TAG_SYNC, "Uploaded multipart request.");
                         removePending(revision);
@@ -549,6 +552,37 @@ public final class Pusher extends Replication implements Database.ChangeListener
         return true;
 
     }
+
+    // Fallback to upload a revision if uploadMultipartRevision failed due to the server's rejecting
+    // multipart format.
+    private void uploadJsonRevision(final RevisionInternal rev) {
+        // Get the revision's properties:
+        if (!db.inlineFollowingAttachmentsIn(rev)) {
+            error = new CouchbaseLiteException(Status.BAD_ATTACHMENT);
+            revisionFailed();
+            return;
+        }
+
+        asyncTaskStarted();
+        String path = String.format("/%s?new_edits=false", URIUtils.encode(rev.getDocId()));
+        sendAsyncRequest("PUT",
+        path,
+        rev.getProperties(),
+        new RemoteRequestCompletionBlock() {
+            public void onCompletion(Object result, Throwable e) {
+                if (e != null) {
+                    setError(e);
+                    revisionFailed();
+                } else {
+                    Log.v(Log.TAG_SYNC, "%s: Sent %s (JSON), response=%s", this, rev, result);
+                    removePending(rev);
+                }
+                asyncTaskFinished(1);
+            }
+        });
+    }
+
+
 
 
     // Given a revision and an array of revIDs, finds the latest common ancestor revID
