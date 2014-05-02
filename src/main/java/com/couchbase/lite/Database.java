@@ -35,9 +35,11 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.StreamUtils;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.Utils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -2855,6 +2857,34 @@ public final class Database {
                     editedAttachment.put("follows",true);
                     Log.v(Log.TAG_SYNC, "Added 'follows' for attachment %s: revpos %d >= %d",rev, revPos, minRevPos);
                 }
+                return editedAttachment;
+            }
+        });
+    }
+
+    // Replaces the "follows" key with the real attachment data in all attachments to 'doc'.
+    public boolean inlineFollowingAttachmentsIn(RevisionInternal rev) {
+
+        return rev.mutateAttachments(new CollectionUtils.Functor<Map<String, Object>, Map<String, Object>>() {
+            public Map<String, Object> invoke(Map<String, Object> attachment) {
+                if (!attachment.containsKey("follows")) {
+                    return attachment;
+                }
+                URL fileURL = fileForAttachmentDict(attachment);
+                byte[] fileData = null;
+                try {
+                    InputStream is = fileURL.openStream();
+                    ByteArrayOutputStream os = new ByteArrayOutputStream();
+                    StreamUtils.copyStream(is,os);
+                    fileData = os.toByteArray();
+                } catch (IOException e) {
+                    Log.e(Log.TAG_SYNC,"could not retrieve attachment data: %S",e);
+                    return null;
+                }
+
+                Map<String, Object> editedAttachment = new HashMap<String, Object>(attachment);
+                editedAttachment.remove("follows");
+                editedAttachment.put("data",Base64.encodeBytes(fileData));
                 return editedAttachment;
             }
         });
