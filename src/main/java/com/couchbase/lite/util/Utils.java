@@ -44,9 +44,16 @@ public class Utils {
 
     public static byte[] byteArrayResultForQuery(SQLiteStorageEngine database, String query, String[] args) throws SQLException {
         byte[] result = null;
-        Cursor cursor = database.rawQuery(query, args);
-        if (cursor.moveToNext()) {
-            result = cursor.getBlob(0);
+        Cursor cursor = null;
+        try {
+            cursor = database.rawQuery(query, args);
+            if (cursor.moveToNext()) {
+                result = cursor.getBlob(0);
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
         }
         return result;
     }
