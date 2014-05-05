@@ -496,32 +496,39 @@ public final class View {
                         // Find conflicts with documents from previous indexings.
                         String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
 
-                        Cursor cursor2 = database.getDatabase().rawQuery(
-                                "SELECT revid, sequence FROM revs "
-                                        + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
-                                        + "ORDER BY revID DESC "
-                                        + "LIMIT 1", selectArgs2);
+                        Cursor cursor2 = null;
+                        try {
+                            cursor2 = database.getDatabase().rawQuery(
+                                    "SELECT revid, sequence FROM revs "
+                                            + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
+                                            + "ORDER BY revID DESC "
+                                            + "LIMIT 1", selectArgs2);
 
-                        if (cursor2.moveToNext()) {
-                            String oldRevId = cursor2.getString(0);
-                            // This is the revision that used to be the 'winner'.
-                            // Remove its emitted rows:
-                            long oldSequence = cursor2.getLong(1);
-                            String[] args = {
-                                    Integer.toString(getViewId()),
-                                    Long.toString(oldSequence)
-                            };
-                            database.getDatabase().execSQL(
-                                    "DELETE FROM maps WHERE view_id=? AND sequence=?", args);
-                            if (RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
-                                // It still 'wins' the conflict, so it's the one that
-                                // should be mapped [again], not the current revision!
-                                revId = oldRevId;
-                                sequence = oldSequence;
+                            if (cursor2.moveToNext()) {
+                                String oldRevId = cursor2.getString(0);
+                                // This is the revision that used to be the 'winner'.
+                                // Remove its emitted rows:
+                                long oldSequence = cursor2.getLong(1);
+                                String[] args = {
+                                        Integer.toString(getViewId()),
+                                        Long.toString(oldSequence)
+                                };
+                                database.getDatabase().execSQL(
+                                        "DELETE FROM maps WHERE view_id=? AND sequence=?", args);
+                                if (RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
+                                    // It still 'wins' the conflict, so it's the one that
+                                    // should be mapped [again], not the current revision!
+                                    revId = oldRevId;
+                                    sequence = oldSequence;
 
-                                String[] selectArgs3 = { Long.toString(sequence) };
-                                json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
+                                    String[] selectArgs3 = { Long.toString(sequence) };
+                                    json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
 
+                                }
+                            }
+                        } finally {
+                            if (cursor2 != null) {
+                                cursor2.close();
                             }
                         }
 
