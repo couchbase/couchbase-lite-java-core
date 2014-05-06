@@ -897,7 +897,7 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public boolean open() {
+    public synchronized boolean open() {
         if(open) {
             return true;
         }
