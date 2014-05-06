@@ -524,7 +524,11 @@ public abstract class Replication implements NetworkReachabilityListener {
         continuous = false;
         stopRemoteRequests();
         cancelPendingRetryIfReady();
-        db.forgetReplication(this);
+        if (db != null) {
+            db.forgetReplication(this);
+        } else {
+            Log.w(Log.TAG_SYNC, "%s: not calling db.forgetReplication(), since db is null", this);
+        }
         if (running && asyncTaskCount <= 0) {
             Log.v(Log.TAG_SYNC, "%s: calling stopped()", this);
             stopped();
@@ -699,6 +703,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             } else {
                 db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
             }
+            Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
             db = null;
         }
     }
