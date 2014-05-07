@@ -894,6 +894,12 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Private
     public synchronized void asyncTaskStarted() {
+        try {
+            Log.v(Log.TAG_SYNC, "%s: asyncTaskStarted %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount + 1);
+            dumpPartialStack();
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception printing stacktrace");
+        }
         if (asyncTaskCount++ == 0) {
             updateActive();
         }
@@ -904,10 +910,30 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Private
     public synchronized void asyncTaskFinished(int numTasks) {
+        try {
+            Log.v(Log.TAG_SYNC, "%s: asyncTaskFinished %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount - numTasks);
+            dumpPartialStack();
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception printing stacktrace");
+        }
         this.asyncTaskCount -= numTasks;
         assert(asyncTaskCount >= 0);
         if (asyncTaskCount == 0) {
             updateActive();
+        }
+    }
+
+    private void dumpPartialStack() {
+        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+        if (stackTraceElements.length >= 6) {
+            int counter = 0;
+            for (int i=0; i<6; i++) {
+                StackTraceElement stackTraceElement = stackTraceElements[i];
+                if (stackTraceElement.getClassName().startsWith("com.couchbase") &&
+                        !stackTraceElement.getMethodName().contains("dumpPartialStack")) {
+                    Log.v(Log.TAG_SYNC, "[%d] %s:%s:%d", counter++, stackTraceElement.getClassName(), stackTraceElement.getMethodName(), stackTraceElement.getLineNumber());
+                }
+            }
         }
     }
 
