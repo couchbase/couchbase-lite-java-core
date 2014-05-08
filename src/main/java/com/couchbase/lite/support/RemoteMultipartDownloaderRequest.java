@@ -35,23 +35,17 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
     @Override
     public void run() {
 
-        try {
-            HttpClient httpClient = clientFactory.getHttpClient();
+        HttpClient httpClient = clientFactory.getHttpClient();
 
-            preemptivelySetAuthCredentials(httpClient);
+        preemptivelySetAuthCredentials(httpClient);
 
-            HttpUriRequest request = createConcreteRequest();
+        HttpUriRequest request = createConcreteRequest();
 
-            request.addHeader("Accept", "*/*");
+        request.addHeader("Accept", "*/*");
 
-            addRequestHeaders(request);
+        addRequestHeaders(request);
 
-            executeRequest(httpClient, request);
-
-        } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception: ", e);
-            throw new RuntimeException(e);
-        }
+        executeRequest(httpClient, request);
 
     }
 
@@ -142,13 +136,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
         } catch (IOException e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
-        } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: caught and rethrowing unexpected exception", e, this);
-            throw new RuntimeException(e);
-        } finally {
-            Log.v(Log.TAG_REMOTE_REQUEST, "%s: finally clause entered", this);
         }
-
     }
 
 }
