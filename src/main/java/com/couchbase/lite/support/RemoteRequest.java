@@ -86,28 +86,21 @@ public class RemoteRequest implements Runnable {
     @Override
     public void run() {
 
-        try {
-            
-            HttpClient httpClient = clientFactory.getHttpClient();
+        HttpClient httpClient = clientFactory.getHttpClient();
 
-            ClientConnectionManager manager = httpClient.getConnectionManager();
+        ClientConnectionManager manager = httpClient.getConnectionManager();
 
-            HttpUriRequest request = createConcreteRequest();
+        HttpUriRequest request = createConcreteRequest();
 
-            preemptivelySetAuthCredentials(httpClient);
+        preemptivelySetAuthCredentials(httpClient);
 
-            request.addHeader("Accept", "multipart/related, application/json");
+        request.addHeader("Accept", "multipart/related, application/json");
 
-            addRequestHeaders(request);
+        addRequestHeaders(request);
 
-            setBody(request);
+        setBody(request);
 
-            executeRequest(httpClient, request);
-
-        } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception: ", e);
-            throw new RuntimeException(e);
-        }
+        executeRequest(httpClient, request);
 
     }
 
