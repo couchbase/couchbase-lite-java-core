@@ -1354,6 +1354,9 @@ public abstract class Replication implements NetworkReachabilityListener {
                 boolean result = future.cancel(true);
                 Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
             }
+            Log.v(Log.TAG_SYNC, "%s: aborting request", this);
+            request.abort();
+            Log.v(Log.TAG_SYNC, "%s: aborted request", this);
         }
     }
 

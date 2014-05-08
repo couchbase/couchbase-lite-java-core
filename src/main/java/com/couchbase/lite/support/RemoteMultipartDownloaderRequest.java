@@ -39,8 +39,6 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
         preemptivelySetAuthCredentials(httpClient);
 
-        HttpUriRequest request = createConcreteRequest();
-
         request.addHeader("Accept", "*/*");
 
         addRequestHeaders(request);
@@ -52,10 +50,16 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
     protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
         Object fullBody = null;
         Throwable error = null;
+        HttpResponse response = null;
 
         try {
 
-            HttpResponse response = httpClient.execute(request);
+            if (request.isAborted()) {
+                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
+                return;
+            }
+
+            response = httpClient.execute(request);
 
             try {
                 // add in cookies to global store
@@ -130,12 +134,14 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
                 }
             }
-        } catch (ClientProtocolException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "client protocol exception", e);
-            error = e;
         } catch (IOException e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
+            respondWithResult(fullBody, e, response);
+        } catch (Exception e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
+            error = e;
+            respondWithResult(fullBody, e, response);
         }
     }
 
