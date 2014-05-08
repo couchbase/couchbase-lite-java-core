@@ -87,7 +87,7 @@ public class RemoteRequest implements Runnable {
     public void run() {
 
         try {
-
+            
             HttpClient httpClient = clientFactory.getHttpClient();
 
             ClientConnectionManager manager = httpClient.getConnectionManager();
@@ -235,13 +235,9 @@ public class RemoteRequest implements Runnable {
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception", e);
             throw new RuntimeException(e);
-        } finally {
-            Log.v(Log.TAG_REMOTE_REQUEST, "%s: finally clause entered", this);
         }
 
-        Log.v(Log.TAG_REMOTE_REQUEST, "%s: calling respondWithResult", this);
         respondWithResult(fullBody, error, response);
-        
     }
 
     protected void preemptivelySetAuthCredentials(HttpClient httpClient) {
