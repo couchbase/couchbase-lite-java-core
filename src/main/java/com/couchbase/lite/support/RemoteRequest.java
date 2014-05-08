@@ -66,6 +66,7 @@ public class RemoteRequest implements Runnable {
     protected RemoteRequestCompletionBlock onPostCompletion;
     private int retryCount;
     private Database db;
+    protected HttpUriRequest request;
 
     protected Map<String, Object> requestHeaders;
 
@@ -80,6 +81,7 @@ public class RemoteRequest implements Runnable {
         this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
         this.db = db;
+        this.request = createConcreteRequest();
 
     }
 
@@ -89,8 +91,6 @@ public class RemoteRequest implements Runnable {
         HttpClient httpClient = clientFactory.getHttpClient();
 
         ClientConnectionManager manager = httpClient.getConnectionManager();
-
-        HttpUriRequest request = createConcreteRequest();
 
         preemptivelySetAuthCredentials(httpClient);
 
@@ -102,6 +102,14 @@ public class RemoteRequest implements Runnable {
 
         executeRequest(httpClient, request);
 
+    }
+
+    public void abort() {
+        if (request != null) {
+            request.abort();
+        } else {
+            Log.w(Log.TAG_REMOTE_REQUEST, "%s: Unable to abort request since underlying request is null", this);
+        }
     }
 
     protected void addRequestHeaders(HttpUriRequest request) {
@@ -177,6 +185,12 @@ public class RemoteRequest implements Runnable {
         HttpResponse response = null;
 
         try {
+
+            if (request.isAborted()) {
+                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
+                return;
+            }
+
             response = httpClient.execute(request);
 
             // add in cookies to global store
@@ -214,9 +228,6 @@ public class RemoteRequest implements Runnable {
                     }
                 }
             }
-        } catch (ClientProtocolException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "client protocol exception", e);
-            error = e;
         } catch (IOException e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
@@ -225,8 +236,12 @@ public class RemoteRequest implements Runnable {
             if (retryRequest()) {
                 return;
             }
+        } catch (Exception e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
+            error = e;
         }
         respondWithResult(fullBody, error, response);
+
     }
 
     protected void preemptivelySetAuthCredentials(HttpClient httpClient) {
@@ -270,6 +285,7 @@ public class RemoteRequest implements Runnable {
     }
 
     public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
+
         if (workExecutor != null) {
             workExecutor.submit(new Runnable() {
 
