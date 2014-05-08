@@ -1,6 +1,7 @@
 package com.couchbase.lite.support;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.util.Log;
 
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
@@ -26,27 +27,33 @@ public class RemoteMultipartRequest extends RemoteRequest {
     @Override
     public void run() {
 
-        HttpClient httpClient = clientFactory.getHttpClient();
+        try {
+            HttpClient httpClient = clientFactory.getHttpClient();
 
-        preemptivelySetAuthCredentials(httpClient);
+            preemptivelySetAuthCredentials(httpClient);
 
-        HttpUriRequest request = null;
-        if (method.equalsIgnoreCase("PUT")) {
-            HttpPut putRequest = new HttpPut(url.toExternalForm());
-            putRequest.setEntity(multiPart);
-            request = putRequest;
+            HttpUriRequest request = null;
+            if (method.equalsIgnoreCase("PUT")) {
+                HttpPut putRequest = new HttpPut(url.toExternalForm());
+                putRequest.setEntity(multiPart);
+                request = putRequest;
 
-        } else if (method.equalsIgnoreCase("POST")) {
-            HttpPost postRequest = new HttpPost(url.toExternalForm());
-            postRequest.setEntity(multiPart);
-            request = postRequest;
-        } else {
-            throw new IllegalArgumentException("Invalid request method: " + method);
+            } else if (method.equalsIgnoreCase("POST")) {
+                HttpPost postRequest = new HttpPost(url.toExternalForm());
+                postRequest.setEntity(multiPart);
+                request = postRequest;
+            } else {
+                throw new IllegalArgumentException("Invalid request method: " + method);
+            }
+
+            request.addHeader("Accept", "*/*");
+
+            executeRequest(httpClient, request);
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception: ", e);
+            throw new RuntimeException(e);
         }
-
-        request.addHeader("Accept", "*/*");
-
-        executeRequest(httpClient, request);
 
     }
 

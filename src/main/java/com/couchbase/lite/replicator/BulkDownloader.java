@@ -69,22 +69,28 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     @Override
     public void run() {
 
-        HttpClient httpClient = clientFactory.getHttpClient();
+        try {
+            HttpClient httpClient = clientFactory.getHttpClient();
 
-        preemptivelySetAuthCredentials(httpClient);
+            preemptivelySetAuthCredentials(httpClient);
 
-        HttpUriRequest request = createConcreteRequest();
+            HttpUriRequest request = createConcreteRequest();
 
-        request.addHeader("Content-Type", "application/json");
-        request.addHeader("Accept", "multipart/related");
-        //TODO: implement gzip support for server response see issue #172
-        //request.addHeader("X-Accept-Part-Encoding", "gzip");
+            request.addHeader("Content-Type", "application/json");
+            request.addHeader("Accept", "multipart/related");
+            //TODO: implement gzip support for server response see issue #172
+            //request.addHeader("X-Accept-Part-Encoding", "gzip");
 
-        addRequestHeaders(request);
+            addRequestHeaders(request);
 
-        setBody(request);
+            setBody(request);
 
-        executeRequest(httpClient, request);
+            executeRequest(httpClient, request);
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception: ", e);
+            throw new RuntimeException(e);
+        }
 
     }
 
@@ -183,6 +189,13 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
             Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
         }
+        catch (Exception e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: caught and rethrowing unexpected exception", e, this);
+            throw new RuntimeException(e);
+        } finally {
+            Log.v(Log.TAG_REMOTE_REQUEST, "%s: finally clause entered", this);
+        }
+
     }
 
 

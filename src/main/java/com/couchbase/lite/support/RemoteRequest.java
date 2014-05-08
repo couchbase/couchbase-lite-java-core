@@ -233,7 +233,7 @@ public class RemoteRequest implements Runnable {
                 return;
             }
         } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception", e);
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: caught and rethrowing unexpected exception", e, this);
             throw new RuntimeException(e);
         } finally {
             Log.v(Log.TAG_REMOTE_REQUEST, "%s: finally clause entered", this);
@@ -285,6 +285,9 @@ public class RemoteRequest implements Runnable {
     }
 
     public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
+
+        Log.e(Log.TAG_REMOTE_REQUEST, "respondWithResult()");
+
         if (workExecutor != null) {
             workExecutor.submit(new Runnable() {
 
