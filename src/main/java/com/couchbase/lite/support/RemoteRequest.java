@@ -225,11 +225,7 @@ public class RemoteRequest implements Runnable {
             if (retryRequest()) {
                 return;
             }
-        } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "caught and rethrowing unexpected exception", e);
-            throw new RuntimeException(e);
         }
-
         respondWithResult(fullBody, error, response);
     }
 
