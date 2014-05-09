@@ -15,6 +15,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Authenticator impl that knows how to do Persona auth
+ *
+ * @exclude
+ */
 public class PersonaAuthorizer extends Authorizer {
 
     public static final String LOGIN_PARAMETER_ASSERTION = "assertion";

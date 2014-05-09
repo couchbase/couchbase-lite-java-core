@@ -114,8 +114,9 @@ public final class Pusher extends Replication implements Database.ChangeListener
     @InterfaceAudience.Private
     private void removePending(RevisionInternal revisionInternal) {
         long seq = revisionInternal.getSequence();
-        if (pendingSequences.isEmpty()) {
-            Log.w(Log.TAG_SYNC, "%s: removePending called, but pendingSequences.isEmpty()", this);
+        if (pendingSequences == null || pendingSequences.isEmpty()) {
+            Log.w(Log.TAG_SYNC, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
+                    this, revisionInternal);
             return;
         }
         boolean wasFirst = (seq == pendingSequences.first());

@@ -937,7 +937,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             boolean newActive = batcherCount > 0 || asyncTaskCount > 0;
             Log.d(Log.TAG_SYNC, "%s: updateActive() called.  active: %s, newActive: %s batcherCount: %d, asyncTaskCount: %d", this, active, newActive, batcherCount, asyncTaskCount); 
             if (active != newActive) {
-                Log.d(Log.TAG_SYNC, "%s: Progress: set active = %s asyncTaskCount: %d batcherCount: ", this, newActive, asyncTaskCount, batcherCount);
+                Log.d(Log.TAG_SYNC, "%s: Progress: set active = %s asyncTaskCount: %d batcherCount: %d", this, newActive, asyncTaskCount, batcherCount);
                 active = newActive;
                 notifyChangeListeners();
 
@@ -1391,12 +1391,6 @@ public abstract class Replication implements NetworkReachabilityListener {
     private void stopRemoteRequests() {
         Log.v(Log.TAG_SYNC, "%s: stopRemoteRequests() cancelling: %d requests", this, requests.size());
         for (RemoteRequest request : requests.keySet()) {
-            Future future = requests.get(request);
-            if (future != null) {
-                Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s to: %s isCancelled: %s isDone: %s", this, future, request, request.getRequest().getURI(), future.isCancelled(), future.isDone());
-                boolean result = future.cancel(true);
-                Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
-            }
             Log.v(Log.TAG_SYNC, "%s: aborting request: %s underlying req: %s", this, request, request.getRequest().getURI());
             request.abort();
             Log.v(Log.TAG_SYNC, "%s: aborted request", this);

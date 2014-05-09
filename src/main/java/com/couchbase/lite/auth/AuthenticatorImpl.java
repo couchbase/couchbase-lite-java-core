@@ -4,9 +4,13 @@ import java.net.URL;
 import java.util.Map;
 
 /**
- * Created by Pasin Suriyentrakorn <pasin@couchbase.com> on 4/14/14.
+ * Abstract implementation of Authenticator that all Authenticator Impls
+ * should extend from
+ *
+ * @exclude
  */
 public abstract class AuthenticatorImpl implements Authenticator {
+
     public String authUserInfo() {
         return null;
     }
