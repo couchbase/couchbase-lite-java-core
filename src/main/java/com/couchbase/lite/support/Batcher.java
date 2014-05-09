@@ -83,7 +83,7 @@ public class Batcher<T> {
                 Log.v(Log.TAG_SYNC, "%s: delta %s >= delay %s --> using delay 0", this, delta, delay);
                 delayToUse = 0;
             } else {
-                Log.v(Log.TAG_SYNC, "%s: delta %s < delay --> using delay %s", this, delta, delay, delayToUse);
+                Log.v(Log.TAG_SYNC, "%s: delta %s < delay %s --> using delay %s", this, delta, delay, delayToUse);
             }
             scheduleWithDelay(delayToUse);
         } else {
