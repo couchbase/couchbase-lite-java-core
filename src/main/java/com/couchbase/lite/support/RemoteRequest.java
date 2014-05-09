@@ -82,11 +82,14 @@ public class RemoteRequest implements Runnable {
         this.requestHeaders = requestHeaders;
         this.db = db;
         this.request = createConcreteRequest();
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest created, url: %s", this, url);
 
     }
 
     @Override
     public void run() {
+
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
 
         HttpClient httpClient = clientFactory.getHttpClient();
 
@@ -101,6 +104,9 @@ public class RemoteRequest implements Runnable {
         setBody(request);
 
         executeRequest(httpClient, request);
+
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
+
 
     }
 
@@ -186,12 +192,17 @@ public class RemoteRequest implements Runnable {
 
         try {
 
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() called, url: %s", this, url);
+
             if (request.isAborted()) {
+                Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
                 respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
                 return;
             }
 
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute", this);
             response = httpClient.execute(request);
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute", this);
 
             // add in cookies to global store
             try {
@@ -233,6 +244,7 @@ public class RemoteRequest implements Runnable {
             error = e;
             // Treat all IOExceptions as transient, per:
             // http://hc.apache.org/httpclient-3.x/exception-handling.html
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling retryRequest()", this);
             if (retryRequest()) {
                 return;
             }
@@ -240,6 +252,7 @@ public class RemoteRequest implements Runnable {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             error = e;
         }
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  error: %s", this, error);
         respondWithResult(fullBody, error, response);
 
     }

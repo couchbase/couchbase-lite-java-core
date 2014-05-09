@@ -212,6 +212,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                     Log.v(Log.TAG_SYNC, "*** %s: BEGIN processInbox (%d sequences)", this, inbox.size());
                     processInbox(new RevisionList(inbox));
                     Log.v(Log.TAG_SYNC, "*** %s: END processInbox (lastSequence=%s)", this, lastSequence);
+                    Log.v(Log.TAG_SYNC, "%s: batcher calling updateActive()", this);
                     updateActive();
                 } catch (Exception e) {
                    Log.e(Log.TAG_SYNC,"ERROR: processInbox failed: ",e);
@@ -885,7 +886,9 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Private
     public synchronized void asyncTaskStarted() {
+        Log.v(Log.TAG_SYNC, "%s: asyncTaskStarted %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount + 1);
         if (asyncTaskCount++ == 0) {
+            Log.v(Log.TAG_SYNC, "%s: asyncTaskStarted() calling updateActive()", this);
             updateActive();
         }
     }
@@ -895,9 +898,11 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Private
     public synchronized void asyncTaskFinished(int numTasks) {
+        Log.v(Log.TAG_SYNC, "%s: asyncTaskFinished %d -> %d", this, this.asyncTaskCount, this.asyncTaskCount - numTasks);
         this.asyncTaskCount -= numTasks;
         assert(asyncTaskCount >= 0);
         if (asyncTaskCount == 0) {
+            Log.v(Log.TAG_SYNC, "%s: asyncTaskFinished() calling updateActive()", this);
             updateActive();
         }
     }
@@ -915,6 +920,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 Log.w(Log.TAG_SYNC, "%s: batcher object is null.", this);
             }
             boolean newActive = batcherCount > 0 || asyncTaskCount > 0;
+            Log.d(Log.TAG_SYNC, "%s: updateActive() called.  active: %s, newActive: %s batcherCount: %d, asyncTaskCount: %d", this, active, newActive, batcherCount, asyncTaskCount); 
             if (active != newActive) {
                 Log.d(Log.TAG_SYNC, "%s: Progress: set active = %s asyncTaskCount: %d batcherCount: ", this, newActive, asyncTaskCount, batcherCount);
                 active = newActive;
@@ -935,9 +941,13 @@ public abstract class Replication implements NetworkReachabilityListener {
 
                 }
 
+            } else {
+                Log.d(Log.TAG_SYNC, "%s: active == newActive.", this); 
             }
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception in updateActive()", e);
+        } finally {
+            Log.d(Log.TAG_SYNC, "%s: exit updateActive()", this);
         }
     }
 
@@ -946,7 +956,9 @@ public abstract class Replication implements NetworkReachabilityListener {
      */
     @InterfaceAudience.Private
     public void addToInbox(RevisionInternal rev) {
+        Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s", this, rev);
         batcher.queueObject(rev);
+        Log.v(Log.TAG_SYNC, "%s: addToInbox() calling updateActive()", this);
         updateActive();
     }
 
@@ -1326,6 +1338,27 @@ public abstract class Replication implements NetworkReachabilityListener {
                     lastSequence = null;
                     setError(null);
                 }
+
+                /*
+                Log.d(Log.TAG_SYNC, "%s: Shutting down remoteRequestExecutor", this);
+                List<Runnable> tasksAwaitingExecution = remoteRequestExecutor.shutdownNow();
+                for (Runnable runnable : tasksAwaitingExecution) {
+                    Log.d(Log.TAG_SYNC, "%s: runnable: %s", this, runnable);
+                    if (runnable instanceof RemoteRequest) {
+                        RemoteRequest remoteRequest = (RemoteRequest) runnable;
+                        Log.v(Log.TAG_SYNC, "%s: request awaiting execution: %s underlying req: %s", this, remoteRequest, remoteRequest.getRequest().getURI());
+                    }
+                }
+
+                boolean succeeded = false;
+                try {
+                    succeeded = remoteRequestExecutor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Log.e(Log.TAG_SYNC, "%s: timeout remoteRequestExecutor.awaitTermination", this, e);
+                }
+                Log.d(Log.TAG_SYNC, "%s: remoteRequestExecutor.awaitTermination succeeded: %s", this, succeeded);
+                */
+
                 remoteRequestExecutor = Executors.newCachedThreadPool();
                 checkSession();
                 notifyChangeListeners();
@@ -1341,11 +1374,11 @@ public abstract class Replication implements NetworkReachabilityListener {
         for (RemoteRequest request : requests.keySet()) {
             Future future = requests.get(request);
             if (future != null) {
-                Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s isCancelled: %s isDone: %s", this, future, request, future.isCancelled(), future.isDone());
+                Log.v(Log.TAG_SYNC, "%s: cancelling future %s for request: %s to: %s isCancelled: %s isDone: %s", this, future, request, request.getRequest().getURI(), future.isCancelled(), future.isDone());
                 boolean result = future.cancel(true);
                 Log.v(Log.TAG_SYNC, "%s: cancelled future, result: %s", this, result);
             }
-            Log.v(Log.TAG_SYNC, "%s: aborting request", this);
+            Log.v(Log.TAG_SYNC, "%s: aborting request: %s underlying req: %s", this, request, request.getRequest().getURI());
             request.abort();
             Log.v(Log.TAG_SYNC, "%s: aborted request", this);
         }
