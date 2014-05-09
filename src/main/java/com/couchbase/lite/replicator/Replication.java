@@ -922,7 +922,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             boolean newActive = batcherCount > 0 || asyncTaskCount > 0;
             Log.d(Log.TAG_SYNC, "%s: updateActive() called.  active: %s, newActive: %s batcherCount: %d, asyncTaskCount: %d", this, active, newActive, batcherCount, asyncTaskCount); 
             if (active != newActive) {
-                Log.d(Log.TAG_SYNC, "%s: Progress: set active = %s asyncTaskCount: %d batcherCount: ", this, newActive, asyncTaskCount, batcherCount);
+                Log.d(Log.TAG_SYNC, "%s: Progress: set active = %s asyncTaskCount: %d batcherCount: %d", this, newActive, asyncTaskCount, batcherCount);
                 active = newActive;
                 notifyChangeListeners();
 
