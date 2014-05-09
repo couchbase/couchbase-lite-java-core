@@ -145,6 +145,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
         creatingTarget = true;
         Log.v(Log.TAG_SYNC, "Remote db might not exist; creating it...");
 
+        Log.v(Log.TAG_SYNC, "%s | %s: maybeCreateRemoteDB() calling asyncTaskStarted()", this, Thread.currentThread());
+
         asyncTaskStarted();
         sendAsyncRequest("PUT", "", null, new RemoteRequestCompletionBlock() {
 
@@ -162,7 +164,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
                         beginReplicating();
                     }
                 } finally {
-                    Log.d(Log.TAG_SYNC, "%s: maybeCreateRemoteDB.onComplete() calling asyncTaskFinished()", this);
+                    Log.v(Log.TAG_SYNC, "%s | %s: maybeCreateRemoteDB.sendAsyncRequest() calling asyncTaskFinished()", this, Thread.currentThread());
+
                     asyncTaskFinished(1);
                 }
             }
@@ -270,6 +273,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
         // Call _revs_diff on the target db:
         Log.v(Log.TAG_SYNC, "%s: posting to /_revs_diff", this);
 
+        Log.v(Log.TAG_SYNC, "%s | %s: processInbox() calling asyncTaskStarted()", this, Thread.currentThread());
+
         asyncTaskStarted();
         sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
 
@@ -373,6 +378,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     }
 
                 } finally {
+                    Log.v(Log.TAG_SYNC, "%s | %s: processInbox.sendAsyncRequest() calling asyncTaskFinished()", this, Thread.currentThread());
+
                     asyncTaskFinished(1);
                 }
             }
@@ -399,6 +406,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
         Map<String,Object> bulkDocsBody = new HashMap<String,Object>();
         bulkDocsBody.put("docs", docsToSend);
         bulkDocsBody.put("new_edits", false);
+
+        Log.v(Log.TAG_SYNC, "%s | %s: uploadBulkDocs() calling asyncTaskStarted()", this, Thread.currentThread());
 
         asyncTaskStarted();
         sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
@@ -445,6 +454,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     addToCompletedChangesCount(numDocsToSend);
 
                 } finally {
+                    Log.v(Log.TAG_SYNC, "%s | %s: uploadBulkDocs.sendAsyncRequest() calling asyncTaskFinished()", this, Thread.currentThread());
+
                     asyncTaskFinished(1);
                 }
 
@@ -523,6 +534,9 @@ public final class Pusher extends Replication implements Database.ChangeListener
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
 
         addToChangesCount(1);
+
+        Log.v(Log.TAG_SYNC, "%s | %s: uploadMultipartRevision() calling asyncTaskStarted()", this, Thread.currentThread());
+
         asyncTaskStarted();
         sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
@@ -547,6 +561,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     }
                 } finally {
                     addToCompletedChangesCount(1);
+                    Log.v(Log.TAG_SYNC, "%s | %s: uploadMultipartRevision() calling asyncTaskFinished()", this, Thread.currentThread());
+
                     asyncTaskFinished(1);
                 }
 
@@ -567,6 +583,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
             return;
         }
 
+        Log.v(Log.TAG_SYNC, "%s | %s: uploadJsonRevision() calling asyncTaskStarted()", this, Thread.currentThread());
+
         asyncTaskStarted();
         String path = String.format("/%s?new_edits=false", URIUtils.encode(rev.getDocId()));
         sendAsyncRequest("PUT",
@@ -581,6 +599,8 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     Log.v(Log.TAG_SYNC, "%s: Sent %s (JSON), response=%s", this, rev, result);
                     removePending(rev);
                 }
+                Log.v(Log.TAG_SYNC, "%s | %s: uploadJsonRevision() calling asyncTaskFinished()", this, Thread.currentThread());
+
                 asyncTaskFinished(1);
             }
         });

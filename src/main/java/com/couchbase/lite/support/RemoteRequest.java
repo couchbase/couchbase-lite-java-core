@@ -112,6 +112,10 @@ public class RemoteRequest implements Runnable {
         }
     }
 
+    public HttpUriRequest getRequest() {
+        return request;
+    }
+
     protected void addRequestHeaders(HttpUriRequest request) {
         for (String requestHeaderKey : requestHeaders.keySet()) {
             request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
