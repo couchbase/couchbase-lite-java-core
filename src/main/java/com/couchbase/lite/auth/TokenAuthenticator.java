@@ -3,6 +3,11 @@ package com.couchbase.lite.auth;
 import java.net.URL;
 import java.util.Map;
 
+/**
+ * Authenticator impl that knows how to do token based auth
+ *
+ * @exclude
+ */
 public class TokenAuthenticator extends AuthenticatorImpl {
     private String loginPath;
     private Map<String, String>loginParams;

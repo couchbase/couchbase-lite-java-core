@@ -3,6 +3,11 @@ package com.couchbase.lite.auth;
 import java.net.URL;
 import java.util.Map;
 
+/**
+ * Authenticator impl that knows how to do basic auth
+ *
+ * @exclude
+ */
 public class BasicAuthenticator extends AuthenticatorImpl {
     private String username;
     private String password;

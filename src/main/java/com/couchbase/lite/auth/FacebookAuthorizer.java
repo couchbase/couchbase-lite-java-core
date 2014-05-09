@@ -9,6 +9,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Authenticator impl that knows how to do facebook auth
+ *
+ * @exclude
+ */
 public class FacebookAuthorizer extends Authorizer {
 
     public static final String LOGIN_PARAMETER_ACCESS_TOKEN = "access_token";
