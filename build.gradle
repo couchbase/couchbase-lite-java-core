@@ -67,6 +67,16 @@ uploadArchives {
     }
 }
 
+task generateJavadocs(type: Javadoc) {
+    source = sourceSets.main.java.srcDirs
+    List<File> pathList = new ArrayList<File>();
+    pathList.add(file('extra/doclet/doclet.jar'))
+    options.docletpath = pathList
+    options.doclet = "ExcludeDoclet"
+    options.showFromPublic()
+    exclude "org/apache/http/**", "com/couchbase/touchdb/**"
+}
+
 task sourcesJar(type: Jar, dependsOn: classes) {
     classifier = 'sources'
     from sourceSets.main.java.srcDirs
