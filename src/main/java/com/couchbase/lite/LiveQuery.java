@@ -287,6 +287,12 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
                     }
                     lastError = error;
                 } else {
+
+                    if (runningState.get() == false) {
+                        Log.d(Log.TAG_QUERY, "%s: update() finished query, but running state == false.", this);
+                        return;
+                    }
+
                     if (rowsParam != null && !rowsParam.equals(rows)) {
                         setRows(rowsParam);
                         for (ChangeListener observer : observers) {
@@ -320,6 +326,12 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
                 if (queryFutureInProgress != null) {
                     try {
                         queryFutureInProgress.get();
+
+                        if (runningState.get() == false) {
+                            Log.v(Log.TAG_QUERY, "%s: queryFutureInProgress.get() done, but running state == false.", this);
+                            return;
+                        }
+
                         update();
                     } catch (Exception e) {
                         if (e instanceof CancellationException) {
