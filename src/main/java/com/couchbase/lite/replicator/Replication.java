@@ -521,11 +521,19 @@ public abstract class Replication implements NetworkReachabilityListener {
             return;
         }
         Log.v(Log.TAG_SYNC, "%s: STOPPING...", this);
-        batcher.clear();  // no sense processing any pending changes
+        if (batcher != null) {
+            batcher.clear();  // no sense processing any pending changes
+        } else {
+            Log.v(Log.TAG_SYNC, "%s: stop() called, not calling batcher.clear() since it's null");
+        }
         continuous = false;
         stopRemoteRequests();
         cancelPendingRetryIfReady();
-        db.forgetReplication(this);
+        if (db != null) {
+            db.forgetReplication(this);
+        } else {
+            Log.v(Log.TAG_SYNC, "%s: stop() called, not calling db.forgetReplication() since it's null");
+        }
         if (running && asyncTaskCount <= 0) {
             Log.v(Log.TAG_SYNC, "%s: calling stopped()", this);
             stopped();
