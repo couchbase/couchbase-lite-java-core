@@ -524,7 +524,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         if (batcher != null) {
             batcher.clear();  // no sense processing any pending changes
         } else {
-            Log.v(Log.TAG_SYNC, "%s: stop() called, not calling batcher.clear() since it's null");
+            Log.v(Log.TAG_SYNC, "%s: stop() called, not calling batcher.clear() since it's null", this);
         }
         continuous = false;
         stopRemoteRequests();
