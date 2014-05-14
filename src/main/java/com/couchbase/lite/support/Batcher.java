@@ -3,6 +3,7 @@ package com.couchbase.lite.support;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.util.Log;
 
+import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -73,26 +74,7 @@ public class Batcher<T> {
 
         inbox.addAll(objects);
 
-        if (inbox.size() < capacity) {
-            // Schedule the processing. To improve latency, if we haven't processed anything
-            // in at least our delay time, rush these object(s) through ASAP:
-            Log.v(Log.TAG_SYNC, "%s: inbox.size() < capacity, schedule processing", this);
-            int delayToUse = delay;
-            long delta = (System.currentTimeMillis() - lastProcessedTime);
-            if (delta >= delay) {
-                Log.v(Log.TAG_SYNC, "%s: delta %s >= delay %s --> using delay 0", this, delta, delay);
-                delayToUse = 0;
-            } else {
-                Log.v(Log.TAG_SYNC, "%s: delta %s < delay %s --> using delay %s", this, delta, delay, delayToUse);
-            }
-            scheduleWithDelay(delayToUse);
-        } else {
-            // If inbox fills up, process it immediately:
-            Log.v(Log.TAG_SYNC, "%s: inbox.size() >= capacity, process immediately", this);
-            unschedule();
-            processNow();
-        }
-
+        scheduleWithDelay(delayToUse());
     }
 
     /**
@@ -107,8 +89,7 @@ public class Batcher<T> {
      * Sends queued objects to the processor block (up to the capacity).
      */
     public void flush() {
-        unschedule();
-        processNow();
+        scheduleWithDelay(delayToUse());
     }
 
     /**
@@ -177,7 +158,7 @@ public class Batcher<T> {
                 Log.v(Log.TAG_SYNC, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
 
                 // There are more objects left, so schedule them Real Soon:
-                scheduleWithDelay(0);
+                scheduleWithDelay(delayToUse());
 
             }
 
@@ -219,4 +200,12 @@ public class Batcher<T> {
         }
     }
 
+    private int delayToUse() {
+        int delayToUse = delay;
+        long delta = (System.currentTimeMillis() - lastProcessedTime);
+        if (delta >= delay) {
+            delayToUse = 0;
+        }
+        return delayToUse;
+    }
 }
