@@ -220,6 +220,8 @@ public class Batcher<T> {
             delayToUse = 0;
         }
 
+        Log.v(Log.TAG_SYNC, "%s: delayToUse() delta: %d, delayToUse: %d, delay: %d", this, delta, delayToUse, delta);
+
         return delayToUse;
     }
 }
