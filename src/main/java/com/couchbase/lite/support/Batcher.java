@@ -200,12 +200,26 @@ public class Batcher<T> {
         }
     }
 
+    /*
+     * calculates the delay to use when scheduling the next batch of objects to process
+     * There is a balance required between clearing down the input queue as fast as possible
+     * and not exhausting downstream system resources such as sockets and http response buffers
+     * by processing too many batches concurrently.
+     */
     private int delayToUse() {
+
+        //initially set the delay to the default value for this Batcher
         int delayToUse = delay;
+
+        //get the time interval since the last batch completed to the current system time
         long delta = (System.currentTimeMillis() - lastProcessedTime);
+
+        //if the time interval is greater or equal to the default delay then set the
+        // delay so that the next batch gets scheduled to process immediately
         if (delta >= delay) {
             delayToUse = 0;
         }
+
         return delayToUse;
     }
 }
