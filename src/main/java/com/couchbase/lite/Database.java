@@ -3840,6 +3840,18 @@ public final class Database {
                 throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
             }
 
+            // Validate new revision
+            RevisionInternal oldRev = null;
+            for(int i=0;i < historyCount; i++) {
+                oldRev = localRevs.revWithDocIdAndRevId(docId, revHistory.get(i));
+                if (oldRev != null) {
+                    break;
+                }
+            }
+            String parentRevId = (historyCount > 1) ? revHistory.get(1) : null;
+            RevisionInternal revCloned = rev.copyWithDocID(rev.getDocId(), null);
+            validateRevision(revCloned, oldRev, parentRevId);
+
             List<Boolean> outIsDeleted = new ArrayList<Boolean>();
             List<Boolean> outIsConflict = new ArrayList<Boolean>();
             boolean oldWinnerWasDeletion = false;
