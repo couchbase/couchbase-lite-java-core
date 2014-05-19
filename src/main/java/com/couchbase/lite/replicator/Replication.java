@@ -532,7 +532,7 @@ public abstract class Replication implements NetworkReachabilityListener {
         if (db != null) {
             db.forgetReplication(this);
         } else {
-            Log.w(Log.TAG_SYNC, "%s: not calling db.forgetReplication(), since db is null", this);
+            Log.v(Log.TAG_SYNC, "%s: stop() called, not calling db.forgetReplication() since it's null", this);
         }
         if (running && asyncTaskCount <= 0) {
             Log.v(Log.TAG_SYNC, "%s: calling stopped()", this);
