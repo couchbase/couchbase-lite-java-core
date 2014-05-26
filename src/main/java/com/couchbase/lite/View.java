@@ -554,6 +554,9 @@ public final class View {
                         mapBlock.map(properties, emitBlock);
                     }
 
+                } else {
+                    // Other revison of same document. Skip to next document.
+                    keepGoing = cursor.moveToNext();
                 }
 
             }
