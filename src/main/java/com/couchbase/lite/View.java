@@ -465,95 +465,86 @@ public final class View {
                             + "ORDER BY revs.doc_id, revid DESC", selectArgs);
 
 
-            long lastDocID = 0;
             boolean keepGoing = cursor.moveToNext();
             while (keepGoing) {
                 long docID = cursor.getLong(0);
-                if (docID != lastDocID) {
-                    // Only look at the first-iterated revision of any document,
-                    // because this is the
-                    // one with the highest revid, hence the "winning" revision
-                    // of a conflict.
-                    lastDocID = docID;
 
-                    // Reconstitute the document as a dictionary:
-                    sequence = cursor.getLong(1);
-                    String docId = cursor.getString(2);
-                    if(docId.startsWith("_design/")) {  // design docs don't get indexed!
-                        keepGoing = cursor.moveToNext();
-                        continue;
-                    }
-                    String revId = cursor.getString(3);
-                    byte[] json = cursor.getBlob(4);
+                // Reconstitute the document as a dictionary:
+                sequence = cursor.getLong(1);
+                String docId = cursor.getString(2);
+                if(docId.startsWith("_design/")) {  // design docs don't get indexed!
+                    keepGoing = cursor.moveToNext();
+                    continue;
+                }
+                String revId = cursor.getString(3);
+                byte[] json = cursor.getBlob(4);
 
-                    boolean noAttachments = cursor.getInt(5) > 0;
+                boolean noAttachments = cursor.getInt(5) > 0;
 
-                    while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
-                        // Skip rows with the same doc_id -- these are losing conflicts.
-                    }
+                while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
+                    // Skip rows with the same doc_id -- these are losing conflicts.
+                }
 
-                    if (lastSequence > 0) {
-                        // Find conflicts with documents from previous indexings.
-                        String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
+                if (lastSequence > 0) {
+                    // Find conflicts with documents from previous indexings.
+                    String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
 
-                        Cursor cursor2 = null;
-                        try {
-                            cursor2 = database.getDatabase().rawQuery(
-                                    "SELECT revid, sequence FROM revs "
-                                            + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
-                                            + "ORDER BY revID DESC "
-                                            + "LIMIT 1", selectArgs2);
+                    Cursor cursor2 = null;
+                    try {
+                        cursor2 = database.getDatabase().rawQuery(
+                                "SELECT revid, sequence FROM revs "
+                                        + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
+                                        + "ORDER BY revID DESC "
+                                        + "LIMIT 1", selectArgs2);
 
-                            if (cursor2.moveToNext()) {
-                                String oldRevId = cursor2.getString(0);
-                                // This is the revision that used to be the 'winner'.
-                                // Remove its emitted rows:
-                                long oldSequence = cursor2.getLong(1);
-                                String[] args = {
-                                        Integer.toString(getViewId()),
-                                        Long.toString(oldSequence)
-                                };
-                                database.getDatabase().execSQL(
-                                        "DELETE FROM maps WHERE view_id=? AND sequence=?", args);
-                                if (RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
-                                    // It still 'wins' the conflict, so it's the one that
-                                    // should be mapped [again], not the current revision!
-                                    revId = oldRevId;
-                                    sequence = oldSequence;
+                        if (cursor2.moveToNext()) {
+                            String oldRevId = cursor2.getString(0);
+                            // This is the revision that used to be the 'winner'.
+                            // Remove its emitted rows:
+                            long oldSequence = cursor2.getLong(1);
+                            String[] args = {
+                                    Integer.toString(getViewId()),
+                                    Long.toString(oldSequence)
+                            };
+                            database.getDatabase().execSQL(
+                                    "DELETE FROM maps WHERE view_id=? AND sequence=?", args);
+                            if (RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
+                                // It still 'wins' the conflict, so it's the one that
+                                // should be mapped [again], not the current revision!
+                                revId = oldRevId;
+                                sequence = oldSequence;
 
-                                    String[] selectArgs3 = { Long.toString(sequence) };
-                                    json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
+                                String[] selectArgs3 = { Long.toString(sequence) };
+                                json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
 
-                                }
-                            }
-                        } finally {
-                            if (cursor2 != null) {
-                                cursor2.close();
                             }
                         }
-
-
+                    } finally {
+                        if (cursor2 != null) {
+                            cursor2.close();
+                        }
                     }
 
-                    // Get the document properties, to pass to the map function:
-                    EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
-                    if (noAttachments)
-                        contentOptions.add(TDContentOptions.TDNoAttachments);
-                    Map<String, Object> properties = database.documentPropertiesFromJSON(
-                            json,
-                            docId,
-                            revId,
-                            false,
-                            sequence,
-                            contentOptions
-                    );
-                    if (properties != null) {
-                        // Call the user-defined map() to emit new key/value
-                        // pairs from this revision:
-                        emitBlock.setSequence(sequence);
-                        mapBlock.map(properties, emitBlock);
-                    }
 
+                }
+
+                // Get the document properties, to pass to the map function:
+                EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
+                if (noAttachments)
+                    contentOptions.add(TDContentOptions.TDNoAttachments);
+                Map<String, Object> properties = database.documentPropertiesFromJSON(
+                        json,
+                        docId,
+                        revId,
+                        false,
+                        sequence,
+                        contentOptions
+                );
+                if (properties != null) {
+                    // Call the user-defined map() to emit new key/value
+                    // pairs from this revision:
+                    emitBlock.setSequence(sequence);
+                    mapBlock.map(properties, emitBlock);
                 }
 
             }
