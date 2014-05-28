@@ -3842,7 +3842,7 @@ public final class Database {
 
             // Validate new revision
             RevisionInternal oldRev = null;
-            for(int i = 1;i < historyCount; i++) {
+            for (int i = 1; i < historyCount; i++) {
                 oldRev = localRevs.revWithDocIdAndRevId(docId, revHistory.get(i));
                 if (oldRev != null) {
                     break;
