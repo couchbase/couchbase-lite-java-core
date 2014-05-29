@@ -41,14 +41,24 @@ public class InputStreamBody extends AbstractContentBody {
 
     private final InputStream in;
     private final String filename;
+    private final long contentLength;
 
-    public InputStreamBody(final InputStream in, final String mimeType, final String filename) {
+
+    public InputStreamBody(final InputStream in, final String mimeType, final String filename, final long contentLength) {
         super(mimeType);
         if (in == null) {
             throw new IllegalArgumentException("Input stream may not be null");
         }
+        if(contentLength < -1) {
+            throw new IllegalArgumentException("Content length must be >= -1");
+        }
         this.in = in;
         this.filename = filename;
+        this.contentLength = contentLength;
+    }
+
+    public InputStreamBody(final InputStream in, final String mimeType, final String filename) {
+        this(in, mimeType, filename, -1L);
     }
 
     public InputStreamBody(final InputStream in, final String filename) {
@@ -92,7 +102,7 @@ public class InputStreamBody extends AbstractContentBody {
     }
 
     public long getContentLength() {
-        return -1;
+        return contentLength;
     }
 
     public String getFilename() {
