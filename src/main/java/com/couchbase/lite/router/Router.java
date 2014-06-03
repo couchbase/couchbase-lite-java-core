@@ -557,7 +557,7 @@ public class Router implements Database.ChangeListener {
     }
 
     public Status do_UNKNOWN(Database db, String docID, String attachmentName) {
-        return new Status(Status.BAD_REQUEST);
+        return new Status(Status.NOT_FOUND);
     }
 
     /*************************************************************************************************/
