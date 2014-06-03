@@ -3571,7 +3571,7 @@ public final class Database {
 
             // Bump the revID and update the JSON:
             byte[] json = null;
-            if(!oldRev.isDeleted()) {
+            if(oldRev.getProperties() != null && oldRev.getProperties().size() > 0) {
                 json = encodeDocumentJSON(oldRev);
                 if(json == null) {
                     // bad or missing json
