@@ -95,7 +95,7 @@ public final class Database {
 
     private BlobStore attachments;
     private Manager manager;
-    final private List<ChangeListener> changeListeners;
+    final private CopyOnWriteArrayList<ChangeListener> changeListeners;
     private Cache<String, Document> docCache;
     private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
@@ -715,7 +715,7 @@ public final class Database {
      */
     @InterfaceAudience.Public
     public void addChangeListener(ChangeListener listener) {
-        changeListeners.add(listener);
+        changeListeners.addIfAbsent(listener);
     }
 
     /**
