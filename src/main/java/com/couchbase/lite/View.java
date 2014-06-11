@@ -700,6 +700,13 @@ public final class View {
         List<Object> key1List = (List<Object>)key1;
         @SuppressWarnings("unchecked")
         List<Object> key2List = (List<Object>)key2;
+
+        // if either key list is smaller than groupLevel and the key lists are different
+        // sizes, they cannot be equal.
+        if ((key1List.size() < groupLevel || key2List.size() < groupLevel) && key1List.size() != key2List.size()) {
+            return false;
+        }
+
         int end = Math.min(groupLevel, Math.min(key1List.size(), key2List.size()));
         for(int i = 0; i < end; ++i) {
             if(!key1List.get(i).equals(key2List.get(i))) {
