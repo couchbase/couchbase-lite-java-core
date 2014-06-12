@@ -483,6 +483,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
             }
          */
         Map<String, Object> attachments = (Map<String, Object>) revProps.get("_attachments");
+        final List<InputStream> inputStreamBodies = new ArrayList<InputStream>();
         for (String attachmentKey : attachments.keySet()) {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentKey);
             if (attachment.containsKey("follows")) {
@@ -506,6 +507,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                 String base64Digest = (String) attachment.get("digest");
                 BlobKey blobKey = new BlobKey(base64Digest);
                 InputStream inputStream = blobStore.blobStreamForKey(blobKey);
+                inputStreamBodies.add(inputStream);
                 if (inputStream == null) {
                     Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
                     multiPart = null;
@@ -561,6 +563,14 @@ public final class Pusher extends Replication implements Database.ChangeListener
                         removePending(revision);
                     }
                 } finally {
+                    for(InputStream is : inputStreamBodies) {
+                        try {
+                            is.close();
+                        } catch (IOException e1) {
+                            Log.v(Log.TAG_SYNC, "Got an error closing an internal input stream, this really shouldn't matter", e1);
+                        }
+                    }
+                    
                     addToCompletedChangesCount(1);
                     Log.v(Log.TAG_SYNC, "%s | %s: uploadMultipartRevision() calling asyncTaskFinished()", this, Thread.currentThread());
 
