@@ -507,12 +507,12 @@ public final class Pusher extends Replication implements Database.ChangeListener
                 String base64Digest = (String) attachment.get("digest");
                 BlobKey blobKey = new BlobKey(base64Digest);
                 InputStream inputStream = blobStore.blobStreamForKey(blobKey);
-                inputStreamBodies.add(inputStream);
                 if (inputStream == null) {
                     Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
                     multiPart = null;
                 }
                 else {
+                    inputStreamBodies.add(inputStream);
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
