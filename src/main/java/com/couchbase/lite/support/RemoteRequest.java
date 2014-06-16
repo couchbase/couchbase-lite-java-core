@@ -251,6 +251,8 @@ public class RemoteRequest implements Runnable {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling retryRequest()", this);
             if (retryRequest()) {
                 return;
+            } else {
+                Log.e(Log.TAG_SYNC, "%s: RemoteRequest failed all retries, giving up.", this);
             }
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
