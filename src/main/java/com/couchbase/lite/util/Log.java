@@ -92,11 +92,8 @@ public class Log {
 
         // this hashmap lookup might be a little expensive, and so it might make
         // sense to convert this over to a CopyOnWriteArrayList
-        if (enabledTags.containsKey(tag)) {
-            int logLevelForTag = enabledTags.get(tag);
-            return logLevel >= logLevelForTag;
-        }
-        return false;
+        Integer logLevelForTag = enabledTags.get(tag);
+        return logLevel >= (logLevelForTag == null ? INFO : logLevelForTag);
     }
 
     /**
