@@ -483,6 +483,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
             }
          */
         Map<String, Object> attachments = (Map<String, Object>) revProps.get("_attachments");
+        final List<InputStream> inputStreamBodies = new ArrayList<InputStream>();
         for (String attachmentKey : attachments.keySet()) {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentKey);
             if (attachment.containsKey("follows")) {
@@ -511,6 +512,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                     multiPart = null;
                 }
                 else {
+                    inputStreamBodies.add(inputStream);
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
@@ -561,6 +563,14 @@ public final class Pusher extends Replication implements Database.ChangeListener
                         removePending(revision);
                     }
                 } finally {
+                    for(InputStream is : inputStreamBodies) {
+                        try {
+                            is.close();
+                        } catch (IOException e1) {
+                            Log.v(Log.TAG_SYNC, "Got an error closing an internal input stream, this really shouldn't matter", e1);
+                        }
+                    }
+                    
                     addToCompletedChangesCount(1);
                     Log.v(Log.TAG_SYNC, "%s | %s: uploadMultipartRevision() calling asyncTaskFinished()", this, Thread.currentThread());
 
