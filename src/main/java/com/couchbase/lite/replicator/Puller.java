@@ -1,5 +1,6 @@
 package com.couchbase.lite.replicator;
 
+import com.couchbase.lite.AsyncTask;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
@@ -789,13 +790,19 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     @InterfaceAudience.Public
     public boolean goOffline() {
-        Log.d(Log.TAG_SYNC, "%s: goOffline() called, stopping changeTracker: %s", this, changeTracker);
+        Log.d(Log.TAG_SYNC, "%s: goOffline() called", this);
         if (!super.goOffline()) {
             return false;
         }
 
         if (changeTracker != null) {
-            changeTracker.stop();
+            db.runAsync(new AsyncTask() {
+                @Override
+                public void run(Database database) {
+                    Log.d(Log.TAG_SYNC, "%s: stopping changeTracker: %s", this, changeTracker);
+                    changeTracker.stop();
+                }
+            });
         }
 
         return true;
