@@ -114,8 +114,8 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                     if (digest != null &&
                             !digest.equals(actualDigest) &&
                             !digest.equals(writer.sHA1DigestString())) {
-                        String errMsg = String.format("Attachment '%s' has incorrect MD5 digest (%s; should be %s)",
-                                attachmentName, digest, actualDigest);
+                        String errMsg = String.format("Attachment '%s' has incorrect MD5 digest (%s; should be either %s or %s)",
+                                attachmentName, digest, actualDigest, writer.sHA1DigestString());
                         throw new IllegalStateException(errMsg);
                     }
                     attachment.put("digest", actualDigest);
