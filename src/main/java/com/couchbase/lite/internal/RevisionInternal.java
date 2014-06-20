@@ -203,6 +203,16 @@ public class RevisionInternal {
         return generation;
     }
 
+    public static String digestFromRevID(String revID) {
+        String digest = "error";
+        int dashPos = revID.indexOf("-");
+        if (dashPos > 0) {
+            digest = revID.substring(dashPos + 1);
+            return digest;
+        }
+        throw new RuntimeException(String.format("Invalid rev id: %s", revID));
+    }
+
     public static int CBLCollateRevIDs(String revId1, String revId2) {
 
         String rev1GenerationStr = null;
