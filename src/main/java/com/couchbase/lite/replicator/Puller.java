@@ -41,7 +41,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
     private static final int MAX_OPEN_HTTP_CONNECTIONS = 16;
     // Maximum number of revs to fetch in a single bulk request
-    private static final int MAX_REVS_TO_GET_IN_BULK = 50;
+    public static final int MAX_REVS_TO_GET_IN_BULK = 50;
 
     // Maximum number of revision IDs to pass in an "?atts_since=" query param
     public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
