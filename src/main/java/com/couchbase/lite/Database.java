@@ -548,7 +548,17 @@ public final class Database {
         if(views != null) {
             view = views.get(name);
         }
-        return view;
+        if(view != null) {
+            return view;
+        }
+
+        //view is not in cache but it maybe in DB
+        view = new View(this, name);
+        if(view.getViewId() > 0) {
+            return view;
+        }
+        
+        return null;
     }
 
     /**
