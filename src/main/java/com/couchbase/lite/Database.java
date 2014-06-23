@@ -2130,6 +2130,12 @@ public final class Database {
     public Status deleteViewNamed(String name) {
         Status result = new Status(Status.INTERNAL_SERVER_ERROR);
         try {
+            final View view = getView(name);
+            if(views != null) {
+                if(view != null) {
+                    views.remove(view);
+                }
+            }
             String[] whereArgs = { name };
             int rowsAffected = database.delete("views", "name=?", whereArgs);
             if(rowsAffected > 0) {
