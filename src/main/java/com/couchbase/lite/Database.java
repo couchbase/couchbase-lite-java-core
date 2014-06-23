@@ -548,15 +548,7 @@ public final class Database {
         if(views != null) {
             view = views.get(name);
         }
-        if(view != null) {
-            return view;
-        }
-        view = new View(this, name);
-        if(view.getViewId() == 0) {
-            return null;
-        }
-
-        return registerView(view);
+        return view;
     }
 
     /**
@@ -2130,10 +2122,9 @@ public final class Database {
     public Status deleteViewNamed(String name) {
         Status result = new Status(Status.INTERNAL_SERVER_ERROR);
         try {
-            final View view = getView(name);
             if(views != null) {
-                if(view != null) {
-                    views.remove(view);
+                if(name != null) {
+                    views.remove(name);
                 }
             }
             String[] whereArgs = { name };
