@@ -702,6 +702,7 @@ public abstract class Replication implements NetworkReachabilityListener {
      * @exclude
      */
     private void clearDbRef() {
+        Log.v(Log.TAG_SYNC, "%s: clearDbRef() called", this);
         if (savingCheckpoint && lastSequence != null && db != null) {
             if (!db.isOpen()) {
                 Log.w(Log.TAG_SYNC, "Not attempting to setLastSequence, db is closed");
@@ -710,6 +711,8 @@ public abstract class Replication implements NetworkReachabilityListener {
             }
             Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
             db = null;
+        } else {
+            Log.v(Log.TAG_SYNC, "%s: clearDbRef() not doing anything.  savingCheckpoint: %s lastSequence: %s db: %s", this, savingCheckpoint, lastSequence, db);
         }
     }
 
@@ -1296,25 +1299,30 @@ public abstract class Replication implements NetworkReachabilityListener {
                     // Failed to save checkpoint:
                     switch (getStatusFromError(e)) {
                         case Status.NOT_FOUND:
+                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 404 NOT FOUND", this);
                             remoteCheckpoint = null;  // doc deleted or db reset
                             overdueForSave = true; // try saving again
                             break;
                         case Status.CONFLICT:
+                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: 409 CONFLICT", this);
                             refreshRemoteCheckpointDoc();
                             break;
                         default:
+                            Log.i(Log.TAG_SYNC, "%s: could not save remote checkpoint: %s", this, e);
                             // TODO: On 401 or 403, and this is a pull, remember that remote
                             // TODo: is read-only & don't attempt to read its checkpoint next time.
                             break;
                     }
                 } else {
                     // Saved checkpoint:
+                    Log.i(Log.TAG_SYNC, "%s: saved remote checkpoint, updating local checkpoint", this);
                     Map<String, Object> response = (Map<String, Object>) result;
                     body.put("_rev", response.get("rev"));
                     remoteCheckpoint = body;
                     db.setLastSequence(lastSequence, checkpointID, !isPull());
                 }
                 if (overdueForSave) {
+                    Log.i(Log.TAG_SYNC, "%s: overdueForSave == true, calling saveLastSequence()", this);
                     saveLastSequence();
                 }
 
