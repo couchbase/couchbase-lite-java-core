@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -240,12 +241,19 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                 @Override
                 public void run() {
                     Log.v(Log.TAG_SYNC, "%s | %s: changeTrackerStopped() calling asyncTaskFinished()", this, Thread.currentThread());
-
                     asyncTaskFinished(1);  // balances -asyncTaskStarted in -startChangeTracker
                 }
             });
         }
-
+        // The 'online' flag can represent a change in status rather than the current status.
+		// It can be that there are 2 changetrackers, one on its way down, the other going up.
+        // As Chagetracker.stop() will set client=null, we can only be called when we are supposed to go offline (or stop).
+        if (running && isContinuous() && online) {
+          // We get here if the changetracker aborted for some reason. Try again soon.
+          // This schedules a goOffline() task asap; depends on goOffline() being thread-safe. 
+          Log.e(Log.TAG_SYNC, "%s | %s: changeTrackerStopped() and we are still online - going offline", this, Thread.currentThread());
+          goOffline();
+        }
     }
 
     @Override
@@ -785,21 +793,17 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
         return URLEncoder.encode(new String(json));
     }
-
-
-    @InterfaceAudience.Public
-    public boolean goOffline() {
-        Log.d(Log.TAG_SYNC, "%s: goOffline() called, stopping changeTracker: %s", this, changeTracker);
-        if (!super.goOffline()) {
-            return false;
-        }
-
-        if (changeTracker != null) {
+    
+    // Go offline in safest possible way we can.
+    @Override
+    protected void goOfflineOnWorker() {
+        if (online && changeTracker != null) {
             changeTracker.stop();
         }
-
-        return true;
+    	super.goOfflineOnWorker();
+        Log.d(Log.TAG_SYNC, "%s: goOffline() called, stopping changeTracker: %s", this, changeTracker);
     }
+
 }
 
 /**

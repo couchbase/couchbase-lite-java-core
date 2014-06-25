@@ -1330,72 +1330,103 @@ public abstract class Replication implements NetworkReachabilityListener {
         });
     }
 
+    protected void goOfflineOnWorker() {
+        if (!online) return;
+        Log.d(Log.TAG_SYNC, "%s: Going offline", this);
+        // The tricky bit here is to be able to cancel all ongoing stuff even when it only just decided to go online.
+        // We could be interleaved with all sorts of start() or goOnline items.
+        online = false;
+        stopRemoteRequests();
+        // cancelPendingRetryIfReady();
+        //should we do this?? I think this helps a lot with consistency. Because there would not be any scheduled things anymore after this.
+        
+        updateProgress();
+        notifyChangeListeners();
+    };
+    
     @InterfaceAudience.Public
     public boolean goOffline() {
-        if (!online) {
-            return false;
-        }
         if (db == null) {
             return false;
         }
-        db.runAsync(new AsyncTask() {
+    	// Execute this on the replicator thread - we might have been called from OS IntentBroadcastReceiver
+		// This code is now guaranteed to be thread-safe as workExecutor is a SingleThreadScheduledExecutor and
+		// also will always run tasks in-order of insertion into the queue (even if inserted at the same time)
+        Log.d(Log.TAG_SYNC, "%s: Scheduling to go offline", this);
+        workExecutor.submit(new Runnable() {
             @Override
-            public void run(Database database) {
-                Log.d(Log.TAG_SYNC, "%s: Going offline", this);
-                online = false;
-                stopRemoteRequests();
-                updateProgress();
-                notifyChangeListeners();
+            public void run() {
+            	goOfflineOnWorker();
             }
         });
         return true;
     }
 
+    protected void goOnlineOnWorker() {
+        if (online) {
+          Log.d(Log.TAG_SYNC, "%s: goOnline called - but we're already online.", this);
+          return;
+        }
+        // If we're not quite offline yet - lets defer this.
+        if(asyncTaskCount > 0) {
+        	Log.e(Log.TAG_SYNC, "%s: goOnline called - and we are offline - but asyncTaskCount is %d. Waiting 1 second",this,asyncTaskCount);
+        	// We'll defer until 1 second later.
+        	workExecutor.schedule(new Runnable() {
+        		public void run() {
+        			goOnlineOnWorker();
+        		}
+        	},1,TimeUnit.SECONDS);
+        	return;
+        }
+
+        Log.d(Log.TAG_SYNC, String.format("%s: Going online", this));
+        online = true;
+
+        if (running) {
+            lastSequence = null;
+            setError(null);
+        }
+
+        /*
+        Log.d(Log.TAG_SYNC, "%s: Shutting down remoteRequestExecutor", this);
+        List<Runnable> tasksAwaitingExecution = remoteRequestExecutor.shutdownNow();
+        for (Runnable runnable : tasksAwaitingExecution) {
+            Log.d(Log.TAG_SYNC, "%s: runnable: %s", this, runnable);
+            if (runnable instanceof RemoteRequest) {
+                RemoteRequest remoteRequest = (RemoteRequest) runnable;
+                Log.v(Log.TAG_SYNC, "%s: request awaiting execution: %s underlying req: %s", this, remoteRequest, remoteRequest.getRequest().getURI());
+            }
+        }
+
+        boolean succeeded = false;
+        try {
+            succeeded = remoteRequestExecutor.awaitTermination(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Log.e(Log.TAG_SYNC, "%s: timeout remoteRequestExecutor.awaitTermination", this, e);
+        }
+        Log.d(Log.TAG_SYNC, "%s: remoteRequestExecutor.awaitTermination succeeded: %s", this, succeeded);
+        */
+        
+        // Just forget all about any remote requests still running??
+
+        remoteRequestExecutor = Executors.newCachedThreadPool();
+        checkSession();
+        notifyChangeListeners();
+    }
+
     @InterfaceAudience.Public
     public boolean goOnline() {
-        if (online) {
-            return false;
-        }
         if (db == null) {
+            Log.d(Log.TAG_SYNC, "%s: No db - gotta bail.", this);
             return false;
         }
-        db.runAsync(new AsyncTask() {
+        Log.d(Log.TAG_SYNC, "%s: Scheduling to go online now", this);
+        workExecutor.submit(new Runnable() {
             @Override
-            public void run(Database database) {
-                Log.d(Log.TAG_SYNC, "%s: Going online", this);
-                online = true;
-
-                if (running) {
-                    lastSequence = null;
-                    setError(null);
-                }
-
-                /*
-                Log.d(Log.TAG_SYNC, "%s: Shutting down remoteRequestExecutor", this);
-                List<Runnable> tasksAwaitingExecution = remoteRequestExecutor.shutdownNow();
-                for (Runnable runnable : tasksAwaitingExecution) {
-                    Log.d(Log.TAG_SYNC, "%s: runnable: %s", this, runnable);
-                    if (runnable instanceof RemoteRequest) {
-                        RemoteRequest remoteRequest = (RemoteRequest) runnable;
-                        Log.v(Log.TAG_SYNC, "%s: request awaiting execution: %s underlying req: %s", this, remoteRequest, remoteRequest.getRequest().getURI());
-                    }
-                }
-
-                boolean succeeded = false;
-                try {
-                    succeeded = remoteRequestExecutor.awaitTermination(30, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                    Log.e(Log.TAG_SYNC, "%s: timeout remoteRequestExecutor.awaitTermination", this, e);
-                }
-                Log.d(Log.TAG_SYNC, "%s: remoteRequestExecutor.awaitTermination succeeded: %s", this, succeeded);
-                */
-
-                remoteRequestExecutor = Executors.newCachedThreadPool();
-                checkSession();
-                notifyChangeListeners();
+            public void run() {
+                goOnlineOnWorker();
             }
         });
-
         return true;
     }
 
