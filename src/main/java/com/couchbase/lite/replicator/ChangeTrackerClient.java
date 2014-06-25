@@ -19,4 +19,9 @@ public interface ChangeTrackerClient {
 
     void changeTrackerStopped(ChangeTracker tracker);
 
+    void changeTrackerFinished(ChangeTracker tracker);
+
+    void changeTrackerCaughtUp();
+
+
 }

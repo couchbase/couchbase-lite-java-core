@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -46,8 +47,12 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     // Maximum number of revision IDs to pass in an "?atts_since=" query param
     public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
 
+    // Does the server support _bulk_get requests?
     protected Boolean canBulkGet;
-    protected Boolean caughtUp;
+
+    // Have I received all current _changes entries?
+    protected AtomicBoolean caughtUp;
+
     protected Batcher<RevisionInternal> downloadsToInsert;
     protected List<RevisionInternal> revsToPull;
     protected List<RevisionInternal> deletedRevsToPull;
@@ -121,10 +126,24 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
     }
 
+    /**
+     * This is called if I've gone idle but some revisions failed to be pulled.
+     * I should start the _changes feed over again, so I can retry all the revisions.
+     */
+    @InterfaceAudience.Private
+    protected void retry() {
+        super.retry();
+
+        if (changeTracker != null) {
+            changeTracker.stop();
+        }
+        beginReplicating();
+    }
 
     @Override
     @InterfaceAudience.Private
     public void beginReplicating() {
+
         if (downloadsToInsert == null) {
             int capacity = 200;
             int delay = 1000;
@@ -146,8 +165,18 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             }
         }
 
-        Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s", this, lastSequence);
-        changeTracker = new ChangeTracker(remote, continuous ? ChangeTracker.ChangeTrackerMode.LongPoll : ChangeTracker.ChangeTrackerMode.OneShot, true, lastSequence, this);
+        caughtUp = new AtomicBoolean(false);
+
+        ChangeTracker.ChangeTrackerMode changeTrackerMode;
+        if (!continuous) {
+            changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
+        } else {
+            // TODO: the ios code here is slightly different, but it caused issues
+            changeTrackerMode = ChangeTracker.ChangeTrackerMode.LongPoll;
+        }
+
+        Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s", this, lastSequence, changeTrackerMode);
+        changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this);
         changeTracker.setAuthenticator(getAuthenticator());
         Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
 
@@ -160,12 +189,16 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         changeTracker.setDocIDs(documentIDs);
         changeTracker.setRequestHeaders(requestHeaders);
 
+        Log.v(Log.TAG_SYNC, "%s | %s: beginReplicating() calling asyncTaskStarted()", this, Thread.currentThread());
+        asyncTaskStarted();
+
+        changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
+        changeTracker.start();
         if (!continuous) {
             Log.v(Log.TAG_SYNC, "%s | %s: beginReplicating() calling asyncTaskStarted()", this, Thread.currentThread());
             asyncTaskStarted();
         }
-        changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
-        changeTracker.start();
+
     }
 
 
@@ -219,6 +252,26 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
     }
 
+    @InterfaceAudience.Private
+    public void changeTrackerCaughtUp() {
+        if (!caughtUp.get()) {
+            Log.i(Log.TAG_SYNC, "%s: Caught up with changes!", this);
+            boolean success = caughtUp.compareAndSet(false, true);
+            if (!success) {
+                caughtUp.set(true);
+                Log.w(Log.TAG_SYNC, "%s: set caughtUp via CAS failed, force-set to true", this);
+            }
+            Log.w(Log.TAG_SYNC, "%s: ChangeTracker changeTrackerCaughtUp() calling asyncTaskFinished", this);
+            asyncTaskFinished(1);  // balances -asyncTaskStarted in -beginReplicating
+        }
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    public void changeTrackerFinished(ChangeTracker tracker) {
+        changeTrackerCaughtUp();
+    }
+
     @Override
     @InterfaceAudience.Private
     public void changeTrackerStopped(ChangeTracker tracker) {
@@ -242,6 +295,19 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                     Log.v(Log.TAG_SYNC, "%s | %s: changeTrackerStopped() calling asyncTaskFinished()", this, Thread.currentThread());
 
                     asyncTaskFinished(1);  // balances -asyncTaskStarted in -startChangeTracker
+                }
+            });
+        }
+
+        if (!caughtUp.get()) {
+            // running this on the workExecutor, because assuming it needs to be according
+            // to comments above in the if (!isContinuous()) code block.
+            workExecutor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    Log.v(Log.TAG_SYNC, "%s | %s: changeTrackerStopped() calling asyncTaskFinished()", this, Thread.currentThread());
+
+                    asyncTaskFinished(1);  // balances -asyncTaskStarted in -beginReplicating
                 }
             });
         }
@@ -456,7 +522,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
                         asyncTaskStarted();
                         // TODO: [gotRev.body compact];
-                        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher", this, gotRev);
+                        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s", Puller.this, gotRev, downloadsToInsert);
                         downloadsToInsert.queueObject(gotRev);
                     }
                 } finally {
@@ -554,6 +620,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                     }
             );
         } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "%s: pullBulkRevisions Exception: %s", this, e);
             return;
         }
 

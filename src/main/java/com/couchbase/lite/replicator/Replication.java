@@ -104,9 +104,9 @@ public abstract class Replication implements NetworkReachabilityListener {
 
     protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
 
+    protected static int RETRY_DELAY = 60;
     protected static final int PROCESSOR_DELAY = 500;
     protected static final int INBOX_CAPACITY = 100;
-    protected static final int RETRY_DELAY = 60;
     protected static final int EXECUTOR_THREAD_POOL_SIZE = 5;
 
 
@@ -946,9 +946,13 @@ public abstract class Replication implements NetworkReachabilityListener {
             if (active != newActive) {
                 Log.d(Log.TAG_SYNC, "%s: Progress: set active = %s asyncTaskCount: %d batcherCount: %d", this, newActive, asyncTaskCount, batcherCount);
                 active = newActive;
+                Log.d(Log.TAG_SYNC, "%s: Progress: active = %s", this, active);
                 notifyChangeListeners();
 
+                Log.d(Log.TAG_SYNC, "%s: Progress: active = %s ..", this, active);
                 if (!active) {
+                    Log.d(Log.TAG_SYNC, "%s: Progress: !active", this);
+
                     if (!continuous) {
                         Log.d(Log.TAG_SYNC, "%s since !continuous, calling stopped()", this);
                         stopped();
@@ -959,8 +963,12 @@ public abstract class Replication implements NetworkReachabilityListener {
                                 RETRY_DELAY);
                         cancelPendingRetryIfReady();
                         scheduleRetryIfReady();
+                    } else {
+                        Log.d(Log.TAG_SYNC, "%s since continuous and error == null, doing nothing", this);
                     }
 
+                } else {
+                    Log.d(Log.TAG_SYNC, "%s: Progress: active", this);
                 }
 
             } else {
@@ -1646,4 +1654,11 @@ public abstract class Replication implements NetworkReachabilityListener {
     /* package */ HttpClientFactory getClientFactory() {
         return clientFactory;
     }
+
+    @InterfaceAudience.Private
+    /* package */ void setRetryDelay(int retryDelay) {
+        Replication.RETRY_DELAY = retryDelay;
+    }
+
+
 }
