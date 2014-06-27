@@ -80,6 +80,7 @@ public class ChangeTracker implements Runnable {
     private boolean usePOST;
     private int heartBeatSeconds;
     private int limit;
+    private boolean caughtUp = false;
 
     private Authenticator authenticator;
 
@@ -319,11 +320,20 @@ public class ChangeTracker implements Runnable {
                             Map<String, Object> fullBody = Manager.getObjectMapper().readValue(input, Map.class);
                             boolean responseOK = receivedPollResponse(fullBody);
                             if (mode == ChangeTrackerMode.LongPoll && responseOK) {
+
+                                // TODO: this logic is questionable, there's lots
+                                // TODO: of differences in the iOS changetracker code,
+                                if (!caughtUp) {
+                                    caughtUp = true;
+                                    client.changeTrackerCaughtUp();
+                                }
+
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
                                 backoff.resetBackoff();
                                 continue;
                             } else {
                                 Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
+                                client.changeTrackerFinished(this);
                                 stop();
                             }
                         } else {  // one-shot replications
@@ -343,8 +353,15 @@ public class ChangeTracker implements Runnable {
 
                             }
 
+                            // TODO: copy this code to continuous replications section
+                            if (!caughtUp) {
+                                caughtUp = true;
+                                client.changeTrackerCaughtUp();
+                            }
+
                             Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
-                            stop();
+                            client.changeTrackerFinished(this);
+                            stopped();
                             break;
 
                         }
