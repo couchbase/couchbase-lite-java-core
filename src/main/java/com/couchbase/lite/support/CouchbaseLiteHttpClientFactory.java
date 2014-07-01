@@ -28,7 +28,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     private BasicHttpParams basicHttpParams;
 
     public static final int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 60;
-    public static final int DEFAULT_SO_TIMEOUT_SECONDS = 60;
+    public static final int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
+
 
     /**
      * Constructor
