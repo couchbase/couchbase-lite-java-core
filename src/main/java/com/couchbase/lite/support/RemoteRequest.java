@@ -204,9 +204,7 @@ public class RemoteRequest implements Runnable {
                 return;
             }
 
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute", this);
             response = httpClient.execute(request);
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute", this);
 
             // add in cookies to global store
             try {
@@ -224,7 +222,7 @@ public class RemoteRequest implements Runnable {
             }
 
             if (status.getStatusCode() >= 300) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
+                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
             } else {

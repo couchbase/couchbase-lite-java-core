@@ -10,20 +10,20 @@ import com.couchbase.lite.Manager;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
-import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.support.RemoteRequestCompletionBlock;
+import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.entity.mime.MultipartEntity;
-import org.apache.http.entity.mime.content.InputStreamBody;
+import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
 
+import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -483,7 +483,6 @@ public final class Pusher extends Replication implements Database.ChangeListener
             }
          */
         Map<String, Object> attachments = (Map<String, Object>) revProps.get("_attachments");
-        final List<InputStream> inputStreamBodies = new ArrayList<InputStream>();
         for (String attachmentKey : attachments.keySet()) {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentKey);
             if (attachment.containsKey("follows")) {
@@ -506,13 +505,13 @@ public final class Pusher extends Replication implements Database.ChangeListener
                 BlobStore blobStore = this.db.getAttachments();
                 String base64Digest = (String) attachment.get("digest");
                 BlobKey blobKey = new BlobKey(base64Digest);
-                InputStream inputStream = blobStore.blobStreamForKey(blobKey);
-                if (inputStream == null) {
+                String path = blobStore.pathForKey(blobKey);
+                File file = new File(path);
+                if (!file.exists()) {
                     Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
                     multiPart = null;
                 }
                 else {
-                    inputStreamBodies.add(inputStream);
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
@@ -522,7 +521,9 @@ public final class Pusher extends Replication implements Database.ChangeListener
                                 " field name instead of content_type (see couchbase-lite-android" +
                                 " issue #80): %s", attachment);
                     }
-                    multiPart.addPart(attachmentKey, new InputStreamBody(inputStream, contentType, attachmentKey,blobStore.getSizeOfBlob(blobKey)));
+
+                    FileBody fileBody = new FileBody(file, contentType);
+                    multiPart.addPart(attachmentKey, fileBody);
                 }
 
             }
@@ -563,14 +564,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
                         removePending(revision);
                     }
                 } finally {
-                    for(InputStream is : inputStreamBodies) {
-                        try {
-                            is.close();
-                        } catch (IOException e1) {
-                            Log.v(Log.TAG_SYNC, "Got an error closing an internal input stream, this really shouldn't matter", e1);
-                        }
-                    }
-                    
+
                     addToCompletedChangesCount(1);
                     Log.v(Log.TAG_SYNC, "%s | %s: uploadMultipartRevision() calling asyncTaskFinished()", this, Thread.currentThread());
 
