@@ -76,6 +76,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
+                respondWithResult(fullBody, error, response);
             } else {
 
                 HttpEntity entity = response.getEntity();
