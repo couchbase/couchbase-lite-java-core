@@ -1398,7 +1398,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 Log.d(Log.TAG_SYNC, "%s: remoteRequestExecutor.awaitTermination succeeded: %s", this, succeeded);
                 */
 
-                remoteRequestExecutor = Executors.newCachedThreadPool();
+                remoteRequestExecutor = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
                 checkSession();
                 notifyChangeListeners();
             }
