@@ -95,4 +95,23 @@ public class RevisionList extends ArrayList<RevisionInternal> {
         }
     }
 
+    public RevisionInternal revWithDocId(String docId) {
+        Iterator<RevisionInternal> iterator = iterator();
+        while(iterator.hasNext()) {
+            RevisionInternal rev = iterator.next();
+            if (rev.getDocId() != null && rev.getDocId().equals(docId)) {
+                return rev;
+            }
+        }
+        return null;
+    }
+
+    public RevisionInternal removeAndReturnRev(RevisionInternal rev) {
+        int index = this.indexOf(rev);
+        if (index == -1) {
+            return null;
+        }
+        RevisionInternal resultRev = this.remove(index);
+        return resultRev;
+    }
 }

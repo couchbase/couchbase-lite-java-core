@@ -1286,7 +1286,7 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         savingCheckpoint = true;
         final String checkpointID = remoteCheckpointDocID;
-        Log.d(Log.TAG_SYNC, "%s: put remote _local document.  checkpointID: %s", this, checkpointID);
+        Log.d(Log.TAG_SYNC, "%s: put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
         sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
@@ -1593,7 +1593,7 @@ public abstract class Replication implements NetworkReachabilityListener {
                 return new Status(Status.OK);
             }
 
-            // 'status' property is nonstandard; TouchDB returns it, others don't.
+            // 'status' property is nonstandard; Couchbase Lite returns it, others don't.
             String statusString = (String) item.get("status");
             int status = Integer.parseInt(statusString);
             if (status >= 400) {
@@ -1606,6 +1606,10 @@ public abstract class Replication implements NetworkReachabilityListener {
                 return new Status(Status.FORBIDDEN);
             } else if (errorStr.equalsIgnoreCase("conflict")) {
                 return new Status(Status.CONFLICT);
+            } else if (errorStr.equalsIgnoreCase("missing")) {
+                return new Status(Status.NOT_FOUND);
+            } else if (errorStr.equalsIgnoreCase("not_found")) {
+                return new Status(Status.NOT_FOUND);
             } else {
                 return new Status(Status.UPSTREAM_ERROR);
             }

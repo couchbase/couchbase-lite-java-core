@@ -1,11 +1,13 @@
 package com.couchbase.lite.util;
 
+import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 
 import org.apache.http.StatusLine;
+import org.apache.http.client.HttpResponseException;
 
 public class Utils {
 
@@ -25,6 +27,21 @@ public class Utils {
         }
     }
 
+    public static boolean isTransientError(Throwable throwable) {
+
+        if (throwable instanceof CouchbaseLiteException) {
+            CouchbaseLiteException e = (CouchbaseLiteException) throwable;
+            return isTransientError(e.getCBLStatus().getCode());
+        } else if (throwable instanceof HttpResponseException) {
+            HttpResponseException e = (HttpResponseException) throwable;
+            return isTransientError(e.getStatusCode());
+        } else {
+            return false;
+        }
+
+    }
+
+
     public static boolean isTransientError(StatusLine status) {
 
         // TODO: in ios implementation, it considers others errors
@@ -34,8 +51,13 @@ public class Utils {
                                           || code == NSURLErrorNetworkConnectionLost;
          */
 
-        int code = status.getStatusCode();
-        if (code == 500 || code == 502 || code == 503 || code == 504) {
+        return isTransientError(status.getStatusCode());
+
+    }
+
+    public static boolean isTransientError(int statusCode) {
+
+        if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504) {
             return true;
         }
         return false;

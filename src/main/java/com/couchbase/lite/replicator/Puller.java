@@ -17,6 +17,7 @@ import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.SequenceMap;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
@@ -509,10 +510,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                 try {
                     if (e != null) {
                         Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);
-                        setError(e);
-                        revisionFailed();
-                        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision() updating completedChangesCount from %d  ->  due to error pulling remote revision", this, getCompletedChangesCount(), getCompletedChangesCount() + 1);
-                        addToCompletedChangesCount(1);
+                        revisionFailed(rev, e);
                     } else {
                         Map<String, Object> properties = (Map<String, Object>) result;
                         PulledRevision gotRev = new PulledRevision(properties, db);
@@ -594,9 +592,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                             } else {
                                 Status status = statusFromBulkDocsResponseItem(props);
                                 error = new CouchbaseLiteException(status);
-                                revisionFailed();
-
-                                completedChangesCount.getAndIncrement();
+                                revisionFailed(rev, error);
                             }
                         }
                     },
@@ -639,7 +635,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         Log.v(Log.TAG_SYNC, "%s | %s: pullBulkWithAllDocs() calling asyncTaskStarted()", this, Thread.currentThread());
         asyncTaskStarted();
         ++httpConnectionCount;
-        final List<RevisionInternal> remainingRevs = new ArrayList<RevisionInternal>(bulkRevs);
+        final RevisionList remainingRevs = new RevisionList(bulkRevs);
 
         Collection<String> keys = CollectionUtils.transform(bulkRevs,
                 new CollectionUtils.Functor<RevisionInternal, String>() {
@@ -675,12 +671,21 @@ public final class Puller extends Replication implements ChangeTrackerClient {
                                 Map<String, Object> doc = (Map<String, Object>) row.get("doc");
                                 if (doc != null && doc.get("_attachments") == null) {
                                     RevisionInternal rev = new RevisionInternal(doc, db);
-                                    int pos = remainingRevs.indexOf(rev);
-                                    if (pos > -1) {
-                                        rev.setSequence(remainingRevs.get(pos).getSequence());
-                                        remainingRevs.remove(pos);
+                                    RevisionInternal removedRev = remainingRevs.removeAndReturnRev(rev);
+                                    if (removedRev != null) {
+                                        rev.setSequence(removedRev.getSequence());
                                         queueDownloadedRevision(rev);
                                     }
+                                } else {
+                                    Status status = statusFromBulkDocsResponseItem(row);
+                                    if (status.isError() && row.containsKey("key") && row.get("key") != null) {
+                                        RevisionInternal rev = remainingRevs.revWithDocId((String)row.get("key"));
+                                        if (rev != null) {
+                                            remainingRevs.remove(rev);
+                                            revisionFailed(rev, new CouchbaseLiteException(status));
+                                        }
+                                    }
+
                                 }
                             }
                         }
@@ -867,6 +872,17 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         return true;
     }
+
+    private void revisionFailed(RevisionInternal rev, Throwable throwable) {
+        if (Utils.isTransientError(throwable)) {
+            revisionFailed();  // retry later
+        } else {
+            Log.v(Log.TAG_SYNC, "%s: giving up on %s: %s", this, rev, throwable);
+            pendingSequences.removeSequence(rev.getSequence());
+        }
+        completedChangesCount.getAndIncrement();
+    }
+
 }
 
 /**
