@@ -1362,14 +1362,22 @@ public abstract class Replication implements NetworkReachabilityListener {
     @InterfaceAudience.Public
     public boolean goOnline() {
         if (online) {
+            Log.v(Log.TAG_SYNC, "%s: goOnline() called, but online == true. ignoring", this);
             return false;
         }
         if (db == null) {
+            Log.v(Log.TAG_SYNC, "%s: goOnline() called, but db == null. ignoring", this);
             return false;
         }
         db.runAsync(new AsyncTask() {
             @Override
             public void run(Database database) {
+
+                if (online) {
+                    Log.v(Log.TAG_SYNC, "%s: goOnline() callback called, but online == true. ignoring", Replication.this);
+                    return;
+                }
+
                 Log.d(Log.TAG_SYNC, "%s: Going online", this);
                 online = true;
 
