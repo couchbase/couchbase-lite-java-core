@@ -424,6 +424,7 @@ public class ChangeTracker implements Runnable {
     }
 
     public boolean start() {
+        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to start", this);
         this.error = null;
         String maskedRemoteWithoutCredentials = databaseURL.toExternalForm();
         maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
@@ -437,6 +438,7 @@ public class ChangeTracker implements Runnable {
         running = false;
         thread.interrupt();
         if(request != null) {
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
             request.abort();
         }
 
@@ -444,9 +446,12 @@ public class ChangeTracker implements Runnable {
     }
 
     public void stopped() {
-        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped", this);
+        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped()", this);
         if (client != null) {
+            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling changeTrackerStopped, client: %s", this, client);
             client.changeTrackerStopped(ChangeTracker.this);
+        } else {
+            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker not calling changeTrackerStopped, client == null", this);
         }
         client = null;
     }

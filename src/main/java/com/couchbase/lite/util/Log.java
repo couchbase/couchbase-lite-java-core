@@ -32,6 +32,7 @@ public class Log {
      */
     public static final String TAG = "CBLite";  // default "catch-all" tag
     public static final String TAG_SYNC = "Sync";
+    public static final String TAG_SYNC_ASYNC_TASK = "SyncAsyncTask";
     public static final String TAG_REMOTE_REQUEST = "RemoteRequest";
     public static final String TAG_VIEW = "View";
     public static final String TAG_QUERY = "Query";
@@ -57,6 +58,7 @@ public class Log {
         enabledTags = new ConcurrentHashMap<String, Integer>();
         enabledTags.put(Log.TAG, WARN);
         enabledTags.put(Log.TAG_SYNC, WARN);
+        enabledTags.put(Log.TAG_SYNC_ASYNC_TASK, WARN);
         enabledTags.put(Log.TAG_REMOTE_REQUEST, WARN);
         enabledTags.put(Log.TAG_VIEW, WARN);
         enabledTags.put(Log.TAG_QUERY, WARN);
