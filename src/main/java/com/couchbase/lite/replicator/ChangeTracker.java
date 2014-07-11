@@ -81,6 +81,7 @@ public class ChangeTracker implements Runnable {
     private int heartBeatSeconds;
     private int limit;
     private boolean caughtUp = false;
+    private boolean continuous = false;  // is enclosing replication continuous?
 
     private Authenticator authenticator;
 
@@ -100,6 +101,14 @@ public class ChangeTracker implements Runnable {
         this.requestHeaders = new HashMap<String, Object>();
         this.heartBeatSeconds = 300;
         this.limit = 50;
+    }
+
+    public boolean isContinuous() {
+        return continuous;
+    }
+
+    public void setContinuous(boolean continuous) {
+        this.continuous = continuous;
     }
 
     public void setFilterName(String filterName) {
@@ -353,16 +362,19 @@ public class ChangeTracker implements Runnable {
 
                             }
 
-                            // TODO: copy this code to continuous replications section
                             if (!caughtUp) {
                                 caughtUp = true;
                                 client.changeTrackerCaughtUp();
                             }
 
-                            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
-                            client.changeTrackerFinished(this);
-                            stopped();
-                            break;
+                            if (isContinuous()) {  // if enclosing replication is continuous
+                                mode = ChangeTrackerMode.LongPoll;
+                            } else {
+                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
+                                client.changeTrackerFinished(this);
+                                stopped();
+                                break;  // break out of while (running) loop
+                            }
 
                         }
 

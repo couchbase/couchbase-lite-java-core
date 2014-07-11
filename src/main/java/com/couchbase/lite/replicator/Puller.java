@@ -168,13 +168,12 @@ public final class Puller extends Replication implements ChangeTrackerClient {
 
         caughtUp = new AtomicBoolean(false);
 
+
         ChangeTracker.ChangeTrackerMode changeTrackerMode;
-        if (!continuous) {
-            changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
-        } else {
-            // TODO: the ios code here is slightly different, but it caused issues
-            changeTrackerMode = ChangeTracker.ChangeTrackerMode.LongPoll;
-        }
+
+        // it always starts out as OneShot, but if its a continuous replication
+        // it will switch to longpoll later.
+        changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
 
         Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s", this, lastSequence, changeTrackerMode);
         changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this);
@@ -189,6 +188,7 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         }
         changeTracker.setDocIDs(documentIDs);
         changeTracker.setRequestHeaders(requestHeaders);
+        changeTracker.setContinuous(isContinuous());
 
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: beginReplicating() calling asyncTaskStarted()", this, Thread.currentThread());
         asyncTaskStarted();
