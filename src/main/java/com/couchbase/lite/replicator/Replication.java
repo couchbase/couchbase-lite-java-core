@@ -1349,6 +1349,13 @@ public abstract class Replication implements NetworkReachabilityListener {
         db.runAsync(new AsyncTask() {
             @Override
             public void run(Database database) {
+
+                // extra guard needed for https://github.com/couchbase/couchbase-lite-java-core/issues/253
+                if (!online) {
+                    Log.v(Log.TAG_SYNC, "%s: goOffline() callback called, but online == false. ignoring", Replication.this);
+                    return;
+                }
+
                 Log.d(Log.TAG_SYNC, "%s: Going offline", this);
                 online = false;
                 stopRemoteRequests();
@@ -1373,6 +1380,7 @@ public abstract class Replication implements NetworkReachabilityListener {
             @Override
             public void run(Database database) {
 
+                // extra guard needed for https://github.com/couchbase/couchbase-lite-java-core/issues/253
                 if (online) {
                     Log.v(Log.TAG_SYNC, "%s: goOnline() callback called, but online == true. ignoring", Replication.this);
                     return;
