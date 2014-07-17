@@ -307,4 +307,11 @@ public class RevisionInternal {
         }
     }
 
+    public Map<String, Object> getAttachments() {
+        if (getProperties().containsKey("_attachments")) {
+            return (Map<String, Object>) getProperties().get("_attachments");
+        }
+        return new HashMap<String, Object>();
+    }
+
 }

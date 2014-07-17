@@ -3891,7 +3891,7 @@ public final class Database {
                     }
 
                     // Insert it:
-                    sequence = insertRevision(newRev, docNumericID, sequence, current, (getAttachmentsFromRevision(newRev).size() > 0), data);
+                    sequence = insertRevision(newRev, docNumericID, sequence, current, (newRev.getAttachments().size() > 0), data);
 
                     if(sequence <= 0) {
                         throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
