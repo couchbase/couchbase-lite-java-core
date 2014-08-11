@@ -124,7 +124,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 else if (digest != null) {
                     writer = attachmentsByMd5Digest.get(digest);
                     if (writer == null) {
-                        String errMsg = String.format("Attachment '%s' does not appear in MIME body (%s; should be %s)",
+                        String errMsg = String.format("Attachment '%s' does not appear in MIME body",
                                 attachmentName);
                         throw new IllegalStateException(errMsg);
                     }
@@ -153,7 +153,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             }
             else if (attachment.containsKey("data") && length > 1000) {
                 Log.w(Log.TAG_REMOTE_REQUEST, "Attachment '%s' sent inline (len=%d).  Large attachments " +
-                        "should be sent in MIME parts for reduced memory overhead.", attachmentName);
+                        "should be sent in MIME parts for reduced memory overhead.", attachmentName, length);
             }
 
         }

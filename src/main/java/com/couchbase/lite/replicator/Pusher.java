@@ -283,7 +283,7 @@ public final class Pusher extends Replication implements Database.ChangeListener
             public void onCompletion(Object response, Throwable e) {
 
                 try {
-                    Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response");
+                    Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response", this);
                     Map<String, Object> results = (Map<String, Object>) response;
                     if (e != null) {
                         setError(e);
