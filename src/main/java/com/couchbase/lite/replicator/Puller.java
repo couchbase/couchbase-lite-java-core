@@ -807,21 +807,27 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             Log.e(Log.TAG_SYNC, this + ": Exception inserting revisions", e);
         } finally {
             db.endTransaction(success);
+
+            if (success) {
+
+                // Checkpoint:
+                setLastSequence(pendingSequences.getCheckpointedValue());
+
+                long delta = System.currentTimeMillis() - time;
+                Log.v(Log.TAG_SYNC, "%s: inserted %d revs in %d milliseconds", this, downloads.size(), delta);
+
+                int newCompletedChangesCount = getCompletedChangesCount() + downloads.size();
+                Log.d(Log.TAG_SYNC, "%s insertDownloads() updating completedChangesCount from %d -> %d ", this, getCompletedChangesCount(), newCompletedChangesCount);
+
+                addToCompletedChangesCount(downloads.size());
+
+            }
+
             Log.d(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: insertDownloads() calling asyncTaskFinished() with value: %d", this, Thread.currentThread(), downloads.size());
 
             asyncTaskFinished(downloads.size());
         }
 
-        // Checkpoint:
-        setLastSequence(pendingSequences.getCheckpointedValue());
-
-        long delta = System.currentTimeMillis() - time;
-        Log.v(Log.TAG_SYNC, "%s: inserted %d revs in %d milliseconds", this, downloads.size(), delta);
-
-        int newCompletedChangesCount = getCompletedChangesCount() + downloads.size();
-        Log.d(Log.TAG_SYNC, "%s insertDownloads() updating completedChangesCount from %d -> %d ", this, getCompletedChangesCount(), newCompletedChangesCount);
-
-        addToCompletedChangesCount(downloads.size());
 
     }
 

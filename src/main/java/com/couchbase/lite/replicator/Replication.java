@@ -1286,11 +1286,12 @@ public abstract class Replication implements NetworkReachabilityListener {
 
         savingCheckpoint = true;
         final String checkpointID = remoteCheckpointDocID;
-        Log.d(Log.TAG_SYNC, "%s: put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
+        Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
         sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(Object result, Throwable e) {
+                Log.d(Log.TAG_SYNC, "%s: put remote _local document request finished.  checkpointID: %s body: %s", this, checkpointID, body);
                 savingCheckpoint = false;
                 if (e != null) {
                     Log.w(Log.TAG_SYNC, "%s: Unable to save remote checkpoint", e, this);
