@@ -1,13 +1,14 @@
 package com.couchbase.lite.support;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.util.Log;
 
-import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -19,7 +20,9 @@ import java.util.concurrent.TimeUnit;
 public class Batcher<T> {
 
     private ScheduledExecutorService workExecutor;
-    private ScheduledFuture<?> flushFuture;
+    private ScheduledFuture flushFuture;
+    private BlockingQueue<ScheduledFuture> pendingFutures;
+
     private int capacity;
     private int delay;
     private int scheduledDelay;
@@ -33,7 +36,9 @@ public class Batcher<T> {
         @Override
         public void run() {
             try {
+                Log.d(Log.TAG_SYNC, "processNowRunnable.run() method starting");
                 processNow();
+                Log.d(Log.TAG_SYNC, "processNowRunnable.run() method finished");
             } catch (Exception e) {
                 // we don't want this to crash the batcher
                 com.couchbase.lite.util.Log.e(Log.TAG_SYNC, this + ": BatchProcessor throw exception", e);
@@ -55,19 +60,18 @@ public class Batcher<T> {
         this.capacity = capacity;
         this.delay = delay;
         this.processor = processor;
+        this.pendingFutures = new LinkedBlockingQueue<ScheduledFuture>();
+        this.inbox = new LinkedHashSet<T>();
     }
 
     /**
      * Adds multiple objects to the queue.
      */
-    public synchronized void queueObjects(List<T> objects) {
+    public void queueObjects(List<T> objects) {
 
         Log.v(Log.TAG_SYNC, "%s: queueObjects called with %d objects. ", this, objects.size());
         if (objects.size() == 0) {
             return;
-        }
-        if (inbox == null) {
-            inbox = new LinkedHashSet<T>();
         }
 
         Log.v(Log.TAG_SYNC, "%s: inbox size before adding objects: %d", this, inbox.size());
@@ -75,6 +79,28 @@ public class Batcher<T> {
         inbox.addAll(objects);
 
         scheduleWithDelay(delayToUse());
+    }
+
+    public void waitForPendingFutures() {
+
+        try {
+            while (!pendingFutures.isEmpty()) {
+                ScheduledFuture future = pendingFutures.take();
+                try {
+                    Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                    future.get();
+                    Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+        }
+
     }
 
     /**
@@ -97,13 +123,11 @@ public class Batcher<T> {
      * After this method returns, the queue is guaranteed to be empty.
      */
     public void flushAll() {
-        while (inbox.size() > 0) {
-            unschedule();
-            List<T> toProcess = new ArrayList<T>();
-            toProcess.addAll(inbox);
-            processor.process(toProcess);
-            lastProcessedTime = System.currentTimeMillis();
-        }
+        List<T> toProcess = new ArrayList<T>();
+        toProcess.addAll(inbox);
+        processor.process(toProcess);
+        lastProcessedTime = System.currentTimeMillis();
+        inbox.clear();
     }
 
     /**
@@ -112,7 +136,7 @@ public class Batcher<T> {
     public void clear() {
         Log.v(Log.TAG_SYNC, "%s: clear() called, setting inbox to null", this);
         unschedule();
-        inbox = null;
+        inbox.clear();
     }
 
     public int count() {
@@ -123,6 +147,7 @@ public class Batcher<T> {
             return inbox.size();
         }
     }
+
 
     private void processNow() {
 
@@ -138,7 +163,7 @@ public class Batcher<T> {
             } else if (inbox.size() <= capacity) {
                 Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
                 toProcess.addAll(inbox);
-                inbox = null;
+                inbox.clear();
             } else {
                 Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
                 int i = 0;
@@ -175,28 +200,26 @@ public class Batcher<T> {
 
     private void scheduleWithDelay(int suggestedDelay) {
         Log.v(Log.TAG_SYNC, "%s: scheduleWithDelay called with delay: %d ms", this, suggestedDelay);
-        if (scheduled && (suggestedDelay < scheduledDelay)) {
-            Log.v(Log.TAG_SYNC, "%s: already scheduled and: %d < %d --> unscheduling", this, suggestedDelay, scheduledDelay);
-            unschedule();
-        }
-        if (!scheduled) {
-            Log.v(Log.TAG_SYNC, "not already scheduled");
-            scheduled = true;
-            scheduledDelay = suggestedDelay;
-            Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: %d ms", suggestedDelay);
-            flushFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
-        }
+        scheduledDelay = suggestedDelay;
+        Log.v(Log.TAG_SYNC, "workExecutor.schedule() with delay: %d ms", suggestedDelay);
+        ScheduledFuture future = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
+        pendingFutures.add(future);
+        flushFuture = future;
     }
 
     private void unschedule() {
         Log.v(Log.TAG_SYNC, this + ": unschedule() called");
-        scheduled = false;
-        if(flushFuture != null) {
-            boolean didCancel = flushFuture.cancel(false);
-            Log.v(Log.TAG_SYNC, "tried to cancel flushFuture, result: %s", didCancel);
 
-        } else {
-            Log.v(Log.TAG_SYNC, "flushFuture was null, doing nothing");
+        try {
+            while (!pendingFutures.isEmpty()) {
+                ScheduledFuture future = pendingFutures.take();
+                Log.d(Log.TAG_SYNC, "calling future.cancel() on %s", future);
+                future.cancel(true);
+                Log.d(Log.TAG_SYNC, "done calling future.cancel() on %s", future);
+            }
+
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
     }
 

@@ -468,13 +468,15 @@ public class ChangeTracker implements Runnable {
         client = null;
     }
 
-    void setRequestHeaders(Map<String, Object> requestHeaders) {
+    public void setRequestHeaders(Map<String, Object> requestHeaders) {
         this.requestHeaders = requestHeaders;
     }
 
     private void addRequestHeaders(HttpUriRequest request) {
-        for (String requestHeaderKey : requestHeaders.keySet()) {
-            request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+        if (requestHeaders != null) {
+            for (String requestHeaderKey : requestHeaders.keySet()) {
+                request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+            }
         }
     }
 
