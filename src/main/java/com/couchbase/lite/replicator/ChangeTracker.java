@@ -321,6 +321,7 @@ public class ChangeTracker implements Runnable {
                     stop();
                 }
                 HttpEntity entity = response.getEntity();
+                Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 InputStream input = null;
                 if (entity != null) {
                     try {
