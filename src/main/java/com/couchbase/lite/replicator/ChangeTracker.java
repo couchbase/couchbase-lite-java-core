@@ -319,6 +319,7 @@ public class ChangeTracker implements Runnable {
                     Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
                     this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     stop();
+                    return;
                 }
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
