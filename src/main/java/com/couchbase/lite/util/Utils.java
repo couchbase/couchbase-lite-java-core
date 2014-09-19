@@ -113,6 +113,9 @@ public class Utils {
         if (t instanceof CouchbaseLiteException) {
             CouchbaseLiteException couchbaseLiteException = (CouchbaseLiteException) t;
             return couchbaseLiteException.getCBLStatus().getCode();
+        } else if (t instanceof HttpResponseException) {
+            HttpResponseException responseException = (HttpResponseException) t;
+            return responseException.getStatusCode();
         }
         return Status.UNKNOWN;
     }
