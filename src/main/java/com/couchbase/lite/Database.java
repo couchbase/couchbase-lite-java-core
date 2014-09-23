@@ -3184,7 +3184,7 @@ public final class Database {
         String digestAsHex = Utils.bytesToHex(md5DigestResult);
 
         int generationIncremented = generation + 1;
-        return String.format("%d-%s", generationIncremented, digestAsHex);
+        return String.format("%d-%s", generationIncremented, digestAsHex).toLowerCase();
 
     }
 
