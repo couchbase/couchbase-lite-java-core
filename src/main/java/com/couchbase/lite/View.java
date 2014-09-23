@@ -918,9 +918,8 @@ public final class View {
 
     /**
      * Utility function to use in reduce blocks. Totals an array of Numbers.
-     * @exclude
      */
-    @InterfaceAudience.Private
+    @InterfaceAudience.Public
     public static double totalValues(List<Object>values) {
         double total = 0;
         for (Object object : values) {
