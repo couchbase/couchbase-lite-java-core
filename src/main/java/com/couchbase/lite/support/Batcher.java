@@ -4,10 +4,13 @@ import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -26,7 +29,7 @@ public class Batcher<T> {
     private int capacity;
     private int delay;
     private int scheduledDelay;
-    private LinkedHashSet<T> inbox;
+    private BlockingQueue<T> inbox;
     private BatchProcessor<T> processor;
     private boolean scheduled = false;
     private long lastProcessedTime;
@@ -61,7 +64,8 @@ public class Batcher<T> {
         this.delay = delay;
         this.processor = processor;
         this.pendingFutures = new LinkedBlockingQueue<ScheduledFuture>();
-        this.inbox = new LinkedHashSet<T>();
+        this.inbox = new LinkedBlockingQueue<T>();
+
     }
 
     /**
@@ -118,17 +122,6 @@ public class Batcher<T> {
         scheduleWithDelay(delayToUse());
     }
 
-    /**
-     * Sends _all_ the queued objects at once to the processor block.
-     * After this method returns, the queue is guaranteed to be empty.
-     */
-    public void flushAll() {
-        List<T> toProcess = new ArrayList<T>();
-        toProcess.addAll(inbox);
-        processor.process(toProcess);
-        lastProcessedTime = System.currentTimeMillis();
-        inbox.clear();
-    }
 
     /**
      * Empties the queue without processing any of the objects in it.
@@ -156,38 +149,40 @@ public class Batcher<T> {
         scheduled = false;
         List<T> toProcess = new ArrayList<T>();
 
-        synchronized (this) {
-            if (inbox == null || inbox.size() == 0) {
-                Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
-                return;
-            } else if (inbox.size() <= capacity) {
-                Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
-                toProcess.addAll(inbox);
-                inbox.clear();
-            } else {
-                Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
-                int i = 0;
-                for (T item: inbox) {
-                    toProcess.add(item);
-                    i += 1;
-                    if (i >= capacity) {
-                        break;
-                    }
+        if (inbox == null || inbox.size() == 0) {
+            Log.v(Log.TAG_SYNC, this + ": processNow() called, but inbox is empty");
+            return;
+        } else if (inbox.size() <= capacity) {
+            Log.v(Log.TAG_SYNC, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
+            while (inbox.size() > 0) {
+                try {
+                    T t = inbox.take();
+                    toProcess.add(t);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-
-                for (T item : toProcess) {
-                    Log.v(Log.TAG_SYNC, "%s: processNow() removing %s from inbox", this, item);
-                    inbox.remove(item);
+            }
+        } else {
+            Log.v(Log.TAG_SYNC, "%s: processNow() called, inbox size: %d", this, inbox.size());
+            int i = 0;
+            while (inbox.size() > 0 && i < capacity) {
+                try {
+                    T t = inbox.take();
+                    toProcess.add(t);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-
-                Log.v(Log.TAG_SYNC, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
-
-                // There are more objects left, so schedule them Real Soon:
-                scheduleWithDelay(delayToUse());
-
+                i += 1;
             }
 
+
+            Log.v(Log.TAG_SYNC, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
+
+            // There are more objects left, so schedule them Real Soon:
+            scheduleWithDelay(delayToUse());
+
         }
+
         if(toProcess != null && toProcess.size() > 0) {
             Log.v(Log.TAG_SYNC, "%s: invoking processor with %d items ", this, toProcess.size());
             processor.process(toProcess);
