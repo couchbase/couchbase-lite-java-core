@@ -16,6 +16,8 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.11'
     compile 'org.codehaus.jackson:jackson-core-asl:1.9.2'
     compile 'org.codehaus.jackson:jackson-mapper-asl:1.9.2'
+    compile 'com.github.oxo42:stateless4j:2.4.0'
+
 
     // Using this version of apache http client based on: http://bit.ly/1kiET7V
     // Decided to use jars instead so this wasn't accidentally included in android version

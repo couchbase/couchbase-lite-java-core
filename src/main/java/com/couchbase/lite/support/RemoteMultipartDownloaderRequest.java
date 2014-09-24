@@ -144,7 +144,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
             error = e;
             respondWithResult(fullBody, e, response);
         } finally {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
+            Log.d(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
         }
     }
 

@@ -2,6 +2,8 @@ package com.couchbase.lite.util;
 
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
+import com.couchbase.lite.Status;
+import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
@@ -92,5 +94,37 @@ public class Utils {
         return new String(hexChars);
     }
 
+    public static void assertNotNull(Object o, String errMsg) {
+        if (o == null) {
+            throw new IllegalArgumentException(errMsg);
+        }
+    }
+
+    @InterfaceAudience.Private
+    public static boolean is404(Throwable e) {
+        if (e instanceof HttpResponseException) {
+            return ((HttpResponseException) e).getStatusCode() == 404;
+        }
+        return false;
+    }
+
+    @InterfaceAudience.Private
+    public static int getStatusFromError(Throwable t) {
+        if (t instanceof CouchbaseLiteException) {
+            CouchbaseLiteException couchbaseLiteException = (CouchbaseLiteException) t;
+            return couchbaseLiteException.getCBLStatus().getCode();
+        } else if (t instanceof HttpResponseException) {
+            HttpResponseException responseException = (HttpResponseException) t;
+            return responseException.getStatusCode();
+        }
+        return Status.UNKNOWN;
+    }
+
+    public static String shortenString(String orig, int maxLength) {
+        if (orig == null || orig.length() <= maxLength) {
+            return orig;
+        }
+        return orig.substring(0, maxLength);
+    }
 
 }
