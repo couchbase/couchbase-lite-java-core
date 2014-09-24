@@ -104,11 +104,16 @@ public final class Puller extends Replication implements ChangeTrackerClient {
             return;
         }
 
-        if (changeTracker != null) {
-            Log.d(Log.TAG_SYNC, "%s: stopping changetracker", this, changeTracker);
-            changeTracker.setClient(null);  // stop it from calling my changeTrackerStopped()
-            changeTracker.stop();
-            changeTracker = null;
+        // Creating a local copy stops any situations where between the null check and the call to stop
+        // that changeTracker could be set to null and so cause a null pointer exception.
+        ChangeTracker localCopyOfChangeTracker = changeTracker;
+        // TODO: Setting changeTracker to null like this is inherently not thread safe unless we are going to re-edit
+        // the puller file to use the 'local' trick above. I don't think that's a good idea. Rather we should restructure
+        // puller to be inherently thread safe. But in the meantime the code below replicates the existing functionality.
+        changeTracker = null;
+        if (localCopyOfChangeTracker != null) {
+            Log.d(Log.TAG_SYNC, "%s: stopping changetracker", this, localCopyOfChangeTracker);
+            localCopyOfChangeTracker.stop();
             if (!continuous) {
                 Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s : puller.stop() calling asyncTaskFinished()", this, Thread.currentThread());
                 asyncTaskFinished(1);  // balances asyncTaskStarted() in beginReplicating()
@@ -177,24 +182,22 @@ public final class Puller extends Replication implements ChangeTrackerClient {
         changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
 
         Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s", this, lastSequence, changeTrackerMode);
-        changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this);
-        changeTracker.setAuthenticator(getAuthenticator());
-        Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
+        boolean usePOST = serverIsSyncGatewayVersion("0.93");
 
-        if (filterName != null) {
-            changeTracker.setFilterName(filterName);
-            if (filterParams != null) {
-                changeTracker.setFilterParams(filterParams);
-            }
+        Map<String, Object> filterParams = null;
+
+        if (documentIDs != null && documentIDs.size() > 0) {
+            changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this, usePOST,
+                    documentIDs, requestHeaders, getAuthenticator(), isContinuous());
+        } else {
+            changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this, usePOST,
+                    filterName, filterParams, requestHeaders, getAuthenticator(), isContinuous());
         }
-        changeTracker.setDocIDs(documentIDs);
-        changeTracker.setRequestHeaders(requestHeaders);
-        changeTracker.setContinuous(isContinuous());
+        Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
 
         Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: beginReplicating() calling asyncTaskStarted()", this, Thread.currentThread());
         asyncTaskStarted();
 
-        changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
         changeTracker.start();
         if (!continuous) {
             Log.v(Log.TAG_SYNC_ASYNC_TASK, "%s | %s: beginReplicating() calling asyncTaskStarted()", this, Thread.currentThread());
@@ -277,6 +280,12 @@ public final class Puller extends Replication implements ChangeTrackerClient {
     @Override
     @InterfaceAudience.Private
     public void changeTrackerStopped(ChangeTracker tracker) {
+        //TODO: This is the equivalent of the existing behavior for stopping the puller but it is not thread
+        //safe, but neither is the existing puller so nothing has been made worse.
+        if (changeTracker == null) {
+            return;
+        }
+
         Log.w(Log.TAG_SYNC, "%s: ChangeTracker %s stopped", this, tracker);
         if (error == null && tracker.getLastError() != null) {
             setError(tracker.getLastError());

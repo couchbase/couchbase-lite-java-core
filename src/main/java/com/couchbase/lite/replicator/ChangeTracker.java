@@ -1,9 +1,6 @@
 package com.couchbase.lite.replicator;
 
-import com.couchbase.lite.CouchbaseLiteException;
-import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
-import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -13,16 +10,13 @@ import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
-import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.AuthState;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpGet;
@@ -32,7 +26,6 @@ import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.protocol.ExecutionContext;
 import org.apache.http.protocol.HttpContext;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonParser;
@@ -47,8 +40,7 @@ import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import javax.management.relation.RoleUnresolved;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -60,30 +52,29 @@ import javax.management.relation.RoleUnresolved;
 @InterfaceAudience.Private
 public class ChangeTracker implements Runnable {
 
-    private URL databaseURL;
-    private ChangeTrackerClient client;
-    private ChangeTrackerMode mode;
-    private Object lastSequenceID;
-    private boolean includeConflicts;
+    private final URL databaseURL;
+    private final ChangeTrackerClient client;
+    private volatile ChangeTracker.ChangeTrackerMode mode;
+    private volatile Object lastSequenceID;
+    private final boolean includeConflicts;
 
     private Thread thread;
-    private boolean running = false;
-    private HttpUriRequest request;
+    public enum ChangeTrackerStateEnum { NOTSTARTED, NOTRUNNING, RUNNING, STOPPED }
+    private AtomicReference<ChangeTrackerStateEnum> trackerState =
+            new AtomicReference<ChangeTrackerStateEnum>(ChangeTrackerStateEnum.NOTSTARTED);
 
-    private String filterName;
-    private Map<String, Object> filterParams;
-    private List<String> docIDs;
+    private final String filterName;
+    private final Map<String, Object> filterParams;
 
-    private Throwable error;
-    protected Map<String, Object> requestHeaders;
-    protected ChangeTrackerBackoff backoff;
-    private boolean usePOST;
-    private int heartBeatSeconds;
-    private int limit;
-    private boolean caughtUp = false;
-    private boolean continuous = false;  // is enclosing replication continuous?
+    private volatile Throwable error = null;
+    private final Map<String, Object> requestHeaders;
+    private final ChangeTrackerBackoff backoff = new ChangeTrackerBackoff();
+    private final boolean usePOST;
+    private final static int heartBeatSeconds = 300;
+    private final static int limit = 50;
+    private final boolean continuous;
 
-    private Authenticator authenticator;
+    private final Authenticator authenticator;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -91,36 +82,78 @@ public class ChangeTracker implements Runnable {
         Continuous  // does not work, do not use it.
     }
 
+    /**
+     * This constructor is intended for testing purposes.
+     * @param databaseURL
+     * @param mode
+     * @param includeConflicts
+     * @param lastSequenceID
+     * @param client
+     * @param usePOST
+     */
+    @InterfaceAudience.Private
     public ChangeTracker(URL databaseURL, ChangeTrackerMode mode, boolean includeConflicts,
-                         Object lastSequenceID, ChangeTrackerClient client) {
-        this.databaseURL = databaseURL;
-        this.mode = mode;
-        this.includeConflicts = includeConflicts;
-        this.lastSequenceID = lastSequenceID;
-        this.client = client;
-        this.requestHeaders = new HashMap<String, Object>();
-        this.heartBeatSeconds = 300;
-        this.limit = 50;
+                         Object lastSequenceID, ChangeTrackerClient client, boolean usePOST) {
+        this(databaseURL, mode, includeConflicts, lastSequenceID, client, usePOST, null, null, null, null, false);
     }
 
-    public boolean isContinuous() {
-        return continuous;
+    public ChangeTracker(URL databaseURL, ChangeTrackerMode mode, boolean includeConflicts,
+                         Object lastSequenceID, ChangeTrackerClient client, boolean usePOST,
+                         List<String> docIDs, Map<String, Object> requestHeaders, Authenticator authenticator,
+                         boolean continuous) {
+        this(databaseURL, mode, includeConflicts, lastSequenceID, client, usePOST, docIDs, null, null,
+                requestHeaders, authenticator, continuous);
     }
 
-    public void setContinuous(boolean continuous) {
+    public ChangeTracker(URL databaseURL, ChangeTrackerMode mode, boolean includeConflicts,
+                         Object lastSequenceID, ChangeTrackerClient client, boolean usePOST,
+                         String filterName, Map<String, Object> filterParams,
+                         Map<String, Object> requestHeaders, Authenticator authenticator, boolean continuous) {
+        this(databaseURL, mode, includeConflicts, lastSequenceID, client, usePOST, null, filterName, filterParams,
+                requestHeaders, authenticator, continuous);
+    }
+
+    private ChangeTracker(URL databaseURL, ChangeTrackerMode mode, boolean includeConflicts,
+                          Object lastSequenceID, ChangeTrackerClient client, boolean usePOST,
+                          List<String> docIDs, String filterName, Map<String, Object> filterParams,
+                          Map<String, Object> requestHeaders, Authenticator authenticator, boolean continuous) {
+
         this.continuous = continuous;
-    }
 
-    public void setFilterName(String filterName) {
-        this.filterName = filterName;
-    }
+        this.mode = mode;
+        this.lastSequenceID = lastSequenceID;
+        this.includeConflicts = includeConflicts;
 
-    public void setFilterParams(Map<String, Object> filterParams) {
-        this.filterParams = filterParams;
-    }
+        if (databaseURL == null) {
+            throw new IllegalArgumentException("databaseURL cannot be NULL");
+        }
 
-    public void setClient(ChangeTrackerClient client) {
+        this.databaseURL = databaseURL;
+
+        if (client == null) {
+            throw new IllegalArgumentException("client cannot be NULL");
+        }
         this.client = client;
+        this.usePOST = usePOST;
+
+        if (docIDs != null && docIDs.size() > 0 && (filterName != null || filterParams != null)) {
+            throw new IllegalArgumentException("Both docIds and filterName/filterParams cannot be simultaneously set.");
+        }
+
+        if (docIDs != null && docIDs.size() > 0) {
+            filterName = "_doc_ids";
+            filterParams = new HashMap<String, Object>();
+            filterParams.put("doc_ids", docIDs);
+        }
+
+        this.filterName = filterName;
+        this.filterParams = filterParams;
+        this.requestHeaders = requestHeaders == null ? new HashMap<String, Object>() : requestHeaders;
+        this.authenticator = authenticator;
+    }
+
+    private boolean isContinuous() {
+        return continuous;
     }
 
     public String getDatabaseName() {
@@ -137,22 +170,23 @@ public class ChangeTracker implements Runnable {
         return result;
     }
 
-    public String getFeed() {
+    private String getFeed() {
         switch (mode) {
-            case OneShot:
-                return "normal";
             case LongPoll:
                 return "longpoll";
             case Continuous:
                 return "continuous";
+            case OneShot:
+            default:
+                return "normal";
         }
-        return "normal";
     }
 
-    public long getHeartbeatMilliseconds() {
+    private long getHeartbeatMilliseconds() {
         return heartBeatSeconds * 1000;
     }
 
+    @InterfaceAudience.Private
     public String getChangesFeedPath() {
 
         if (usePOST) {
@@ -172,12 +206,6 @@ public class ChangeTracker implements Runnable {
 
         if(lastSequenceID != null) {
             path += "&since=" + URLEncoder.encode(lastSequenceID.toString());
-        }
-
-        if (docIDs != null && docIDs.size() > 0) {
-            filterName = "_doc_ids";
-            filterParams = new HashMap<String, Object>();
-            filterParams.put("doc_ids", docIDs);
         }
 
         if(filterName != null) {
@@ -202,7 +230,7 @@ public class ChangeTracker implements Runnable {
         return path;
     }
 
-    public URL getChangesFeedURL() {
+    private URL getChangesFeedURL() {
         String dbURLString = databaseURL.toExternalForm();
         if(!dbURLString.endsWith("/")) {
             dbURLString += "/";
@@ -212,45 +240,38 @@ public class ChangeTracker implements Runnable {
         try {
             result = new URL(dbURLString);
         } catch(MalformedURLException e) {
-            Log.e(Log.TAG_CHANGE_TRACKER, this + ": Changes feed ULR is malformed", e);
+            Log.e(Log.TAG_CHANGE_TRACKER, this + ": Changes feed URL is malformed", e);
         }
         return result;
     }
 
-    /**
-     *  Set Authenticator for BASIC Authentication
-     */
-    public void setAuthenticator(Authenticator authenticator) {
-        this.authenticator = authenticator;
-    }
-
     @Override
     public void run() {
+        boolean caughtUp = false;
 
-        running = true;
-        HttpClient httpClient;
-
-        if (client == null) {
-            // This is a race condition that can be reproduced by calling cbpuller.start() and cbpuller.stop()
-            // directly afterwards.  What happens is that by the time the Changetracker thread fires up,
-            // the cbpuller has already set this.client to null.  See issue #109
-            Log.w(Log.TAG_CHANGE_TRACKER, "%s: ChangeTracker run() loop aborting because client == null", this);
+        if (!trackerState.compareAndSet(ChangeTrackerStateEnum.NOTRUNNING,
+                ChangeTrackerStateEnum.RUNNING)) {
+            Log.w(Log.TAG_CHANGE_TRACKER,
+                    "%s: ChangeTracker run() loop aborting because tracker state isn't NOTRUNNING", this);
+            stop();
             return;
         }
 
         if (mode == ChangeTrackerMode.Continuous) {
             // there is a failing unit test for this, and from looking at the code the Replication
-            // object will never use Continuous mode anyway.  Explicitly prevent its use until
+            // object will never use Continuous desiredReplicationMode anyway.  Explicitly prevent its use until
             // it is demonstrated to actually work.
-            throw new RuntimeException("ChangeTracker does not correctly support continuous mode");
+            Log.e(Log.TAG_CHANGE_TRACKER,
+                    "ChangeTracker does not correctly support continuous mode");
+            stop();
+            return;
         }
 
-        httpClient = client.getHttpClient();
-        backoff = new ChangeTrackerBackoff();
+        HttpClient httpClient = client.getHttpClient();
 
-        while (running) {
-
-            URL url = getChangesFeedURL();
+        HttpUriRequest request = null;
+        while (trackerState.get() == ChangeTrackerStateEnum.RUNNING && !Thread.interrupted()) {
+            final URL url = getChangesFeedURL();
             if (usePOST) {
                 HttpPost postRequest = new HttpPost(url.toString());
                 postRequest.setHeader("Content-Type", "application/json");
@@ -329,8 +350,7 @@ public class ChangeTracker implements Runnable {
                         input = entity.getContent();
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             Map<String, Object> fullBody = Manager.getObjectMapper().readValue(input, Map.class);
-                            boolean responseOK = receivedPollResponse(fullBody);
-                            if (mode == ChangeTrackerMode.LongPoll && responseOK) {
+                            if (receivedPollResponse(fullBody)) {
 
                                 // TODO: this logic is questionable, there's lots
                                 // TODO: of differences in the iOS changetracker code,
@@ -369,12 +389,12 @@ public class ChangeTracker implements Runnable {
                                 client.changeTrackerCaughtUp();
                             }
 
-                            if (isContinuous()) {  // if enclosing replication is continuous
+                            if (isContinuous()) { // If enclosing replication is continuous
                                 mode = ChangeTrackerMode.LongPoll;
                             } else {
                                 Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
                                 client.changeTrackerFinished(this);
-                                stopped();
+                                stop();
                                 break;  // break out of while (running) loop
                             }
 
@@ -391,7 +411,7 @@ public class ChangeTracker implements Runnable {
                 }
             } catch (Exception e) {
 
-                if (!running && e instanceof IOException) {
+                if (trackerState.get() != ChangeTrackerStateEnum.RUNNING && e instanceof IOException) {
                     // in this case, just silently absorb the exception because it
                     // frequently happens when we're shutting down and have to
                     // close the socket underneath our read.
@@ -403,23 +423,29 @@ public class ChangeTracker implements Runnable {
 
             }
         }
+
+        if (request != null) {
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
+            request.abort();
+        }
+
         Log.v(Log.TAG_CHANGE_TRACKER, "%s: Change tracker run loop exiting", this);
     }
 
-    public boolean receivedChange(final Map<String,Object> change) {
+    private boolean receivedChange(final Map<String,Object> change) {
         Object seq = change.get("seq");
         if(seq == null) {
             return false;
         }
         //pass the change to the client on the thread that created this change tracker
-        if(client != null) {
+        if(trackerState.get() == ChangeTrackerStateEnum.RUNNING) {
             client.changeTrackerReceivedChange(change);
         }
         lastSequenceID = seq;
         return true;
     }
 
-    public boolean receivedPollResponse(Map<String,Object> response) {
+    private boolean receivedPollResponse(Map<String,Object> response) {
         List<Map<String,Object>> changes = (List)response.get("results");
         if(changes == null) {
             return false;
@@ -437,9 +463,17 @@ public class ChangeTracker implements Runnable {
         this.error = new Throwable(message);
     }
 
+    /**
+     * Starts the change tracker. Can only be called once or it will throw an exception.
+     * @return
+     */
     public boolean start() {
+        if (!trackerState.compareAndSet(ChangeTrackerStateEnum.NOTSTARTED, ChangeTrackerStateEnum.NOTRUNNING)) {
+            Log.e(Log.TAG_CHANGE_TRACKER, this + ": start called twice or after stop");
+            throw new RuntimeException("Start got called twice or after stop.");
+        }
+
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to start", this);
-        this.error = null;
         String maskedRemoteWithoutCredentials = databaseURL.toExternalForm();
         maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
         thread = new Thread(this, "ChangeTracker-" + maskedRemoteWithoutCredentials);
@@ -447,31 +481,21 @@ public class ChangeTracker implements Runnable {
         return true;
     }
 
+    /**
+     * Because stop can be called from exception handlers, finally clauses etc., we allow it to be called
+     * multiple times without harm.
+     */
     public void stop() {
+        ChangeTrackerStateEnum currentEnum = trackerState.getAndSet(ChangeTrackerStateEnum.STOPPED);
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to stop", this);
-        running = false;
-        thread.interrupt();
-        if(request != null) {
-            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
-            request.abort();
-        }
-
-        stopped();
-    }
-
-    public void stopped() {
-        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped()", this);
-        if (client != null) {
+        if (currentEnum != ChangeTrackerStateEnum.STOPPED) {
+            Thread localThread = thread;
+            if (localThread != null) {
+                localThread.interrupt();
+            }
             Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling changeTrackerStopped, client: %s", this, client);
             client.changeTrackerStopped(ChangeTracker.this);
-        } else {
-            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker not calling changeTrackerStopped, client == null", this);
         }
-        client = null;
-    }
-
-    void setRequestHeaders(Map<String, Object> requestHeaders) {
-        this.requestHeaders = requestHeaders;
     }
 
     private void addRequestHeaders(HttpUriRequest request) {
@@ -484,14 +508,7 @@ public class ChangeTracker implements Runnable {
         return error;
     }
 
-    public boolean isRunning() {
-        return running;
-    }
-
-    public void setDocIDs(List<String> docIDs) {
-        this.docIDs = docIDs;
-    }
-
+    @InterfaceAudience.Private
     public String changesFeedPOSTBody() {
         Map<String, Object> postBodyMap = changesFeedPOSTBodyMap();
         try {
@@ -501,24 +518,11 @@ public class ChangeTracker implements Runnable {
         }
     }
 
-    public boolean isUsePOST() {
-        return usePOST;
-    }
-
-    public void setUsePOST(boolean usePOST) {
-        this.usePOST = usePOST;
-    }
-
+    @InterfaceAudience.Private
     public Map<String, Object> changesFeedPOSTBodyMap() {
 
         if (!usePOST) {
             return null;
-        }
-
-        if (docIDs != null && docIDs.size() > 0) {
-            filterName = "_doc_ids";
-            filterParams = new HashMap<String, Object>();
-            filterParams.put("doc_ids", docIDs);
         }
 
         Map<String, Object> post = new HashMap<String, Object>();
@@ -545,11 +549,17 @@ public class ChangeTracker implements Runnable {
 
         if (filterName != null) {
             post.put("filter", filterName);
-            post.putAll(filterParams);
+            if (filterParams != null) {
+                post.putAll(filterParams);
+            }
         }
 
         return post;
+    }
 
+    @InterfaceAudience.Private
+    public ChangeTrackerBackoff getBackoff() {
+        return backoff;
     }
 
 }
