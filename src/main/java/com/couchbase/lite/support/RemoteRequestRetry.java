@@ -181,13 +181,13 @@ public class RemoteRequestRetry<T> implements Future<T> {
         if (httpResponse != null) {
 
             if (Utils.isTransientError(httpResponse.getStatusLine())) {
-                Log.d(Log.TAG_SYNC, "%s: its a transient error, return true");
+                Log.d(Log.TAG_SYNC, "%s: its a transient error, return true", this);
                 return true;
             }
 
         } else {
             if (e instanceof IOException) {
-                Log.d(Log.TAG_SYNC, "%s: its an ioexception, return true");
+                Log.d(Log.TAG_SYNC, "%s: its an ioexception, return true", this);
                 return true;
             }
 
