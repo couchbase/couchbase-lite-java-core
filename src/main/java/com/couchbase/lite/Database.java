@@ -4669,9 +4669,6 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public void addActiveReplication(Replication replication) {
-        if (activeReplicators != null) {
-            activeReplicators.add(replication);
-        }
 
         replication.addChangeListener(new Replication.ChangeListener() {
             @Override
@@ -4683,6 +4680,10 @@ public final class Database {
                 }
             }
         });
+
+        if (activeReplicators != null) {
+            activeReplicators.add(replication);
+        }
 
 
     }
