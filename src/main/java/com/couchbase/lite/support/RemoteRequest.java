@@ -2,25 +2,21 @@ package com.couchbase.lite.support;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
-import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.auth.Authenticator;
+import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
-import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.AuthState;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
@@ -32,28 +28,26 @@ import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.auth.BasicScheme;
-import org.apache.http.impl.client.ClientParamsStack;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.params.HttpParams;
-import org.apache.http.protocol.ExecutionContext;
 import org.apache.http.protocol.HttpContext;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * @exclude
+ */
 public class RemoteRequest implements Runnable {
-
-    private static final int MAX_RETRIES = 2;
-    private static final int RETRY_DELAY_MS = 10 * 1000;
 
     protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
@@ -89,28 +83,34 @@ public class RemoteRequest implements Runnable {
     @Override
     public void run() {
 
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
+        try {
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
 
-        HttpClient httpClient = clientFactory.getHttpClient();
+            HttpClient httpClient = clientFactory.getHttpClient();
 
-        ClientConnectionManager manager = httpClient.getConnectionManager();
+            ClientConnectionManager manager = httpClient.getConnectionManager();
 
-        preemptivelySetAuthCredentials(httpClient);
+            preemptivelySetAuthCredentials(httpClient);
 
-        request.addHeader("Accept", "multipart/related, application/json");
+            request.addHeader("Accept", "multipart/related, application/json");
 
-        addRequestHeaders(request);
+            addRequestHeaders(request);
 
-        setBody(request);
+            setBody(request);
 
-        executeRequest(httpClient, request);
+            executeRequest(httpClient, request);
 
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
+
+        } catch (Throwable e) {
+            Log.e(Log.TAG_SYNC, "RemoteRequest.run() exception: %s", e);
+        }
 
 
     }
 
     public void abort() {
+        Log.w(Log.TAG_REMOTE_REQUEST, "%s: aborting request: %s", this, request);
         if (request != null) {
             request.abort();
         } else {
@@ -123,8 +123,10 @@ public class RemoteRequest implements Runnable {
     }
 
     protected void addRequestHeaders(HttpUriRequest request) {
-        for (String requestHeaderKey : requestHeaders.keySet()) {
-            request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+        if (requestHeaders != null) {
+            for (String requestHeaderKey : requestHeaders.keySet()) {
+                request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+            }
         }
     }
 
@@ -170,41 +172,32 @@ public class RemoteRequest implements Runnable {
         this.authenticator = authenticator;
     }
 
-    /**
-     * Retry this remote request, unless we've already retried MAX_RETRIES times
-     *
-     * NOTE: This assumes all requests are idempotent, since even though we got an error back, the
-     * request might have succeeded on the remote server, and by retrying we'd be issuing it again.
-     * PUT and POST requests aren't generally idempotent, but the ones sent by the replicator are.
-     *
-     * @return true if going to retry the request, false otherwise
-     */
-    protected boolean retryRequest() {
-        if (retryCount >= MAX_RETRIES) {
-            return false;
-        }
-        workExecutor.schedule(this, RETRY_DELAY_MS, TimeUnit.MILLISECONDS);
-        retryCount += 1;
-        Log.d(Log.TAG_REMOTE_REQUEST, "Will retry in %d ms", RETRY_DELAY_MS);
-        return true;
-    }
+    protected void executeRequest(HttpClient httpClient, HttpUriRequest requestParam) {
 
-    protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
+        retryCount = 0;
 
         try {
 
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest executeRequest() called, url: %s", this, url);
+            fullBody = null;
+            error = null;
+            response = null;
 
-            if (request.isAborted()) {
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
+
+            if (requestParam.isAborted()) {
                 Log.v(Log.TAG_SYNC, "%s: RemoteRequest has already been aborted", this);
-                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
+                respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, requestParam)), response);
                 return;
             }
 
-            response = httpClient.execute(request);
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, client: %s url: %s", this, httpClient, url);
+
+            response = httpClient.execute(requestParam);
+
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
 
             // add in cookies to global store
             try {
@@ -217,14 +210,14 @@ public class RemoteRequest implements Runnable {
             }
 
             StatusLine status = response.getStatusLine();
-            if (Utils.isTransientError(status) && retryRequest()) {
-                return;
-            }
+
 
             if (status.getStatusCode() >= 300) {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
+                respondWithResult(fullBody, error, response);
+                return;
             } else {
                 HttpEntity temp = response.getEntity();
                 if (temp != null) {
@@ -242,21 +235,23 @@ public class RemoteRequest implements Runnable {
                 }
             }
         } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
+            Log.e(Log.TAG_REMOTE_REQUEST, "io exception.  url: %s", e, url);
             error = e;
             // Treat all IOExceptions as transient, per:
             // http://hc.apache.org/httpclient-3.x/exception-handling.html
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling retryRequest()", this);
-            if (retryRequest()) {
-                return;
-            } else {
-                Log.e(Log.TAG_SYNC, "%s: RemoteRequest failed all retries, giving up.", this);
-            }
+        } catch (IllegalStateException e) {
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+            error = e;
         } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
+            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
             error = e;
         }
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  error: %s", this, error);
+        finally {
+            Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
+        }
+
+
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
         respondWithResult(fullBody, error, response);
 
     }
@@ -303,30 +298,21 @@ public class RemoteRequest implements Runnable {
 
     public void respondWithResult(final Object result, final Throwable error, final HttpResponse response) {
 
-        if (workExecutor != null) {
-            workExecutor.submit(new Runnable() {
-
-                @Override
-                public void run() {
-                    try {
-                        if (onPreCompletion != null) {
-                            onPreCompletion.onCompletion(response, error);
-                        }
-                        onCompletion.onCompletion(result, error);
-                        if (onPostCompletion != null) {
-                            onPostCompletion.onCompletion(response, error);
-                        }
-                    } catch (Exception e) {
-                        // don't let this crash the thread
-                        Log.e(Log.TAG_REMOTE_REQUEST,
-                                "RemoteRequestCompletionBlock throw Exception",
-                                e);
-                    }
-                }
-            });
-        } else {
-            Log.e(Log.TAG_REMOTE_REQUEST, "Work executor was null!");
+        try {
+            if (onPreCompletion != null) {
+                onPreCompletion.onCompletion(response, null, error);
+            }
+            onCompletion.onCompletion(response, result, error);
+            if (onPostCompletion != null) {
+                onPostCompletion.onCompletion(response, null, error);
+            }
+        } catch (Exception e) {
+            // don't let this crash the thread
+            Log.e(Log.TAG_REMOTE_REQUEST,
+                    "RemoteRequestCompletionBlock throw Exception",
+                    e);
         }
+
     }
 
 }

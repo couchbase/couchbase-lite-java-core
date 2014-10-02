@@ -499,8 +499,10 @@ public class ChangeTracker implements Runnable {
     }
 
     private void addRequestHeaders(HttpUriRequest request) {
-        for (String requestHeaderKey : requestHeaders.keySet()) {
-            request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+        if (requestHeaders != null) {
+            for (String requestHeaderKey : requestHeaders.keySet()) {
+                request.addHeader(requestHeaderKey, requestHeaders.get(requestHeaderKey).toString());
+            }
         }
     }
 
