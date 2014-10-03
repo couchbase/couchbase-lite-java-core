@@ -644,11 +644,13 @@ public class Router implements Database.ChangeListener {
 
             replicator.start();
 
-            // wait for replication to start, otherwise replicator.getSessionId() will return null
-            try {
-                replicationStarted.await();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+            if (replicator.getSessionID() == null) {
+                // wait for replication to start, otherwise replicator.getSessionId() will return null
+                try {
+                    replicationStarted.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
 
             Map<String,Object> result = new HashMap<String,Object>();

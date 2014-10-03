@@ -113,21 +113,19 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
 
         Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s", this, lastSequence, changeTrackerMode);
-        changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this);
-        changeTracker.setAuthenticator(getAuthenticator());
+        boolean usePOST = serverIsSyncGatewayVersion("0.93");
+
+        Map<String, Object> filterParams = null;
+        boolean isContinuous = lifecycle == Replication.Lifecycle.CONTINUOUS;
+        if (documentIDs != null && documentIDs.size() > 0) {
+            changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this, usePOST,
+                    documentIDs, requestHeaders, getAuthenticator(), isContinuous);
+        } else {
+            changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this, usePOST,
+                    filterName, filterParams, requestHeaders, getAuthenticator(), isContinuous);
+        }
         Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
 
-        if (filterName != null) {
-            changeTracker.setFilterName(filterName);
-            if (filterParams != null) {
-                changeTracker.setFilterParams(filterParams);
-            }
-        }
-        changeTracker.setDocIDs(documentIDs);
-        changeTracker.setRequestHeaders(requestHeaders);
-        changeTracker.setContinuous(lifecycle == Replication.Lifecycle.CONTINUOUS);
-
-        changeTracker.setUsePOST(serverIsSyncGatewayVersion("0.93"));
         changeTracker.start();
 
     }
