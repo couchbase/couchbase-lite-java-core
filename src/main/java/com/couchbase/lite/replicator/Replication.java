@@ -135,21 +135,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public void start() {
 
-        if (replicationInternal == null) {
-            initReplicationInternal();
-        } else {
-            if (replicationInternal.stateMachine.isInState(ReplicationState.INITIAL)) {
-                // great, it's ready to be started, nothing to do
-            } else if (replicationInternal.stateMachine.isInState(ReplicationState.STOPPED)) {
-                // if there was a previous internal replication and it's in the STOPPED state, then
-                // start a fresh internal replication
-                initReplicationInternal();
-            } else {
-                String mesg = String.format("replicationInternal in unexpected state: %s", replicationInternal.stateMachine.getState());
-                throw new RuntimeException(mesg);
-            }
-        }
-
         replicationInternal.triggerStart();
     }
 
