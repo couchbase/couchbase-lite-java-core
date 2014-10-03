@@ -424,11 +424,6 @@ public class ChangeTracker implements Runnable {
             }
         }
 
-        if (request != null) {
-            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
-            request.abort();
-        }
-
         Log.v(Log.TAG_CHANGE_TRACKER, "%s: Change tracker run loop exiting", this);
     }
 
