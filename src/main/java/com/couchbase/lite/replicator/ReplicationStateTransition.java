@@ -25,7 +25,7 @@ public class ReplicationStateTransition {
         return source;
     }
 
-    public void setSource(ReplicationState source) {
+    /* package */ void setSource(ReplicationState source) {
         this.source = source;
     }
 
@@ -33,15 +33,19 @@ public class ReplicationStateTransition {
         return destination;
     }
 
-    public void setDestination(ReplicationState destination) {
+    /* package */ void setDestination(ReplicationState destination) {
         this.destination = destination;
     }
 
+    /**
+     * @exclude
+     */
     public ReplicationTrigger getTrigger() {
         return trigger;
     }
 
-    public void setTrigger(ReplicationTrigger trigger) {
+    /* package */ void setTrigger(ReplicationTrigger trigger) {
         this.trigger = trigger;
     }
+
 }

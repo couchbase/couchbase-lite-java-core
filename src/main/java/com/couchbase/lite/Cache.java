@@ -1,5 +1,6 @@
 package com.couchbase.lite;
 
+import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.WeakValueHashMap;
 import com.couchbase.lite.util.LruCache;
 
@@ -9,7 +10,10 @@ import com.couchbase.lite.util.LruCache;
  * It keeps track of all added objects as long as anything else has retained them,
  * and it keeps a certain number of recently-accessed objects with no external references.
  * It's intended for use by a parent resource, to cache its children.
+ *
+ * @exclude
  */
+@InterfaceAudience.Private
 public class Cache<K,V> {
 
     private static final int DEFAULT_RETAIN_LIMIT = 50;

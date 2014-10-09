@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @exclude
  */
+@InterfaceAudience.Private
 abstract class ReplicationInternal {
 
     // Change listeners can be called back synchronously or asynchronously.

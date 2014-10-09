@@ -33,6 +33,12 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * A special type of RemoteRequest that knows how to call the _bulk_get endpoint.
+ *
+ * @exclude
+ */
+@InterfaceAudience.Private
 public class BulkDownloader extends RemoteRequest implements MultipartReaderDelegate {
 
     private Database _db;
@@ -235,10 +241,13 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     }
 
 
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     public interface BulkDownloaderDocumentBlock {
         public void onDocument(Map<String, Object> props);
     }
-
 
     private static Map<String, Object> helperMethod(List<RevisionInternal> revs, final Database database) {
 

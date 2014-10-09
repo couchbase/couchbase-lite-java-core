@@ -38,7 +38,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Pull Replication
+ *
+ * @exclude
  */
+@InterfaceAudience.Private
 public class PullerInternal extends ReplicationInternal implements ChangeTrackerClient{
 
     private static final int MAX_OPEN_HTTP_CONNECTIONS = 16;

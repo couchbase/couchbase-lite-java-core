@@ -3,8 +3,8 @@ package com.couchbase.lite;
 import java.io.File;
 
 /**
- * Portable java wrapper around a "system specific" context.  The main implementation wraps an
- * Android context.
+ * The Couchbase Lite context is an abstract wrapper around platform specific context.  Eg,
+ * there are platform specific implementations such as AndroidContext and JavaContext.
  *
  * The wrapper is needed so that there are no compile time dependencies on Android classes
  * within the Couchbase Lite java core library.

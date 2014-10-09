@@ -25,7 +25,19 @@ import java.util.concurrent.ThreadFactory;
  */
 public class Replication implements ReplicationInternal.ChangeListener, NetworkReachabilityListener {
 
+    /**
+     * Enum to specify which direction this replication is going (eg, push vs pull)
+     *
+     * @exclude
+     */
     public enum Direction { PULL, PUSH };
+
+
+    /**
+     * Enum to specify whether this replication is oneshot or continuous.
+     *
+     * @exclude
+     */
     public enum Lifecycle { ONESHOT, CONTINUOUS };
 
     /**
@@ -155,6 +167,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
 
     /**
      * Restarts the replication.  This blocks until the replication successfully stops.
+     *
+     * Alternatively, you can stop() the replication and create a brand new one and start() it.
      */
     @InterfaceAudience.Public
     public void restart() {
@@ -389,22 +403,41 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             this.completedChangeCount =replInternal.getCompletedChangesCount().get();
         }
 
+        /**
+         * Get the owner Replication object that generated this ChangeEvent.
+         */
         public Replication getSource() {
             return source;
         }
 
+        /**
+         * Get the ReplicationStateTransition associated with this ChangeEvent, or nil
+         * if it was not associated with a state transition.
+         *
+         * This is not in our official public API, and is subject to change/removal.
+         */
         public ReplicationStateTransition getTransition() {
             return transition;
         }
 
-        public void setTransition(ReplicationStateTransition transition) {
+        /* package */ void setTransition(ReplicationStateTransition transition) {
             this.transition = transition;
         }
 
+        /**
+         * The total number of changes to be processed, if the task is active, else 0.
+         *
+         * This is not in our official public API, and is subject to change/removal.
+         */
         public int getChangeCount() {
             return changeCount;
         }
 
+        /**
+         * The number of completed changes processed, if the task is active, else 0.
+         *
+         * This is not in our official public API, and is subject to change/removal.
+         */
         public int getCompletedChangeCount() {
             return completedChangeCount;
         }
