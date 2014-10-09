@@ -448,15 +448,28 @@ public class ChangeTracker implements Runnable {
     }
 
     public void stop() {
+
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to stop", this);
-        running = false;
-        thread.interrupt();
-        if(request != null) {
-            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
-            request.abort();
+
+        try {
+
+            running = false;
+            try {
+                if (thread != null) {
+                    thread.interrupt();
+                }
+            } catch (Exception e) {
+                Log.d(Log.TAG_CHANGE_TRACKER, "%s: Exception interrupting thread: %s", this);
+            }
+            if(request != null) {
+                Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
+                request.abort();
+            }
+
+        } finally {
+            stopped();
         }
 
-        stopped();
     }
 
     public void stopped() {
