@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -77,7 +78,7 @@ public class RemoteRequestRetry<T> implements Future<T> {
         this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
         this.db = db;
-        this.pendingRequests = new LinkedBlockingDeque<Future>();
+        this.pendingRequests = new LinkedBlockingQueue<Future>();
 
         Log.v(Log.TAG_SYNC, "%s: RemoteRequestRetry created, url: %s", this, url);
 
