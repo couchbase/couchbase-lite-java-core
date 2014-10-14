@@ -472,7 +472,12 @@ public class ChangeTracker implements Runnable {
 
     }
 
-    public void stopped() {
+    /**
+     * The reason this is synchronized is because it can be called by multiple threads,
+     * and if those calls are interleaved, the null check will pass but then an NPE will be thrown
+     * when client.changeTrackerStopped() is called.
+     */
+    public synchronized void stopped() {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped()", this);
         if (client != null) {
             Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling changeTrackerStopped, client: %s", this, client);
