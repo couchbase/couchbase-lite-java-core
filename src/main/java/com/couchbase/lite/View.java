@@ -881,7 +881,9 @@ public final class View {
                                     null,
                                     EnumSet.noneOf(TDContentOptions.class)
                             );
-                            docContents = linkedDoc.getProperties();
+                            if (linkedDoc != null) {
+                                docContents = linkedDoc.getProperties();
+                            }
                         } else {
                             docContents = database.documentPropertiesFromJSON(
                                     cursor.getBlob(5),
