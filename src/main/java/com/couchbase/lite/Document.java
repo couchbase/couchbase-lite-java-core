@@ -302,7 +302,15 @@ public final class Document {
      */
     @InterfaceAudience.Public
     public static interface DocumentUpdater {
+
+        /**
+         * Document update delegate
+         *
+         * @param newRevision the unsaved revision about to be saved
+         * @return True if the UnsavedRevision should be saved, otherwise false.
+         */
         public boolean update(UnsavedRevision newRevision);
+        
     }
 
     /**

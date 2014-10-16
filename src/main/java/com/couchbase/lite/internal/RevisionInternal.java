@@ -203,6 +203,16 @@ public class RevisionInternal {
         return generation;
     }
 
+    public static String digestFromRevID(String revID) {
+        String digest = "error";
+        int dashPos = revID.indexOf("-");
+        if (dashPos > 0) {
+            digest = revID.substring(dashPos + 1);
+            return digest;
+        }
+        throw new RuntimeException(String.format("Invalid rev id: %s", revID));
+    }
+
     public static int CBLCollateRevIDs(String revId1, String revId2) {
 
         String rev1GenerationStr = null;
@@ -268,21 +278,25 @@ public class RevisionInternal {
             Map<String, Object> editedProperties = null;
             Map<String, Object> attachments = (Map<String, Object>) properties.get("_attachments");
             Map<String, Object> editedAttachments = null;
-            for (String name : attachments.keySet()) {
+            if(attachments != null) {
+                for (String name : attachments.keySet()) {
 
-                Map<String, Object> attachment = (Map<String, Object>) attachments.get(name);
-                Map<String, Object> editedAttachment = functor.invoke(attachment);
-                if (editedAttachment == null) {
-                    return false;  // block canceled
-                }
-                if (editedAttachment != attachment) {
-                    if (editedProperties == null) {
-                        // Make the document properties and _attachments dictionary mutable:
-                        editedProperties = new HashMap<String, Object>(properties);
-                        editedAttachments = new HashMap<String, Object>(attachments);
-                        editedProperties.put("_attachments", editedAttachments);
+                    Map<String, Object> attachment = new HashMap<String, Object>((Map<String, Object>) attachments.get(name));
+                    attachment.put("name", name);
+                    Map<String, Object> editedAttachment = functor.invoke(attachment);
+                    if (editedAttachment == null) {
+                        return false;  // block canceled
                     }
-                    editedAttachments.put(name, editedAttachment);
+                    if (editedAttachment != attachment) {
+                        if (editedProperties == null) {
+                            // Make the document properties and _attachments dictionary mutable:
+                            editedProperties = new HashMap<String, Object>(properties);
+                            editedAttachments = new HashMap<String, Object>(attachments);
+                            editedProperties.put("_attachments", editedAttachments);
+                        }
+                        editedAttachment.remove("name");
+                        editedAttachments.put(name, editedAttachment);
+                    }
                 }
             }
             if (editedProperties != null) {
@@ -291,6 +305,13 @@ public class RevisionInternal {
             }
             return false;
         }
+    }
+
+    public Map<String, Object> getAttachments() {
+        if (getProperties() != null && getProperties().containsKey("_attachments")) {
+            return (Map<String, Object>) getProperties().get("_attachments");
+        }
+        return new HashMap<String, Object>();
     }
 
 }

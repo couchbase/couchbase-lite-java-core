@@ -114,8 +114,8 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                     if (digest != null &&
                             !digest.equals(actualDigest) &&
                             !digest.equals(writer.sHA1DigestString())) {
-                        String errMsg = String.format("Attachment '%s' has incorrect MD5 digest (%s; should be %s)",
-                                attachmentName, digest, actualDigest);
+                        String errMsg = String.format("Attachment '%s' has incorrect MD5 digest (%s; should be either %s or %s)",
+                                attachmentName, digest, actualDigest, writer.sHA1DigestString());
                         throw new IllegalStateException(errMsg);
                     }
                     attachment.put("digest", actualDigest);
@@ -124,7 +124,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 else if (digest != null) {
                     writer = attachmentsByMd5Digest.get(digest);
                     if (writer == null) {
-                        String errMsg = String.format("Attachment '%s' does not appear in MIME body (%s; should be %s)",
+                        String errMsg = String.format("Attachment '%s' does not appear in MIME body",
                                 attachmentName);
                         throw new IllegalStateException(errMsg);
                     }
@@ -153,7 +153,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             }
             else if (attachment.containsKey("data") && length > 1000) {
                 Log.w(Log.TAG_REMOTE_REQUEST, "Attachment '%s' sent inline (len=%d).  Large attachments " +
-                        "should be sent in MIME parts for reduced memory overhead.", attachmentName);
+                        "should be sent in MIME parts for reduced memory overhead.", attachmentName, length);
             }
 
         }

@@ -32,6 +32,7 @@ public class Log {
      */
     public static final String TAG = "CBLite";  // default "catch-all" tag
     public static final String TAG_SYNC = "Sync";
+    public static final String TAG_SYNC_ASYNC_TASK = "SyncAsyncTask";
     public static final String TAG_REMOTE_REQUEST = "RemoteRequest";
     public static final String TAG_VIEW = "View";
     public static final String TAG_QUERY = "Query";
@@ -57,6 +58,7 @@ public class Log {
         enabledTags = new ConcurrentHashMap<String, Integer>();
         enabledTags.put(Log.TAG, WARN);
         enabledTags.put(Log.TAG_SYNC, WARN);
+        enabledTags.put(Log.TAG_SYNC_ASYNC_TASK, WARN);
         enabledTags.put(Log.TAG_REMOTE_REQUEST, WARN);
         enabledTags.put(Log.TAG_VIEW, WARN);
         enabledTags.put(Log.TAG_QUERY, WARN);
@@ -92,11 +94,8 @@ public class Log {
 
         // this hashmap lookup might be a little expensive, and so it might make
         // sense to convert this over to a CopyOnWriteArrayList
-        if (enabledTags.containsKey(tag)) {
-            int logLevelForTag = enabledTags.get(tag);
-            return logLevel >= logLevelForTag;
-        }
-        return false;
+        Integer logLevelForTag = enabledTags.get(tag);
+        return logLevel >= (logLevelForTag == null ? INFO : logLevelForTag);
     }
 
     /**
@@ -371,7 +370,7 @@ public class Log {
     public static void e(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, ERROR)) {
             try {
-                logger.e(tag, String.format(formatString, args));
+                logger.e(tag, String.format(formatString, args), tr);
             } catch (Exception e) {
                 logger.e(tag, String.format("Unable to format log: %s", formatString), e);
             }

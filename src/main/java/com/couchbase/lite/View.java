@@ -465,38 +465,33 @@ public final class View {
                             + "ORDER BY revs.doc_id, revid DESC", selectArgs);
 
 
-            long lastDocID = 0;
             boolean keepGoing = cursor.moveToNext();
             while (keepGoing) {
                 long docID = cursor.getLong(0);
-                if (docID != lastDocID) {
-                    // Only look at the first-iterated revision of any document,
-                    // because this is the
-                    // one with the highest revid, hence the "winning" revision
-                    // of a conflict.
-                    lastDocID = docID;
 
-                    // Reconstitute the document as a dictionary:
-                    sequence = cursor.getLong(1);
-                    String docId = cursor.getString(2);
-                    if(docId.startsWith("_design/")) {  // design docs don't get indexed!
-                        keepGoing = cursor.moveToNext();
-                        continue;
-                    }
-                    String revId = cursor.getString(3);
-                    byte[] json = cursor.getBlob(4);
+                // Reconstitute the document as a dictionary:
+                sequence = cursor.getLong(1);
+                String docId = cursor.getString(2);
+                if(docId.startsWith("_design/")) {  // design docs don't get indexed!
+                    keepGoing = cursor.moveToNext();
+                    continue;
+                }
+                String revId = cursor.getString(3);
+                byte[] json = cursor.getBlob(4);
 
-                    boolean noAttachments = cursor.getInt(5) > 0;
+                boolean noAttachments = cursor.getInt(5) > 0;
 
-                    while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
-                        // Skip rows with the same doc_id -- these are losing conflicts.
-                    }
+                while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
+                    // Skip rows with the same doc_id -- these are losing conflicts.
+                }
 
-                    if (lastSequence > 0) {
-                        // Find conflicts with documents from previous indexings.
-                        String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
+                if (lastSequence > 0) {
+                    // Find conflicts with documents from previous indexings.
+                    String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
 
-                        Cursor cursor2 = database.getDatabase().rawQuery(
+                    Cursor cursor2 = null;
+                    try {
+                        cursor2 = database.getDatabase().rawQuery(
                                 "SELECT revid, sequence FROM revs "
                                         + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
                                         + "ORDER BY revID DESC "
@@ -524,29 +519,32 @@ public final class View {
 
                             }
                         }
-
-
+                    } finally {
+                        if (cursor2 != null) {
+                            cursor2.close();
+                        }
                     }
 
-                    // Get the document properties, to pass to the map function:
-                    EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
-                    if (noAttachments)
-                        contentOptions.add(TDContentOptions.TDNoAttachments);
-                    Map<String, Object> properties = database.documentPropertiesFromJSON(
-                            json,
-                            docId,
-                            revId,
-                            false,
-                            sequence,
-                            contentOptions
-                    );
-                    if (properties != null) {
-                        // Call the user-defined map() to emit new key/value
-                        // pairs from this revision:
-                        emitBlock.setSequence(sequence);
-                        mapBlock.map(properties, emitBlock);
-                    }
 
+                }
+
+                // Get the document properties, to pass to the map function:
+                EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
+                if (noAttachments)
+                    contentOptions.add(TDContentOptions.TDNoAttachments);
+                Map<String, Object> properties = database.documentPropertiesFromJSON(
+                        json,
+                        docId,
+                        revId,
+                        false,
+                        sequence,
+                        contentOptions
+                );
+                if (properties != null) {
+                    // Call the user-defined map() to emit new key/value
+                    // pairs from this revision:
+                    emitBlock.setSequence(sequence);
+                    mapBlock.map(properties, emitBlock);
                 }
 
             }
@@ -702,6 +700,13 @@ public final class View {
         List<Object> key1List = (List<Object>)key1;
         @SuppressWarnings("unchecked")
         List<Object> key2List = (List<Object>)key2;
+
+        // if either key list is smaller than groupLevel and the key lists are different
+        // sizes, they cannot be equal.
+        if ((key1List.size() < groupLevel || key2List.size() < groupLevel) && key1List.size() != key2List.size()) {
+            return false;
+        }
+
         int end = Math.min(groupLevel, Math.min(key1List.size(), key2List.size()));
         for(int i = 0; i < end; ++i) {
             if(!key1List.get(i).equals(key2List.get(i))) {
@@ -913,9 +918,8 @@ public final class View {
 
     /**
      * Utility function to use in reduce blocks. Totals an array of Numbers.
-     * @exclude
      */
-    @InterfaceAudience.Private
+    @InterfaceAudience.Public
     public static double totalValues(List<Object>values) {
         double total = 0;
         for (Object object : values) {

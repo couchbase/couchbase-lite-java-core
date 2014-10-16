@@ -81,6 +81,11 @@ public class Query {
     private String endKeyDocId;
 
     /**
+     * If YES (the default) the endKey (or endKeyDocID) comparison uses "<=". Else it uses "<".
+     */
+    private boolean inclusiveEnd;
+
+    /**
      * If set, the view will not be updated for this query, even if the database has changed.
      * This allows faster results at the expense of returning possibly out-of-date data.
      */
@@ -146,6 +151,7 @@ public class Query {
         this.database = database;
         this.view = view;
         limit = Integer.MAX_VALUE;
+        inclusiveEnd = true;
         mapOnly = (view != null && view.getReduce() == null);
         indexUpdateMode = IndexUpdateMode.BEFORE;
         allDocsMode = AllDocsMode.ALL_DOCS;
@@ -158,6 +164,7 @@ public class Query {
     /* package */ Query(Database database, Mapper mapFunction) {
         this(database, database.makeAnonymousView());
         temporaryView = true;
+        inclusiveEnd = true;
         view.setMap(mapFunction, "");
     }
 
@@ -180,6 +187,7 @@ public class Query {
         endKeyDocId = query.endKeyDocId;
         indexUpdateMode = query.indexUpdateMode;
         allDocsMode = query.allDocsMode;
+        inclusiveEnd = query.inclusiveEnd;
     }
 
     /**
@@ -429,7 +437,7 @@ public class Query {
         queryOptions.setDescending(isDescending());
         queryOptions.setIncludeDocs(shouldPrefetch());
         queryOptions.setUpdateSeq(true);
-        queryOptions.setInclusiveEnd(true);
+        queryOptions.setInclusiveEnd(inclusiveEnd);
         queryOptions.setStale(getIndexUpdateMode());
         queryOptions.setAllDocsMode(getAllDocsMode());
         queryOptions.setStartKeyDocId(getStartKeyDocId());

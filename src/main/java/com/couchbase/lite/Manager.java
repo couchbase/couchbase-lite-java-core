@@ -4,10 +4,7 @@ import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.replicator.Puller;
-import com.couchbase.lite.replicator.Pusher;
 import com.couchbase.lite.replicator.Replication;
-import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.Version;
@@ -35,6 +32,7 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -132,7 +130,17 @@ public final class Manager {
         }
 
         upgradeOldDatabaseFiles(directoryFile);
-        workExecutor = Executors.newSingleThreadScheduledExecutor();
+
+        // this must be a single threaded executor due to contract w/ Replication object
+        // which must run on either:
+        // - a shared single threaded executor
+        // - its own single threaded executor
+        workExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                return new Thread(r, "CBLManagerWorkExecutor");
+            }
+        });
 
     }
 
@@ -446,10 +454,10 @@ public final class Manager {
         final boolean continuous = false;
 
         if (push) {
-            replicator = new Pusher(db, remote, continuous, getWorkExecutor());
+            replicator = new Replication(db, remote, Replication.Direction.PUSH, null, getWorkExecutor());
         }
         else {
-            replicator = new Puller(db, remote, continuous, getWorkExecutor());
+            replicator = new Replication(db, remote, Replication.Direction.PULL, null, getWorkExecutor());
         }
 
         replications.add(replicator);
@@ -464,7 +472,7 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Database getDatabaseWithoutOpening(String name, boolean mustExist) {
+    public synchronized Database getDatabaseWithoutOpening(String name, boolean mustExist) {
         Database db = databases.get(name);
         if(db == null) {
             if (!isValidDatabaseName(name)) {
@@ -622,7 +630,7 @@ public final class Manager {
             }
 
             if(push) {
-                ((Pusher)repl).setCreateTarget(createTarget);
+                repl.setCreateTarget(createTarget);
             }
 
 

@@ -18,9 +18,16 @@ package com.couchbase.lite.util;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.logging.Level;
 
 public class SystemLogger implements Logger {
     private final static java.util.logging.Logger logger = java.util.logging.Logger.getLogger("com.couchbase.lite");
+
+    static {
+        // Logging levels are filtered on top of this class but if we don't set this to all then all info and
+        // higher will get through no matter what levels are set higher in the chain.
+        logger.setLevel(Level.ALL);
+    }
 
     @Override
     public void v(String tag, String msg) {

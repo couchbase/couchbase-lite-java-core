@@ -4,7 +4,6 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.MultipartDocumentReader;
 import com.couchbase.lite.support.MultipartReader;
@@ -18,7 +17,6 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -35,6 +33,12 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * A special type of RemoteRequest that knows how to call the _bulk_get endpoint.
+ *
+ * @exclude
+ */
+@InterfaceAudience.Private
 public class BulkDownloader extends RemoteRequest implements MultipartReaderDelegate {
 
     private Database _db;
@@ -237,10 +241,13 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     }
 
 
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     public interface BulkDownloaderDocumentBlock {
         public void onDocument(Map<String, Object> props);
     }
-
 
     private static Map<String, Object> helperMethod(List<RevisionInternal> revs, final Database database) {
 
@@ -249,7 +256,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
             public Map<String, Object> invoke(RevisionInternal source) {
                 AtomicBoolean hasAttachment = new AtomicBoolean(false);
-                List<String> attsSince = database.getPossibleAncestorRevisionIDs(source, Puller.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
+                List<String> attsSince = database.getPossibleAncestorRevisionIDs(source, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
                 if (!hasAttachment.get() || attsSince.size() == 0) {
                     attsSince = null;
                 }

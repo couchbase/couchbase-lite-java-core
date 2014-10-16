@@ -2,6 +2,14 @@ package com.couchbase.lite;
 
 import java.io.File;
 
+/**
+ * This is the default couchbase lite context when running "portable java" (eg, non-Android platforms
+ * such as Linux or OSX).
+ *
+ * If you are running on Android, you will want to use AndroidContext instead.  At the time of writing,
+ * the AndroidContext is currently not available in the javadocs due to an issue in our build
+ * infrastructure.
+ */
 public class JavaContext implements Context {
 
     private String subdir;

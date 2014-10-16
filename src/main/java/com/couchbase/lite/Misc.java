@@ -12,7 +12,7 @@ import com.couchbase.lite.util.Log;
 public class Misc {
 
     public static String TDCreateUUID() {
-        return UUID.randomUUID().toString();
+        return UUID.randomUUID().toString().toLowerCase();
     }
 
     public static String TDHexSHA1Digest(byte[] input) {

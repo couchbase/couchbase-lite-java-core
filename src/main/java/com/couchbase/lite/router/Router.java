@@ -26,6 +26,7 @@ import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
+import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
@@ -50,6 +51,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -557,7 +559,7 @@ public class Router implements Database.ChangeListener {
     }
 
     public Status do_UNKNOWN(Database db, String docID, String attachmentName) {
-        return new Status(Status.BAD_REQUEST);
+        return new Status(Status.NOT_FOUND);
     }
 
     /*************************************************************************************************/
@@ -630,7 +632,30 @@ public class Router implements Database.ChangeListener {
         boolean cancel = (cancelBoolean != null && cancelBoolean.booleanValue());
 
         if(!cancel) {
-            replicator.start();
+
+            if (!replicator.isRunning()) {
+
+                final CountDownLatch replicationStarted = new CountDownLatch(1);
+                replicator.addChangeListener(new Replication.ChangeListener() {
+                    @Override
+                    public void changed(Replication.ChangeEvent event) {
+                        if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.RUNNING) {
+                            replicationStarted.countDown();
+                        }
+                    }
+                });
+
+                replicator.start();
+
+                // wait for replication to start, otherwise replicator.getSessionId() will return null
+                try {
+                    replicationStarted.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }
+
             Map<String,Object> result = new HashMap<String,Object>();
             result.put("session_id", replicator.getSessionID());
             connection.setResponseBody(new Body(result));
