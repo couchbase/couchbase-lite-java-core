@@ -632,23 +632,28 @@ public class Router implements Database.ChangeListener {
         boolean cancel = (cancelBoolean != null && cancelBoolean.booleanValue());
 
         if(!cancel) {
-            final CountDownLatch replicationStarted = new CountDownLatch(1);
-            replicator.addChangeListener(new Replication.ChangeListener() {
-                @Override
-                public void changed(Replication.ChangeEvent event) {
-                    if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.RUNNING) {
-                        replicationStarted.countDown();
+
+            if (!replicator.isRunning()) {
+
+                final CountDownLatch replicationStarted = new CountDownLatch(1);
+                replicator.addChangeListener(new Replication.ChangeListener() {
+                    @Override
+                    public void changed(Replication.ChangeEvent event) {
+                        if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.RUNNING) {
+                            replicationStarted.countDown();
+                        }
                     }
+                });
+
+                replicator.start();
+
+                // wait for replication to start, otherwise replicator.getSessionId() will return null
+                try {
+                    replicationStarted.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
                 }
-            });
 
-            replicator.start();
-
-            // wait for replication to start, otherwise replicator.getSessionId() will return null
-            try {
-                replicationStarted.await();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
             }
 
             Map<String,Object> result = new HashMap<String,Object>();

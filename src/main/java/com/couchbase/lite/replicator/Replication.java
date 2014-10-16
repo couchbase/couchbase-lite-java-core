@@ -157,8 +157,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 // start a fresh internal replication
                 initReplicationInternal();
             } else {
-                String mesg = String.format("replicationInternal in unexpected state: %s", replicationInternal.stateMachine.getState());
-                throw new RuntimeException(mesg);
+                String mesg = String.format("replicationInternal in unexpected state: %s, ignoring start()", replicationInternal.stateMachine.getState());
+                Log.w(Log.TAG_SYNC, mesg);
             }
         }
 
