@@ -139,6 +139,23 @@ public class Query {
      */
     private int groupLevel;
 
+   /**
+    * If non-zero, enables prefix matching of string or array keys.
+    *
+    * A value of 1 treats the endKey itself as a prefix: if it's a string, keys in the index that
+    * come after the endKey, but begin with the same prefix, will be matched. (For example, if the
+    * endKey is "foo" then the key "foolish" in the index will be matched, but not "fong".)
+    * Or if the endKey is an array, any array beginning with those elements will be matched.
+    * (For example, if the endKey is [1], then [1, "x"] will match, but not [2].)
+    * If the key is any other type, there is no effect.
+    *
+    * A value of 2 assumes the endKey is an array and treats its final item as a prefix, using the
+    * rules above. (For example, an endKey of [1, "x"] will match [1, "xtc"] but not [1, "y"].)
+    *
+    * A value of 3 assumes the key is an array of arrays, etc.
+    */
+    private int prefixMatchLevel;
+
 
 
     private long lastSequence;
@@ -182,6 +199,7 @@ public class Query {
         prefetch = query.prefetch;
         keys = query.keys;
         groupLevel = query.groupLevel;
+        prefixMatchLevel = query.prefixMatchLevel;
         mapOnly = query.mapOnly;
         startKeyDocId = query.startKeyDocId;
         endKeyDocId = query.endKeyDocId;
@@ -320,6 +338,16 @@ public class Query {
     }
 
     @InterfaceAudience.Public
+    public int getPrefixMatchLevel() {
+        return prefixMatchLevel;
+    }
+
+    @InterfaceAudience.Public
+    public void setPrefixMatchLevel(int prefixMatchLevel) {
+        this.prefixMatchLevel = prefixMatchLevel;
+    }
+
+    @InterfaceAudience.Public
     public boolean shouldPrefetch() {
         return prefetch;
     }
@@ -434,6 +462,7 @@ public class Query {
         queryOptions.setReduce(!isMapOnly());
         queryOptions.setReduceSpecified(true);
         queryOptions.setGroupLevel(getGroupLevel());
+        queryOptions.setPrefixMatchLevel(getPrefixMatchLevel());
         queryOptions.setDescending(isDescending());
         queryOptions.setIncludeDocs(shouldPrefetch());
         queryOptions.setUpdateSeq(true);
