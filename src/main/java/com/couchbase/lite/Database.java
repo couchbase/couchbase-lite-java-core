@@ -25,6 +25,7 @@ import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.ContentValues;
 import com.couchbase.lite.storage.Cursor;
+import com.couchbase.lite.storage.DefaultSQLiteStorageEngineFactory;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
@@ -902,7 +903,12 @@ public final class Database {
         }
 
         // Create the storage engine.
-        database = SQLiteStorageEngineFactory.createStorageEngine();
+        SQLiteStorageEngineFactory sqliteStorageEngineFactoryDefault = manager.getContext().getSQLiteStorageEngineFactory();
+        if (sqliteStorageEngineFactoryDefault != null) {
+            database = sqliteStorageEngineFactoryDefault.createStorageEngine();
+        } else {
+            database = new DefaultSQLiteStorageEngineFactory().createStorageEngine();
+        }
 
         // Try to open the storage engine and stop if we fail.
         if (database == null || !database.open(path)) {

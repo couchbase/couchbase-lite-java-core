@@ -1,5 +1,8 @@
 package com.couchbase.lite;
 
+import com.couchbase.lite.storage.DefaultSQLiteStorageEngineFactory;
+import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
+
 import java.io.File;
 
 /**
@@ -35,6 +38,11 @@ public class JavaContext implements Context {
     @Override
     public NetworkReachabilityManager getNetworkReachabilityManager() {
         return new FakeNetworkReachabilityManager();
+    }
+
+    @Override
+    public SQLiteStorageEngineFactory getSQLiteStorageEngineFactory() {
+        return new DefaultSQLiteStorageEngineFactory();
     }
 
     public File getRootDirectory() {
