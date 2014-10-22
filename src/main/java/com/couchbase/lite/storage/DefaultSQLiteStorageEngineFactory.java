@@ -35,6 +35,9 @@ public class DefaultSQLiteStorageEngineFactory implements SQLiteStorageEngineFac
 
         try {
             InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(resource);
+            if (inputStream == null) {
+                return null;
+            }
             byte[] bytes = TextUtils.read(inputStream);
             classname = new String(bytes);
             Log.d(Database.TAG, "Loading storage engine: %s", classname);
