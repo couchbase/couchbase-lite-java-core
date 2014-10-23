@@ -1,6 +1,5 @@
 package com.couchbase.lite;
 
-import com.couchbase.lite.storage.DefaultSQLiteStorageEngineFactory;
 import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
 
 import java.io.File;

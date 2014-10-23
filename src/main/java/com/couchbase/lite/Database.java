@@ -25,7 +25,6 @@ import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.ContentValues;
 import com.couchbase.lite.storage.Cursor;
-import com.couchbase.lite.storage.DefaultSQLiteStorageEngineFactory;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
