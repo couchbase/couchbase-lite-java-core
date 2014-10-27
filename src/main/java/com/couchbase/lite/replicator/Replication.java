@@ -529,6 +529,13 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     }
 
     /**
+     * Gets the documents to specify as part of the replication.
+     */
+    public List<String> getDocIds() {
+        return replicationInternal.getDocIds();
+    }
+
+    /**
      * Set parameters to pass to the filter function.
      */
     public void setFilterParams(Map<String, Object> filterParams) {
