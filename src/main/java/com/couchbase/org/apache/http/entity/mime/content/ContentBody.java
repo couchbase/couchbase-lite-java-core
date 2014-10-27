@@ -25,24 +25,19 @@
  *
  */
 
-package org.apache.http.entity.mime;
+package com.couchbase.org.apache.http.entity.mime.content;
 
-import java.nio.charset.Charset;
+import java.io.IOException;
+import java.io.OutputStream;
 
 /**
  *
  * @since 4.0
  */
-public final class MIME {
+public interface ContentBody extends ContentDescriptor {
 
-    public static final String CONTENT_TYPE          = "Content-Type";
-    public static final String CONTENT_TRANSFER_ENC  = "Content-Transfer-Encoding";
-    public static final String CONTENT_DISPOSITION   = "Content-Disposition";
+    String getFilename();
 
-    public static final String ENC_8BIT              = "8bit";
-    public static final String ENC_BINARY            = "binary";
-
-    /** The default character set to be used, i.e. "US-ASCII" */
-    public static final Charset DEFAULT_CHARSET      = Charset.forName("US-ASCII");
+    void writeTo(OutputStream out) throws IOException;
 
 }

@@ -20,6 +20,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.Utils;
+import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action1;
 import com.github.oxo42.stateless4j.transitions.Transition;
@@ -28,7 +29,6 @@ import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.cookie.Cookie;
-import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.IOException;

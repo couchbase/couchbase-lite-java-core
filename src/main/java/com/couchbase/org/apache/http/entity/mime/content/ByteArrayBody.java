@@ -24,13 +24,13 @@
  * <http://www.apache.org/>.
  *
  */
-package org.apache.http.entity.mime.content;
+package com.couchbase.org.apache.http.entity.mime.content;
 
 import java.io.IOException;
 import java.io.OutputStream;
 
-import org.apache.http.entity.mime.MIME;
-import org.apache.http.entity.mime.content.AbstractContentBody;
+import com.couchbase.org.apache.http.entity.mime.MIME;
+import com.couchbase.org.apache.http.entity.mime.content.AbstractContentBody;
 
 /**
  * Body part that is built using a byte array containing a file.

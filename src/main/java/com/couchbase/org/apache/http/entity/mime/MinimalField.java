@@ -25,44 +25,39 @@
  *
  */
 
-package org.apache.http.entity.mime.content;
+package com.couchbase.org.apache.http.entity.mime;
 
 /**
+ * Minimal MIME field.
  *
  * @since 4.0
  */
-public abstract class AbstractContentBody implements ContentBody {
+public class MinimalField {
 
-    private final String mimeType;
-    private final String mediaType;
-    private final String subType;
+    private final String name;
+    private final String value;
 
-    public AbstractContentBody(final String mimeType) {
+    MinimalField(final String name, final String value) {
         super();
-        if (mimeType == null) {
-            throw new IllegalArgumentException("MIME type may not be null");
-        }
-        this.mimeType = mimeType;
-        int i = mimeType.indexOf('/');
-        if (i != -1) {
-            this.mediaType = mimeType.substring(0, i);
-            this.subType = mimeType.substring(i + 1);
-        } else {
-            this.mediaType = mimeType;
-            this.subType = null;
-        }
+        this.name = name;
+        this.value = value;
     }
 
-    public String getMimeType() {
-        return this.mimeType;
+    public String getName() {
+        return this.name;
     }
 
-    public String getMediaType() {
-        return this.mediaType;
+    public String getBody() {
+        return this.value;
     }
 
-    public String getSubType() {
-        return this.subType;
+    @Override
+    public String toString() {
+        StringBuilder buffer = new StringBuilder();
+        buffer.append(this.name);
+        buffer.append(": ");
+        buffer.append(this.value);
+        return buffer.toString();
     }
 
 }

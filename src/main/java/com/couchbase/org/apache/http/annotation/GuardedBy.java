@@ -24,7 +24,7 @@
  * <http://www.apache.org/>.
  *
  */
-package org.apache.http.annotation;
+package com.couchbase.org.apache.http.annotation;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
