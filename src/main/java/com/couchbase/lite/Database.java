@@ -3524,8 +3524,8 @@ public final class Database {
                             parentSequence = getSequenceOfDocument(docNumericID, prevRevId, false);
 
                         } else if (oldWinningRevID != null) {
-                            // The current winning revision is not deleted, so this is a conflict
-                            throw new CouchbaseLiteException(Status.CONFLICT);
+                            String msg = "The current winning revision is not deleted, so this is a conflict";
+                            throw new CouchbaseLiteException(msg, Status.CONFLICT);
                         }
 
                     }
@@ -3559,8 +3559,8 @@ public final class Database {
             if(oldRev.getProperties() != null && oldRev.getProperties().size() > 0) {
                 json = encodeDocumentJSON(oldRev);
                 if(json == null) {
-                    // bad or missing json
-                    throw new CouchbaseLiteException(Status.BAD_REQUEST);
+                    String msg = "Bad or missing JSON";
+                    throw new CouchbaseLiteException(msg, Status.BAD_REQUEST);
                 }
 
                 if(json.length == 2 && json[0] == '{' && json[1] == '}') {
@@ -3593,7 +3593,7 @@ public final class Database {
                 database.update("revs", args, "sequence=?", new String[] {String.valueOf(parentSequence)});
             } catch (SQLException e) {
                 Log.e(Database.TAG, "Error setting parent rev non-current", e);
-                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
             }
 
 
