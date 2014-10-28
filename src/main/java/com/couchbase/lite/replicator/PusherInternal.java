@@ -16,12 +16,12 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
+import com.couchbase.org.apache.http.entity.mime.content.FileBody;
+import com.couchbase.org.apache.http.entity.mime.content.StringBody;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
-import org.apache.http.entity.mime.MultipartEntity;
-import org.apache.http.entity.mime.content.FileBody;
-import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.File;
 import java.io.IOException;

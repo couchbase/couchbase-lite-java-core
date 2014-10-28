@@ -24,13 +24,14 @@
  * <http://www.apache.org/>.
  *
  */
-package org.apache.http.impl.client.trunk;
+package com.couchbase.org.apache.http.impl.client.trunk;
 
-import org.apache.http.annotation.GuardedBy;
-import org.apache.http.annotation.ThreadSafe;
 import org.apache.http.client.CookieStore;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.cookie.CookieIdentityComparator;
+
+import com.couchbase.org.apache.http.annotation.GuardedBy;
+import com.couchbase.org.apache.http.annotation.ThreadSafe;
 
 import java.io.Serializable;
 import java.util.ArrayList;

@@ -25,7 +25,7 @@
  *
  */
 
-package org.apache.http.entity.mime.content;
+package com.couchbase.org.apache.http.entity.mime.content;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -36,7 +36,7 @@ import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 
-import org.apache.http.entity.mime.MIME;
+import com.couchbase.org.apache.http.entity.mime.MIME;
 
 /**
  *
