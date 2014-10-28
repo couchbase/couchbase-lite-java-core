@@ -494,6 +494,7 @@ abstract class ReplicationInternal {
     public Future sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
 
         RemoteRequestRetry request = new RemoteRequestRetry(
+                RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
                 remoteRequestExecutor,
                 workExecutor,
                 clientFactory,
@@ -537,7 +538,10 @@ abstract class ReplicationInternal {
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException(e);
         }
-        RemoteMultipartRequest request = new RemoteMultipartRequest(
+
+        RemoteRequestRetry request = new RemoteRequestRetry(
+                RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_REQUEST,
+                remoteRequestExecutor,
                 workExecutor,
                 clientFactory,
                 method,
@@ -545,11 +549,14 @@ abstract class ReplicationInternal {
                 multiPartEntity,
                 getLocalDatabase(),
                 getHeaders(),
-                onCompletion);
+                onCompletion
+        );
 
         request.setAuthenticator(getAuthenticator());
 
-        return remoteRequestExecutor.submit(request);
+        Future future = request.submit();
+        return future;
+
     }
 
     /**
@@ -562,20 +569,24 @@ abstract class ReplicationInternal {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
 
-            RemoteMultipartDownloaderRequest request = new RemoteMultipartDownloaderRequest(
+            RemoteRequestRetry request = new RemoteRequestRetry(
+                    RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_DOWNLOADER_REQUEST,
+                    remoteRequestExecutor,
                     workExecutor,
                     clientFactory,
                     method,
                     url,
                     body,
-                    db,
+                    getLocalDatabase(),
                     getHeaders(),
-                    onCompletion);
+                    onCompletion
+            );
 
             request.setAuthenticator(getAuthenticator());
 
-            Future future = remoteRequestExecutor.submit(request);
+            Future future = request.submit();
             return future;
+
 
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
