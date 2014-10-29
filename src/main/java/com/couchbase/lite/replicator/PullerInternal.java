@@ -850,6 +850,52 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 }
             }
         });
+
+        // for continuous replications, once the change tracker is caught up, we
+        // should try to go into the idle state.
+        if (isContinuous()) {
+
+            // this has to be on a different thread than the replicator thread, or else it's a deadlock
+            // because it might be waiting for jobs that have been scheduled, and not
+            // yet executed (and which will never execute because this will block processing).
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+
+                    try {
+
+                        if (batcher != null) {
+                            Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                            batcher.waitForPendingFutures();
+                        }
+
+                        Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
+                        waitForPendingFutures();
+
+                        if (downloadsToInsert != null) {
+                            Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                            downloadsToInsert.waitForPendingFutures();
+                        }
+
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_SYNC, "Exception waiting for jobs to drain: %s", e);
+                        e.printStackTrace();
+
+                    } finally {
+
+                        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                    }
+
+                    Log.e(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
+
+
+                }
+            }).start();
+
+        }
+
+
+
     }
 
     protected void stopGraceful() {
