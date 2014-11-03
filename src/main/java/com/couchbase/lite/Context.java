@@ -1,5 +1,7 @@
 package com.couchbase.lite;
 
+import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
+
 import java.io.File;
 
 /**
@@ -35,5 +37,11 @@ public interface Context {
      */
     public NetworkReachabilityManager getNetworkReachabilityManager();
 
+
+    /**
+     * Get the SQLiteStorageEngineFactory, or null if none has been set, in which case
+     * the default will be used.
+     */
+    public SQLiteStorageEngineFactory getSQLiteStorageEngineFactory();
 
 }

@@ -897,12 +897,14 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public synchronized boolean open() {
+        
         if(open) {
             return true;
         }
 
         // Create the storage engine.
-        database = SQLiteStorageEngineFactory.createStorageEngine();
+        SQLiteStorageEngineFactory sqliteStorageEngineFactoryDefault = manager.getContext().getSQLiteStorageEngineFactory();
+        database = sqliteStorageEngineFactoryDefault.createStorageEngine();
 
         // Try to open the storage engine and stop if we fail.
         if (database == null || !database.open(path)) {
