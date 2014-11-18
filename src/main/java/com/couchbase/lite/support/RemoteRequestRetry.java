@@ -56,6 +56,9 @@ public class RemoteRequestRetry<T> implements Future<T> {
     private Throwable requestThrowable;
     private BlockingQueue<Future> pendingRequests;
 
+    // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
+    private boolean dontLog404;
+
     protected Map<String, Object> requestHeaders;
 
     private RemoteRequestType requestType;
@@ -152,6 +155,8 @@ public class RemoteRequestRetry<T> implements Future<T> {
                 );
                 break;
         }
+
+        request.setDontLog404(dontLog404);
 
         if (this.authenticator != null) {
             request.setAuthenticator(this.authenticator);
@@ -310,4 +315,7 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
     }
 
+    public void setDontLog404(boolean dontLog404) {
+        this.dontLog404 = dontLog404;
+    }
 }

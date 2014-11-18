@@ -477,10 +477,18 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public Future sendAsyncRequest(String method, String relativePath, Object body, RemoteRequestCompletionBlock onCompletion) {
+        return sendAsyncRequest(method, relativePath, body, false, onCompletion);
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public Future sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404, RemoteRequestCompletionBlock onCompletion) {
         try {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
-            return sendAsyncRequest(method, url, body, onCompletion);
+            return sendAsyncRequest(method, url, body, dontLog404, onCompletion);
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
@@ -491,7 +499,7 @@ abstract class ReplicationInternal {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncRequest(String method, URL url, Object body, boolean dontLog404, final RemoteRequestCompletionBlock onCompletion) {
 
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
@@ -505,6 +513,8 @@ abstract class ReplicationInternal {
                 getHeaders(),
                 onCompletion
         );
+
+        request.setDontLog404(dontLog404);
 
         request.setAuthenticator(getAuthenticator());
         request.setOnPreCompletionCaller(new RemoteRequestCompletionBlock() {
@@ -763,8 +773,9 @@ abstract class ReplicationInternal {
     public void fetchRemoteCheckpointDoc() {
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
+        boolean dontLog404 = true;
 
-        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
@@ -780,7 +791,7 @@ abstract class ReplicationInternal {
 
             } else {
                 if (e != null && Utils.is404(e)) {
-                    Log.d(Log.TAG_SYNC, "%s: 404 error getting remote checkpoint %s, calling maybeCreateRemoteDB", this, remoteCheckpointDocID());
+                    Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s", this, remoteCheckpointDocID());
                     maybeCreateRemoteDB();
                 }
                 Map<String, Object> response = (Map<String, Object>) result;
