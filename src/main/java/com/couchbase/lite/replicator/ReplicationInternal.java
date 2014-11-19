@@ -1161,7 +1161,7 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public void addToInbox(RevisionInternal rev) {
-        Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s", this, rev);
+        Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s.  Thread: %s", this, rev, Thread.currentThread());
         batcher.queueObject(rev);
         Log.v(Log.TAG_SYNC, "%s: addToInbox() calling updateActive()", this);
         updateActive();
