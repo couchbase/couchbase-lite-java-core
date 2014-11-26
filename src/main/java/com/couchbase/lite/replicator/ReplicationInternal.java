@@ -763,6 +763,19 @@ abstract class ReplicationInternal {
         if (remoteUrlString.endsWith("/") && relativePath.startsWith("/")) {
             remoteUrlString = remoteUrlString.substring(0, remoteUrlString.length() - 1);
         }
+
+        // workaround for https://github.com/couchbase/couchbase-lite-java-core/issues/208
+        if (relativePath.equals("_session")) {
+            try {
+                URL remoteUrl = new URL(remoteUrlString);
+                URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(), remoteUrl.getPort(), relativePath);
+                remoteUrlString = remoteUrlNoPath.toExternalForm();
+                return remoteUrlString;
+            } catch (MalformedURLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         return remoteUrlString + relativePath;
     }
 
