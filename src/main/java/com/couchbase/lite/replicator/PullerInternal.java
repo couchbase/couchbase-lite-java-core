@@ -782,7 +782,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         switch (lifecycle) {
             case ONESHOT:
                 Log.d(Log.TAG_SYNC, "fire STOP_GRACEFUL");
-                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); instead of this, just to be more consistent
+                if (tracker.getLastError() != null) {
+                    setError(tracker.getLastError());
+                }
+                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
                 break;
             case CONTINUOUS:
                 if (stateMachine.isInState(ReplicationState.OFFLINE)) {

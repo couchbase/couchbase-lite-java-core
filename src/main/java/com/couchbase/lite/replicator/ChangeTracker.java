@@ -422,6 +422,7 @@ public class ChangeTracker implements Runnable {
                     // close the socket underneath our read.
                 } else {
                     Log.e(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
+                    this.error = e;
                 }
 
                 backoff.sleepAppropriateAmountOfTime();
