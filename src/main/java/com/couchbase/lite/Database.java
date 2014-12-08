@@ -1050,15 +1050,63 @@ public final class Database {
             dbVersion = 10;
         }
 
-        if (dbVersion < 11) {
-            // Version 10: Add another index
-            String upgradeSql = "CREATE INDEX revs_cur_deleted ON revs(current,deleted); " +
-                    "PRAGMA user_version = 11";
+        // (Version 11 used to create the index revs_cur_deleted, which is obsoleted in version 16)
+
+        // TODO: had to skip 12, because the bugfix has not been ported to android yet.
+        // TODO: See https://github.com/couchbase/couchbase-lite-ios/commit/a33d6ef3acc61fbc99deedd5658dc5ee897bd399
+        // TODO: once it's ported, it can be added onto the end
+
+
+        if (dbVersion < 13) {
+            // Version 13: Add rows to track number of rows in the views
+            String upgradeSql =  "ALTER TABLE views ADD COLUMN total_docs INTEGER DEFAULT -1; " +
+                    "PRAGMA user_version = 13";
             if (!initialize(upgradeSql)) {
                 database.close();
                 return false;
             }
+            dbVersion = 13;
         }
+
+        if (dbVersion < 14) {
+            // Version 14: Add index for getting a document with doc and rev id
+            String upgradeSql =  "CREATE INDEX IF NOT EXISTS revs_by_docid_revid ON revs(doc_id, revid desc, current, deleted); " +
+                    "PRAGMA user_version = 14";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 14;
+        }
+
+        if (dbVersion < 15) {
+            // Version 15: Add sequence index on maps and attachments for revs(sequence) on DELETE CASCADE
+            String upgradeSql =  "CREATE INDEX maps_sequence ON maps(sequence); " +
+                    "CREATE INDEX attachments_sequence ON attachments(sequence); " +
+                    "PRAGMA user_version = 15";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 15;
+        }
+
+
+        if (dbVersion < 16) {
+            // Version 16: Fix the very suboptimal index revs_cur_deleted.
+            // The new revs_current is an optimal index for finding the winning revision of a doc.
+            String upgradeSql =  "DROP INDEX IF EXISTS revs_current; " +
+                    "DROP INDEX IF EXISTS revs_cur_deleted; " +
+                    "CREATE INDEX revs_current ON revs(doc_id, current desc, deleted, revid desc);" +
+                    "PRAGMA user_version = 16";
+
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 16;
+        }
+
 
 
         try {
