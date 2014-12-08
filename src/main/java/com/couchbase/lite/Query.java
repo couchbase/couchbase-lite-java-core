@@ -1,6 +1,7 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
@@ -156,6 +157,12 @@ public class Query {
     */
     private int prefixMatchLevel;
 
+    /**
+     * An optional predicate that filters the resulting query rows.
+     * If present, it's called on every row returned from the index, and if it returns false the
+     * row is skipped.
+     */
+    private CollectionUtils.Predicate<QueryRow> postFilter;
 
 
     private long lastSequence;
@@ -206,6 +213,7 @@ public class Query {
         indexUpdateMode = query.indexUpdateMode;
         allDocsMode = query.allDocsMode;
         inclusiveEnd = query.inclusiveEnd;
+        postFilter = query.postFilter;
     }
 
     /**
@@ -345,6 +353,16 @@ public class Query {
     @InterfaceAudience.Public
     public void setPrefixMatchLevel(int prefixMatchLevel) {
         this.prefixMatchLevel = prefixMatchLevel;
+    }
+
+    @InterfaceAudience.Public
+    public CollectionUtils.Predicate<QueryRow> getPostFilter() {
+        return postFilter;
+    }
+
+    @InterfaceAudience.Public
+    public void setPostFilter(CollectionUtils.Predicate<QueryRow> postFilter) {
+        this.postFilter = postFilter;
     }
 
     @InterfaceAudience.Public
