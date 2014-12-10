@@ -768,7 +768,8 @@ abstract class ReplicationInternal {
         if (relativePath.equals("_session")) {
             try {
                 URL remoteUrl = new URL(remoteUrlString);
-                URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(), remoteUrl.getPort(), relativePath);
+                String relativePathWithLeadingSlash = String.format("/%s", relativePath);  // required on couchbase-lite-java
+                URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(), remoteUrl.getPort(), relativePathWithLeadingSlash);
                 remoteUrlString = remoteUrlNoPath.toExternalForm();
                 return remoteUrlString;
             } catch (MalformedURLException e) {
