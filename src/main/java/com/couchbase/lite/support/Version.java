@@ -14,14 +14,14 @@ public class Version {
     }
 
     public static String getVersionName() {
-        if (VERSION_NAME == "${VERSION_NAME}") {
+        if (VERSION_NAME.contains("VERSION_NAME")) {
             return "devbuild";
         }
         return VERSION_NAME;
     }
 
     public static int getVersionCode() {
-        if (VERSION_CODE == "${VERSION_CODE}") {
+        if (VERSION_CODE.contains("VERSION_CODE")) {
             return 0;
         }
         try {
