@@ -6,8 +6,8 @@ public class Version {
 
     public static final String VERSION;
 
-    private static final String VERSION_NAME="${VERSION_NAME}";  // replaced during build process
-    private static final String VERSION_CODE="${VERSION_CODE}";  // replaced during build process
+    private static final String VERSION_NAME="%VERSION_NAME%";  // replaced during build process
+    private static final String VERSION_CODE="%VERSION_CODE%";  // replaced during build process
 
     static {
         VERSION = String.format("%s-%s", getVersionName(), getVersionCode());
