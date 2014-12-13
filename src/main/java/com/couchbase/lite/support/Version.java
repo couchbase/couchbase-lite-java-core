@@ -25,7 +25,8 @@ public class Version {
             return 0;
         }
         try {
-            Integer.parseInt(VERSION_CODE);
+            int versionCode = Integer.parseInt(VERSION_CODE);
+            return versionCode;
         } catch (NumberFormatException e) {
             Log.e(Log.TAG, "Cannot parse version code: %s", VERSION_CODE);
         }
