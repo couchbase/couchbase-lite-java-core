@@ -94,73 +94,84 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
             @Override
             public void run() {
-
                 try {
-
                     Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful()");
 
                     // wait for pending futures from the pusher (eg, oustanding http requests)
                     waitForPendingFutures();
 
                     stopObserving();
-
-
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
                     e.printStackTrace();
-
                 } finally {
-
                     triggerStopImmediate();
+                    Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful.run() finished");
                 }
-
-                Log.e(Log.TAG_SYNC, "PusherInternal stopGraceful.run() finished");
-
             }
         }).start();
-
-
     }
 
+    protected boolean waitingForPendingFutures = false;
+    protected Object lockWaitForPendingFutures = new Object();
+
     public void waitForPendingFutures() {
-
-        try {
-
-            // wait for batcher's pending futures
-            if (batcher != null) {
-                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                // TODO: should we call batcher.flushAll(); here?
-                batcher.waitForPendingFutures();
-                Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
-            }
-
-            while (!pendingFutures.isEmpty()) {
-                Future future = pendingFutures.take();
-                try {
-                    Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
-                    future.get();
-                    Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                } catch (ExecutionException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            // since it's possible that in the process of waiting for pendingFutures,
-            // new items were added to the batcher, let's wait for the batcher to
-            // drain again.
-            if (batcher != null) {
-                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                batcher.waitForPendingFutures();
-                Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
-            }
-
-
-        } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+        if(waitingForPendingFutures) {
+            return;
         }
 
+        synchronized (lockWaitForPendingFutures) {
+            waitingForPendingFutures = true;
+
+            Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
+
+            try {
+
+                // wait for batcher's pending futures
+                if (batcher != null) {
+                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                    // TODO: should we call batcher.flushAll(); here?
+                    batcher.waitForPendingFutures();
+                    Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
+                }
+
+                while (!pendingFutures.isEmpty()) {
+                    Future future = pendingFutures.take();
+                    try {
+                        Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                        future.get();
+                        Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    } catch (ExecutionException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                // since it's possible that in the process of waiting for pendingFutures,
+                // new items were added to the batcher, let's wait for the batcher to
+                // drain again.
+                if (batcher != null) {
+                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                    batcher.waitForPendingFutures();
+                    Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
+                }
+
+                // If pendingFutures queue is empty and state is RUNNING, fireTrigger to IDLE
+                // NOTE: in case of many documents sync, new Future tasks could be added into the queue.
+                //       This is reason to check if queue is empty.
+                if (pendingFutures.isEmpty()) {
+                    Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] state=" + stateMachine.getState());
+                    Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);");
+                    fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                }
+            } catch (Exception e) {
+                Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+            } finally {
+                Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
+                waitingForPendingFutures = false;
+            }
+        }
     }
 
     /**
@@ -282,23 +293,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if(isContinuous()) {
             observing = true;
             db.addChangeListener(this);
-
-            // once this work drains, go into the IDLE state
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    waitForPendingFutures();
-                    fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                }
-            }).start();
-
         } else {
             // if it's one shot, then we can stop graceful and wait for
             // pending work to drain.
-
             triggerStop();
         }
-
     }
 
 
@@ -695,7 +694,4 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         return generation;
     }
-
-
-
 }

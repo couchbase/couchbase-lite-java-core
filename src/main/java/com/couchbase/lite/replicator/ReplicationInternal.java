@@ -10,10 +10,9 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
+import com.couchbase.lite.support.BlockingQueueListener;
+import com.couchbase.lite.support.CustomLinkedBlockingQueue;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.RemoteMultipartDownloaderRequest;
-import com.couchbase.lite.support.RemoteMultipartRequest;
-import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.RemoteRequestRetry;
 import com.couchbase.lite.util.CollectionUtils;
@@ -44,10 +43,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -58,7 +55,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @exclude
  */
 @InterfaceAudience.Private
-abstract class ReplicationInternal {
+abstract class ReplicationInternal implements BlockingQueueListener{
 
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle { SYNC, ASYNC };
@@ -144,10 +141,9 @@ abstract class ReplicationInternal {
         //   depending on calling replication.status(), and changeListenerNotifyStyle could be set to SYNC.
         changeListenerNotifyStyle = ChangeListenerNotifyStyle.ASYNC;
 
-        pendingFutures = new LinkedBlockingQueue<Future>();
+        pendingFutures = new CustomLinkedBlockingQueue<Future>(this);
 
         initializeStateMachine();
-
     }
 
     /**
@@ -182,6 +178,7 @@ abstract class ReplicationInternal {
      * Fire a trigger to the state machine
      */
     protected void fireTrigger(final ReplicationTrigger trigger) {
+        Log.w(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
         // All state machine triggers need to happen on the replicator thread
         workExecutor.submit(new Runnable() {
             @Override
@@ -500,7 +497,7 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public Future sendAsyncRequest(String method, URL url, Object body, boolean dontLog404, final RemoteRequestCompletionBlock onCompletion) {
-
+        Log.d(Log.TAG_SYNC, "[sendAsyncRequest()] " + method + " => " + url);
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
                 remoteRequestExecutor,
@@ -1023,6 +1020,10 @@ abstract class ReplicationInternal {
                 ReplicationTrigger.START,
                 ReplicationState.RUNNING
         );
+        stateMachine.configure(ReplicationState.IDLE).permit(
+                ReplicationTrigger.RESUME,
+                ReplicationState.RUNNING
+        );
         stateMachine.configure(ReplicationState.RUNNING).permit(
                 ReplicationTrigger.WAITING_FOR_CHANGES,
                 ReplicationState.IDLE
@@ -1055,6 +1056,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
         stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_OFFLINE);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_OFFLINE);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_OFFLINE);
@@ -1064,41 +1066,51 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_ONLINE);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_ONLINE);
         stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.RESUME);
 
         // actions
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+
                 Log.d(Log.TAG_SYNC, "entered the RUNNING state, calling start()");
                 ReplicationInternal.this.start();
                 Log.d(Log.TAG_SYNC, "called start(), calling notifyChangeListenersStateTransition");
-
                 notifyChangeListenersStateTransition(transition);
                 Log.d(Log.TAG_SYNC, "called notifyChangeListenersStateTransition");
-
             }
         });
+
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
                 Log.d(Log.TAG_SYNC, "replicator exiting the RUNNING method");
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 notifyChangeListenersStateTransition(transition);
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
                 notifyChangeListenersStateTransition(transition);
             }
         });
         stateMachine.configure(ReplicationState.OFFLINE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 goOffline();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1106,6 +1118,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.OFFLINE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
                 goOnline();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1113,6 +1126,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 ReplicationInternal.this.stopGraceful();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1120,6 +1134,7 @@ abstract class ReplicationInternal {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 ReplicationInternal.this.clearDbRef();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1395,9 +1410,38 @@ abstract class ReplicationInternal {
         }
     }
 
-
     public String getSessionID() {
         return sessionID;
+    }
+
+    public abstract void waitForPendingFutures();
+
+    //@Override
+    //public void changed(EventType type, Object o, BlockingQueue queue) {
+        // should be overide
+    //}
+    @Override
+    public void changed(EventType type, Object o, BlockingQueue queue) {
+        // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
+
+        if(type == EventType.PUT || type == EventType.ADD) {
+            // in case of one shot, not necessary to switch state and call waitForPendingFutures.
+            if(isContinuous()) {
+                if (!queue.isEmpty()) {
+                    // trigger to RUNNING if state is IDLE
+                    fireTrigger(ReplicationTrigger.RESUME);
+
+                    // run waitForPendingFutures.
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            waitForPendingFutures();
+                        }
+                    }).start();
+                }
+
+            }
+        }
     }
 }
 
