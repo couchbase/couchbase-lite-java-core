@@ -71,7 +71,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     private static int lastSessionID = 0;
 
-    public static int RETRY_DELAY = 5; // #define kRetryDelay 60.0 in CBL_Replicator.m
+    public static int RETRY_DELAY = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
     protected Database db;
