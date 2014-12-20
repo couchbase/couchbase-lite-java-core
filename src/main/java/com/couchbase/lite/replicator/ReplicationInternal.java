@@ -47,6 +47,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -69,6 +70,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
 
     private static int lastSessionID = 0;
+
+    public static int RETRY_DELAY = 5; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
     protected Database db;
@@ -108,6 +111,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected Replication.Lifecycle lifecycle;
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
 
+    protected Future retryFuture = null;
 
     /**
      * Constructor
@@ -1097,6 +1101,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                retryReplicationIfError();
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -1194,6 +1199,90 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         batcher.queueObject(rev);
         Log.v(Log.TAG_SYNC, "%s: addToInbox() calling updateActive()", this);
         updateActive();
+    }
+
+    /**
+     * Called after a continuous replication has gone idle, but it failed to transfer some revisions
+     * and so wants to try again in a minute. Can be overridden by subclasses.
+     *
+     * in CBL_Replicator.m
+     * - (void) retry
+     */
+    protected void retry(){
+        Log.v(Log.TAG_SYNC, "[retry()]");
+        error = null;
+        checkSession();
+    }
+
+    /**
+     * in CBL_Replicator.m
+     * - (void) retryIfReady
+     */
+    protected void retryIfReady(){
+        Log.v(Log.TAG_SYNC, "[retryIfReady()] stateMachine => "+stateMachine.getState().toString());
+
+        //if (!_running)
+        if(stateMachine.getState().equals(ReplicationState.RUNNING)) {
+            return;
+        }
+
+        // online - retry now
+        // if (_online) {
+        if(!stateMachine.getState().equals(ReplicationState.OFFLINE)){
+            // retry now
+            Log.v(Log.TAG_SYNC, "%s RETRYING, to transfer missed revisions...", this);
+            revisionsFailed = 0;
+            cancelRetryFuture();
+            retry();
+        }
+        else{
+            // retry later
+            scheduleRetryFuture();
+        }
+    }
+
+    /**
+     * helper function to schedule retry future. no in iOS code.
+     */
+    private void scheduleRetryFuture(){
+        Log.v(Log.TAG_SYNC, "[scheduleRetryFuture()]");
+        this.retryFuture = workExecutor.schedule(new Runnable() {
+            public void run() {
+                retryIfReady();
+            }
+        }, RETRY_DELAY, TimeUnit.SECONDS);
+    }
+    /**
+     * helper function to cancel retry future. not in iOS code.
+     */
+    private void cancelRetryFuture(){
+        if(retryFuture != null && !retryFuture.isDone()){
+            retryFuture.cancel(true);
+        }
+        retryFuture = null;
+    }
+
+    /**
+     * Retry replication if previous attempt ends with error
+     */
+    protected void retryReplicationIfError(){
+        // state should be IDLE
+        if(stateMachine.getState().equals(ReplicationState.IDLE)){
+            // mode should be continuous
+            if(isContinuous()){
+                // previous attempt should end with error
+                if(error!=null){
+                    // 12/16/2014 - only retry if error is transient error 50x http error
+                    // It may need to retry for any kind of errors
+                    if(Utils.isTransientError(error)){
+                        Log.v(Log.TAG_SYNC, "%s: Failed to xfer %d revisions; will retry in %d sec",
+                                this, revisionsFailed, RETRY_DELAY);
+                        cancelRetryFuture();
+                        scheduleRetryFuture();
+                    }
+                }
+            }
+        }
     }
 
     protected void updateActive() {

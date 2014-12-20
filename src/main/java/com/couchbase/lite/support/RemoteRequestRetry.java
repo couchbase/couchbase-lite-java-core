@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,7 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class RemoteRequestRetry<T> implements Future<T> {
 
     public static int MAX_RETRIES = 3;  // total number of attempts = 4 (1 initial + MAX_RETRIES)
-    public static int RETRY_DELAY_MS = 10 * 1000;
+    public static int RETRY_DELAY_MS = 4 * 1000; // 4 sec
 
     protected ScheduledExecutorService workExecutor;
     protected ExecutorService requestExecutor;  // must have more than one thread
@@ -62,6 +63,9 @@ public class RemoteRequestRetry<T> implements Future<T> {
     protected Map<String, Object> requestHeaders;
 
     private RemoteRequestType requestType;
+
+    // for Retry task
+    ScheduledFuture retryFuture = null;
 
     /**
      * The kind of RemoteRequest that will be created on each retry attempt
@@ -190,6 +194,7 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
             } else {
 
+                // Only retry if error is  TransientError (5xx).
                 if (isTransientError(httpResponse, e)) {
                     if (retryCount >= MAX_RETRIES) {
                         Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  retries exhausted. url: %s", this, url);
@@ -202,19 +207,24 @@ public class RemoteRequestRetry<T> implements Future<T> {
                         requestHttpResponse = httpResponse;
                         requestResult = result;
                         requestThrowable = e;
-
                         retryCount += 1;
-
-                        submit();
-
+                        // Another choice: android.os.Handler.postDelayed(Runnable r, long delayMillis) is another choice. But only for Android.
+                        // reuse workExecutor (ScheduledExecutorService) to retry replication
+                        double dDelay = RETRY_DELAY_MS * (Math.pow((double) 2, (double) (retryCount-1)));
+                        long lDelay = (dDelay > (double) Long.MAX_VALUE) ? Long.MAX_VALUE : (long) dDelay;
+                        retryFuture = workExecutor.schedule(new Runnable() {
+                            @Override
+                            public void run() {
+                                submit();
+                            }
+                        }, lDelay, TimeUnit.MILLISECONDS); // delay init_delay * 2^retry ms
                     }
+
                 } else {
                     Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, non-transient error.  NOT retrying. url: %s", this, url);
                     // this isn't a transient error, so there's no point in retrying
                     completed(httpResponse, result, e);
                 }
-
-
             }
         }
     };
@@ -256,6 +266,11 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
+        // If RemoteRequestRetry is canceled, make sure if retry future is also canceled.
+        if(retryFuture != null && !retryFuture.isCancelled()){
+            retryFuture.cancel(mayInterruptIfRunning);
+        }
+
         return false;
     }
 
