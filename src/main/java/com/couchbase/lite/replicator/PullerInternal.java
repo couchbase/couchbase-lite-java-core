@@ -423,7 +423,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         Map<String, Object> res = (Map<String, Object>) result;
 
                         if (e != null) {
-                            setError(e);
+                            setError(e, "/_all_docs?include_docs=true");
                             revisionFailed();
 
                             // TODO: There is a known bug caused by the line below, which is
@@ -433,6 +433,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // completedChangesCount.addAndGet(bulkRevs.size());
 
                         } else {
+                            resetErrorRequest("/_all_docs?include_docs=true");
+
                             // Process the resulting rows' documents.
                             // We only add a document if it doesn't have attachments, and if its
                             // revID matches the one we asked for.

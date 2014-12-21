@@ -71,6 +71,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     private static int lastSessionID = 0;
 
+    public static int MAX_RETRIES = 10;  // total number of attempts = 11 (1 initial + MAX_RETRIES)
     public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
@@ -111,7 +112,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected Replication.Lifecycle lifecycle;
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
 
-    protected Future retryFuture = null;
+    private Future retryFuture = null;  // future obj of retry task
+    private int retryCount = 0;         // counter for retry.
+    private String errorRequest = null; // request that ended with error
 
     /**
      * Constructor
@@ -148,6 +151,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         pendingFutures = new CustomLinkedBlockingQueue<Future>(this);
 
         initializeStateMachine();
+
+        this.retryCount = 0;
+        this.errorRequest = null;
     }
 
     /**
@@ -239,6 +245,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             initNetworkReachabilityManager();
 
+            this.retryCount = 0;
+            this.errorRequest = null;
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "%s: Exception in start()", e, this);
         }
@@ -354,9 +362,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                             return;
                         }
                         Log.e(Log.TAG_SYNC, this + ": Session check failed", error);
-                        setError(error);
+                        setError(error, sessionPath);
 
                     } else {
+                        resetErrorRequest(sessionPath);
                         Map<String, Object> response = (Map<String, Object>) result;
                         Log.e(Log.TAG_SYNC, "%s checkSessionAtPath() response: %s", this, response);
                         Map<String, Object> userCtx = (Map<String, Object>) response.get("userCtx");
@@ -417,6 +426,28 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         });
         pendingFutures.add(future);
 
+    }
+
+    @InterfaceAudience.Private
+    protected void resetErrorRequest(String errorRequest){
+        if(errorRequest != null && this.errorRequest != null){
+            if(errorRequest.equals(this.errorRequest)){
+                this.retryCount = 0;
+                this.errorRequest = null;
+            }
+        }
+    }
+
+    @InterfaceAudience.Private
+    protected void setError(Throwable throwable, String errorRequest){
+        if(throwable != null && errorRequest != null){
+            // if error is for different request, reset retry count.
+            if(!errorRequest.equals(this.errorRequest)){
+                this.retryCount = 0;
+                this.errorRequest = errorRequest;
+            }
+        }
+        this.setError(throwable);
     }
 
     @InterfaceAudience.Private
@@ -966,6 +997,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      */
     protected void stopGraceful() {
         Log.d(Log.TAG_SYNC, "stopGraceful()");
+        this.retryCount = 0;
+        this.errorRequest = null;
     }
 
     /**
@@ -1080,7 +1113,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.e(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
 
                 Log.d(Log.TAG_SYNC, "entered the RUNNING state, calling start()");
                 ReplicationInternal.this.start();
@@ -1211,6 +1244,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected void retry(){
         Log.v(Log.TAG_SYNC, "[retry()]");
         revisionsFailed = 0;
+        retryCount++;
         error = null;
         checkSession();
     }
@@ -1233,12 +1267,13 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * helper function to schedule retry future. no in iOS code.
      */
     private void scheduleRetryFuture(){
-        Log.v(Log.TAG_SYNC, "[scheduleRetryFuture()]");
+        long delay = RETRY_DELAY_SECONDS * (long)Math.pow((double)2, (double)Math.min(retryCount, MAX_RETRIES));
+        Log.v(Log.TAG_SYNC, "[scheduleRetryFuture()] retry with delay: " + delay + " sec");
         this.retryFuture = workExecutor.schedule(new Runnable() {
             public void run() {
                 retryIfReady();
             }
-        }, RETRY_DELAY_SECONDS, TimeUnit.SECONDS);
+        }, delay, TimeUnit.SECONDS);
     }
     /**
      * helper function to cancel retry future. not in iOS code.
@@ -1254,19 +1289,22 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * Retry replication if previous attempt ends with error
      */
     protected void retryReplicationIfError(){
-        // state should be IDLE
-        if(stateMachine.getState().equals(ReplicationState.IDLE)){
-            // mode should be continuous
-            if(isContinuous()){
-                // previous attempt should end with error
-                if(error!=null){
-                    // 12/16/2014 - only retry if error is transient error 50x http error
-                    // It may need to retry for any kind of errors
-                    if(Utils.isTransientError(error)){
-                        Log.v(Log.TAG_SYNC, "%s: Failed to xfer %d revisions; will retry in %d sec",
-                                this, revisionsFailed, RETRY_DELAY_SECONDS);
-                        cancelRetryFuture();
-                        scheduleRetryFuture();
+        // not retry infinite times
+        if(retryCount < MAX_RETRIES) {
+            // state should be IDLE
+            if(stateMachine.getState().equals(ReplicationState.IDLE)){
+                // mode should be continuous
+                if(isContinuous()){
+                    // previous attempt should end with error
+                    if(error!=null){
+                        // 12/16/2014 - only retry if error is transient error 50x http error
+                        // It may need to retry for any kind of errors
+                        if(Utils.isTransientError(error)){
+                            Log.v(Log.TAG_SYNC, "%s: Failed to xfer %d revisions; will retry in %d sec",
+                                    this, revisionsFailed, RETRY_DELAY_SECONDS);
+                            cancelRetryFuture();
+                            scheduleRetryFuture();
+                        }
                     }
                 }
             }

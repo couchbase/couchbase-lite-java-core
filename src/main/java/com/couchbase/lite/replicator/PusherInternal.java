@@ -366,76 +366,80 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response", this);
                 Map<String, Object> results = (Map<String, Object>) response;
                 if (e != null) {
-                    setError(e);
+                    setError(e, "/_revs_diff");
                     revisionFailed();
-                } else if (results.size() != 0) {
-                    // Go through the list of local changes again, selecting the ones the destination server
-                    // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
-                    final List<Object> docsToSend = new ArrayList<Object>();
-                    RevisionList revsToSend = new RevisionList();
-                    for(RevisionInternal rev : changes) {
-                        // Is this revision in the server's 'missing' list?
-                        Map<String,Object> properties = null;
-                        Map<String,Object> revResults = (Map<String,Object>)results.get(rev.getDocId());
-                        if(revResults == null) {
-                            continue;
-                        }
-                        List<String> revs = (List<String>)revResults.get("missing");
-                        if(revs == null || !revs.contains(rev.getRevId())) {
-                            removePending(rev);
-                            continue;
-                        }
+                }
+                else {
+                    resetErrorRequest("/_revs_diff");
 
-                        // Get the revision's properties:
-                        EnumSet<Database.TDContentOptions> contentOptions = EnumSet.of(
-                                Database.TDContentOptions.TDIncludeAttachments
-                        );
-
-                        if (!dontSendMultipart && revisionBodyTransformationBlock==null) {
-                            contentOptions.add(Database.TDContentOptions.TDBigAttachmentsFollow);
-                        }
-
-                        RevisionInternal loadedRev;
-                        try {
-                            loadedRev = db.loadRevisionBody(rev, contentOptions);
-                            properties = new HashMap<String,Object>(rev.getProperties());
-                        } catch (CouchbaseLiteException e1) {
-                            Log.w(Log.TAG_SYNC, "%s Couldn't get local contents of %s", rev, PusherInternal.this);
-                            revisionFailed();
-                            continue;
-                        }
-
-                        RevisionInternal populatedRev = transformRevision(loadedRev);
-
-                        List<String> possibleAncestors = (List<String>)revResults.get("possible_ancestors");
-
-                        properties = new HashMap<String,Object>(populatedRev.getProperties());
-                        Map<String,Object> revisions = db.getRevisionHistoryDictStartingFromAnyAncestor(populatedRev, possibleAncestors);
-                        properties.put("_revisions",revisions);
-                        populatedRev.setProperties(properties);
-
-                        // Strip any attachments already known to the target db:
-                        if (properties.containsKey("_attachments")) {
-                            // Look for the latest common ancestor and stub out older attachments:
-                            int minRevPos = findCommonAncestor(populatedRev, possibleAncestors);
-
-                            Database.stubOutAttachmentsInRevBeforeRevPos(populatedRev,minRevPos + 1,false);
-
-                            properties = populatedRev.getProperties();
-
-                            if (!dontSendMultipart && uploadMultipartRevision(populatedRev)) {
+                    if (results.size() != 0) {
+                        // Go through the list of local changes again, selecting the ones the destination server
+                        // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
+                        final List<Object> docsToSend = new ArrayList<Object>();
+                        RevisionList revsToSend = new RevisionList();
+                        for (RevisionInternal rev : changes) {
+                            // Is this revision in the server's 'missing' list?
+                            Map<String, Object> properties = null;
+                            Map<String, Object> revResults = (Map<String, Object>) results.get(rev.getDocId());
+                            if (revResults == null) {
                                 continue;
                             }
-                        }
+                            List<String> revs = (List<String>) revResults.get("missing");
+                            if (revs == null || !revs.contains(rev.getRevId())) {
+                                removePending(rev);
+                                continue;
+                            }
 
-                        if(properties == null || !properties.containsKey("_id")) {
-                            throw new IllegalStateException("properties must contain a document _id");
-                        }
+                            // Get the revision's properties:
+                            EnumSet<Database.TDContentOptions> contentOptions = EnumSet.of(
+                                    Database.TDContentOptions.TDIncludeAttachments
+                            );
 
-                        revsToSend.add(rev);
-                        docsToSend.add(properties);
+                            if (!dontSendMultipart && revisionBodyTransformationBlock == null) {
+                                contentOptions.add(Database.TDContentOptions.TDBigAttachmentsFollow);
+                            }
 
-                        //TODO: port this code from iOS
+                            RevisionInternal loadedRev;
+                            try {
+                                loadedRev = db.loadRevisionBody(rev, contentOptions);
+                                properties = new HashMap<String, Object>(rev.getProperties());
+                            } catch (CouchbaseLiteException e1) {
+                                Log.w(Log.TAG_SYNC, "%s Couldn't get local contents of %s", rev, PusherInternal.this);
+                                revisionFailed();
+                                continue;
+                            }
+
+                            RevisionInternal populatedRev = transformRevision(loadedRev);
+
+                            List<String> possibleAncestors = (List<String>) revResults.get("possible_ancestors");
+
+                            properties = new HashMap<String, Object>(populatedRev.getProperties());
+                            Map<String, Object> revisions = db.getRevisionHistoryDictStartingFromAnyAncestor(populatedRev, possibleAncestors);
+                            properties.put("_revisions", revisions);
+                            populatedRev.setProperties(properties);
+
+                            // Strip any attachments already known to the target db:
+                            if (properties.containsKey("_attachments")) {
+                                // Look for the latest common ancestor and stub out older attachments:
+                                int minRevPos = findCommonAncestor(populatedRev, possibleAncestors);
+
+                                Database.stubOutAttachmentsInRevBeforeRevPos(populatedRev, minRevPos + 1, false);
+
+                                properties = populatedRev.getProperties();
+
+                                if (!dontSendMultipart && uploadMultipartRevision(populatedRev)) {
+                                    continue;
+                                }
+                            }
+
+                            if (properties == null || !properties.containsKey("_id")) {
+                                throw new IllegalStateException("properties must contain a document _id");
+                            }
+
+                            revsToSend.add(rev);
+                            docsToSend.add(properties);
+
+                            //TODO: port this code from iOS
                                 /*
                                 bufferedSize += [CBLJSON estimateMemorySize: properties];
                                 if (bufferedSize > kMaxBulkDocsObjectSize) {
@@ -446,18 +450,18 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                 }
                                 */
 
-                    }
+                        }
 
-                    // Post the revisions to the destination:
-                    uploadBulkDocs(docsToSend, revsToSend);
+                        // Post the revisions to the destination:
+                        uploadBulkDocs(docsToSend, revsToSend);
 
-                } else {
-                    // None of the revisions are new to the remote
-                    for (RevisionInternal revisionInternal : changes) {
-                        removePending(revisionInternal);
+                    } else {
+                        // None of the revisions are new to the remote
+                        for (RevisionInternal revisionInternal : changes) {
+                            removePending(revisionInternal);
+                        }
                     }
                 }
-
             }
 
         });
@@ -519,9 +523,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
                 }
                 if (e != null) {
-                    setError(e);
+                    setError(e, "/_bulk_docs");
                     revisionFailed();
                 } else {
+                    resetErrorRequest("/_bulk_docs");
                     Log.v(Log.TAG_SYNC, "%s: POSTed to _bulk_docs", PusherInternal.this);
                 }
                 addToCompletedChangesCount(numDocsToSend);
@@ -600,7 +605,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return false;
         }
 
-        String path = String.format("/%s?new_edits=false", revision.getDocId());
+        final String path = String.format("/%s?new_edits=false", revision.getDocId());
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
 
@@ -620,11 +625,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             }
                         } else {
                             Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
-                            setError(e);
+                            setError(e, path);
                             revisionFailed();
                         }
                     } else {
                         Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
+                        resetErrorRequest(path);
                         removePending(revision);
                     }
                 } finally {
@@ -651,17 +657,18 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return;
         }
 
-        String path = String.format("/%s?new_edits=false", URIUtils.encode(rev.getDocId()));
+        final String path = String.format("/%s?new_edits=false", URIUtils.encode(rev.getDocId()));
         Future future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),
                 new RemoteRequestCompletionBlock() {
                     public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                         if (e != null) {
-                            setError(e);
+                            setError(e, path);
                             revisionFailed();
                         } else {
                             Log.v(Log.TAG_SYNC, "%s: Sent %s (JSON), response=%s", this, rev, result);
+                            resetErrorRequest(path);
                             removePending(rev);
                         }
                     }
