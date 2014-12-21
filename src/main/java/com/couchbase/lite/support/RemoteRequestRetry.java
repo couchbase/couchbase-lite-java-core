@@ -208,16 +208,14 @@ public class RemoteRequestRetry<T> implements Future<T> {
                         requestResult = result;
                         requestThrowable = e;
                         retryCount += 1;
-                        // Another choice: android.os.Handler.postDelayed(Runnable r, long delayMillis) is another choice. But only for Android.
-                        // reuse workExecutor (ScheduledExecutorService) to retry replication
-                        double dDelay = RETRY_DELAY_MS * (Math.pow((double) 2, (double) (retryCount-1)));
-                        long lDelay = (dDelay > (double) Long.MAX_VALUE) ? Long.MAX_VALUE : (long) dDelay;
+                        // delay * 2 << retry
+                        long delay = RETRY_DELAY_MS * (long)Math.pow((double)2, (double)Math.min(retryCount-1, MAX_RETRIES));
                         retryFuture = workExecutor.schedule(new Runnable() {
                             @Override
                             public void run() {
                                 submit();
                             }
-                        }, lDelay, TimeUnit.MILLISECONDS); // delay init_delay * 2^retry ms
+                        }, delay, TimeUnit.MILLISECONDS); // delay init_delay * 2^retry ms
                     }
 
                 } else {

@@ -71,7 +71,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     private static int lastSessionID = 0;
 
-    public static int RETRY_DELAY = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
+    public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
     protected Database db;
@@ -1210,6 +1210,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      */
     protected void retry(){
         Log.v(Log.TAG_SYNC, "[retry()]");
+        revisionsFailed = 0;
         error = null;
         checkSession();
     }
@@ -1220,24 +1221,11 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      */
     protected void retryIfReady(){
         Log.v(Log.TAG_SYNC, "[retryIfReady()] stateMachine => "+stateMachine.getState().toString());
-
-        //if (!_running)
-        if(stateMachine.getState().equals(ReplicationState.RUNNING)) {
-            return;
-        }
-
-        // online - retry now
-        // if (_online) {
-        if(!stateMachine.getState().equals(ReplicationState.OFFLINE)){
-            // retry now
+        // check if state is still IDLE (ONLINE), then retry now.
+        if(stateMachine.getState().equals(ReplicationState.IDLE)){
             Log.v(Log.TAG_SYNC, "%s RETRYING, to transfer missed revisions...", this);
-            revisionsFailed = 0;
             cancelRetryFuture();
             retry();
-        }
-        else{
-            // retry later
-            scheduleRetryFuture();
         }
     }
 
@@ -1250,7 +1238,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             public void run() {
                 retryIfReady();
             }
-        }, RETRY_DELAY, TimeUnit.SECONDS);
+        }, RETRY_DELAY_SECONDS, TimeUnit.SECONDS);
     }
     /**
      * helper function to cancel retry future. not in iOS code.
@@ -1276,7 +1264,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     // It may need to retry for any kind of errors
                     if(Utils.isTransientError(error)){
                         Log.v(Log.TAG_SYNC, "%s: Failed to xfer %d revisions; will retry in %d sec",
-                                this, revisionsFailed, RETRY_DELAY);
+                                this, revisionsFailed, RETRY_DELAY_SECONDS);
                         cancelRetryFuture();
                         scheduleRetryFuture();
                     }
