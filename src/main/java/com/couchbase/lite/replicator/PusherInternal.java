@@ -366,12 +366,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response", this);
                 Map<String, Object> results = (Map<String, Object>) response;
                 if (e != null) {
-                    setError(e, "/_revs_diff");
+                    setError(e);
                     revisionFailed();
                 }
                 else {
-                    resetErrorRequest("/_revs_diff");
-
                     if (results.size() != 0) {
                         // Go through the list of local changes again, selecting the ones the destination server
                         // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
@@ -523,10 +521,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
                 }
                 if (e != null) {
-                    setError(e, "/_bulk_docs");
+                    setError(e);
                     revisionFailed();
                 } else {
-                    resetErrorRequest("/_bulk_docs");
                     Log.v(Log.TAG_SYNC, "%s: POSTed to _bulk_docs", PusherInternal.this);
                 }
                 addToCompletedChangesCount(numDocsToSend);
@@ -625,12 +622,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             }
                         } else {
                             Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
-                            setError(e, path);
+                            setError(e);
                             revisionFailed();
                         }
                     } else {
                         Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
-                        resetErrorRequest(path);
                         removePending(revision);
                     }
                 } finally {
@@ -664,11 +660,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 new RemoteRequestCompletionBlock() {
                     public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                         if (e != null) {
-                            setError(e, path);
+                            setError(e);
                             revisionFailed();
                         } else {
                             Log.v(Log.TAG_SYNC, "%s: Sent %s (JSON), response=%s", this, rev, result);
-                            resetErrorRequest(path);
                             removePending(rev);
                         }
                     }
