@@ -838,6 +838,14 @@ public final class View {
                 }
                 lastKey = keyObject;
             }
+            if(keysToReduce==null){
+                //with group, no reduce
+                keysToReduce=new ArrayList<Object>();
+            }
+            if(valuesToReduce==null){
+                //with group, no reduce
+                valuesToReduce=new ArrayList<Object>();
+            }
             keysToReduce.add(keyObject);
             valuesToReduce.add(valueDoc.jsonObject());
 
