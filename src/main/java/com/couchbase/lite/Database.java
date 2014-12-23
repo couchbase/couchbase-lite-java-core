@@ -3651,7 +3651,7 @@ public final class Database {
                 //    return null;
                 Log.w(Database.TAG, "Duplicate rev insertion: " + docId + " / " + newRevId);
                 newRev.setBody(null);
-                // don't return yet; update the parent's current just to be sure (see #316 (iOS #501))
+                // don't return yet; update the parent's current just to be sure (see #316 (iOS #509))
             }
 
             // Make replaced rev non-current:
