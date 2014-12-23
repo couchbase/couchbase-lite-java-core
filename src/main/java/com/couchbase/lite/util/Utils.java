@@ -1,7 +1,6 @@
 package com.couchbase.lite.util;
 
 import com.couchbase.lite.CouchbaseLiteException;
-import com.couchbase.lite.Database;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.storage.Cursor;
@@ -28,6 +27,34 @@ public class Utils {
             return obj2 == null;
         }
     }
+
+    /**
+     * in CBLMisc.m
+     * BOOL CBLIsPermanentError( NSError* error )
+     */
+    public static boolean isPermanentError(Throwable throwable){
+        if (throwable instanceof CouchbaseLiteException) {
+            CouchbaseLiteException e = (CouchbaseLiteException) throwable;
+            return isPermanentError(e.getCBLStatus().getCode());
+        } else if (throwable instanceof HttpResponseException) {
+            HttpResponseException e = (HttpResponseException) throwable;
+            return isPermanentError(e.getStatusCode());
+        } else {
+            return false;
+        }
+    }
+    /**
+     * in CBLMisc.m
+     * BOOL CBLIsPermanentError( NSError* error )
+     */
+    public static boolean isPermanentError(int code){
+        // TODO: make sure if 406 is acceptable error
+        // 406 - in Test cases, server return 406 because of CouchDB API
+        //       http://docs.couchdb.org/en/latest/api/database/bulk-api.html
+        //       GET /{db}/_all_docs or POST /{db}/_all_docs
+        return (code >= 400 && code <= 405) || (code >= 407 && code <= 499);
+    }
+
 
     public static boolean isTransientError(Throwable throwable) {
 
