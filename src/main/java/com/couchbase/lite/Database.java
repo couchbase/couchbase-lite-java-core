@@ -2391,6 +2391,12 @@ public final class Database {
     /**
      * Returns the rev ID of the 'winning' revision of this document, and whether it's deleted.
      * @exclude
+     *
+     * in CBLDatabase+Internal.m
+     * - (NSString*) winningRevIDOfDocNumericID: (SInt64)docNumericID
+     *                                isDeleted: (BOOL*)outIsDeleted
+     *                               isConflict: (BOOL*)outIsConflict // optional
+     *                                   status: (CBLStatus*)outStatus
      */
     @InterfaceAudience.Private
     String winningRevIDOfDoc(long docNumericId, AtomicBoolean outIsDeleted, AtomicBoolean outIsConflict) throws CouchbaseLiteException {
@@ -3633,7 +3639,19 @@ public final class Database {
             // Now insert the rev itself:
             long newSequence = insertRevision(newRev, docNumericID, parentSequence, true, (attachments != null), json);
             if(newSequence <= 0) {
-                return null;
+                // The insert failed. If it was due to a constraint violation, that means a revision
+                // already exists with identical contents and the same parent rev. We can ignore this
+                // insert call, then.
+                // TODO - figure out database error code
+                // NOTE - In AndroidSQLiteStorageEngine.java, CBL Android uses insert() method of SQLiteDatabase
+                //        which return -1 for error case. Instead of insert(), should use insertOrThrow method()
+                //        which throws detailed error code. Need to check with SQLiteDatabase.CONFLICT_FAIL.
+                //        However, returning after updating parentSequence might not cause any problem.
+                //if (_fmdb.lastErrorCode != SQLITE_CONSTRAINT)
+                //    return null;
+                Log.w(Database.TAG, "Duplicate rev insertion: " + docId + " / " + newRevId);
+                newRev.setBody(null);
+                // don't return yet; update the parent's current just to be sure (see #316 (iOS #501))
             }
 
             // Make replaced rev non-current:
@@ -3646,6 +3664,9 @@ public final class Database {
                 throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
             }
 
+            if(newSequence <= 0) {
+                return null; // duplicate rev; see above
+            }
 
             // Store any attachments:
             if(attachments != null) {
@@ -3681,6 +3702,11 @@ public final class Database {
 
     /**
      * @exclude
+     * in CBLDatabase+Insertion.m
+     * - (CBL_Revision*) winnerWithDocID: (SInt64)docNumericID
+     *                         oldWinner: (NSString*)oldWinningRevID
+     *                        oldDeleted: (BOOL)oldWinnerWasDeletion
+     *                            newRev: (CBL_Revision*)newRev
      */
     @InterfaceAudience.Private
     RevisionInternal winner(long docNumericID,
@@ -3836,6 +3862,10 @@ public final class Database {
      *
      * It must already have a revision ID. This may create a conflict! The revision's history must be given; ancestor revision IDs that don't already exist locally will create phantom revisions with no content.
      * @exclude
+     * in CBLDatabase+Insertion.m
+     * - (CBLStatus) forceInsert: (CBL_Revision*)inRev
+     *           revisionHistory: (NSArray*)history  // in *reverse* order, starting with rev's revID
+     *                    source: (NSURL*)source
      */
     @InterfaceAudience.Private
     public void forceInsert(RevisionInternal rev, List<String> revHistory, URL source) throws CouchbaseLiteException {
