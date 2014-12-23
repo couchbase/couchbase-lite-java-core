@@ -442,6 +442,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             notifyChangeListeners(changeEvent);
         }
 
+        // #352
+        // iOS version: stop replicator immediately when call setError() with permanent error.
+        // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
+        // state becomes IDLE.
     }
 
 
@@ -1109,6 +1113,15 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 retryReplicationIfError();
                 notifyChangeListenersStateTransition(transition);
+
+                // #352
+                // iOS version: stop replicator immediately when call setError() with permanent error.
+                // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
+                // state becomes IDLE.
+                if(Utils.isPermanentError(error) && isContinuous()){
+                    Log.e(Log.TAG_SYNC, "IDLE: triggerStop() " + error.toString());
+                    triggerStop();
+                }
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
