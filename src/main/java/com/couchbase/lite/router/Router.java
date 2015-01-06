@@ -1726,7 +1726,7 @@ public class Router implements Database.ChangeListener {
 
         Map<String,Object> responseBody = new HashMap<String,Object>();
         responseBody.put("rows", rows);
-        responseBody.put("total_rows", rows.size());
+        responseBody.put("total_rows", view.getTotalRows());
         responseBody.put("offset", options.getSkip());
         if(options.isUpdateSeq()) {
             responseBody.put("update_seq", lastSequenceIndexed);
