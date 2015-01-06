@@ -970,11 +970,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     e.printStackTrace();
                 }
             }
-
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
-
     }
 
     @Override
