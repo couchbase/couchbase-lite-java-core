@@ -28,7 +28,6 @@ import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.support.JsonDocument;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
-import com.couchbase.lite.util.CollectionUtils.Predicate;
 
 import java.util.ArrayList;
 import java.util.EnumSet;

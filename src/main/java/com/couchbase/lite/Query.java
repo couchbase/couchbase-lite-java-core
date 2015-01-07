@@ -1,7 +1,6 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
@@ -162,7 +161,7 @@ public class Query {
      * If present, it's called on every row returned from the index, and if it returns false the
      * row is skipped.
      */
-    private CollectionUtils.Predicate<QueryRow> postFilter;
+    private Predicate<QueryRow> postFilter;
 
 
     private long lastSequence;
@@ -356,12 +355,12 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public CollectionUtils.Predicate<QueryRow> getPostFilter() {
+    public Predicate<QueryRow> getPostFilter() {
         return postFilter;
     }
 
     @InterfaceAudience.Public
-    public void setPostFilter(CollectionUtils.Predicate<QueryRow> postFilter) {
+    public void setPostFilter(Predicate<QueryRow> postFilter) {
         this.postFilter = postFilter;
     }
 
