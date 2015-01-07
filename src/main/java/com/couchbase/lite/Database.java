@@ -2332,7 +2332,9 @@ public final class Database {
                 change.setDatabase(this);
                 if (options.getKeys() != null) {
                     docs.put(docId, change);
-                } else {
+                }
+                // TODO: In the future, we need to implement CBLRowPassesFilter() in CBLView+Querying.m
+                else if (options.getPostFilter() == null || options.getPostFilter().apply(change)) {
                     rows.add(change);
                 }
             }

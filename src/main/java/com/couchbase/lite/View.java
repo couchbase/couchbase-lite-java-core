@@ -867,7 +867,8 @@ public final class View {
      * @exclude
      */
     @InterfaceAudience.Private
-    List<QueryRow> reducedQuery(Cursor cursor, boolean group, int groupLevel) throws CouchbaseLiteException {
+    List<QueryRow> reducedQuery(Cursor cursor, boolean group, int groupLevel,
+                                Predicate<QueryRow> postFilter) throws CouchbaseLiteException {
 
         List<Object> keysToReduce = null;
         List<Object> valuesToReduce = null;
@@ -892,7 +893,9 @@ public final class View {
                     Object key = groupKey(lastKey, groupLevel);
                     QueryRow row = new QueryRow(null, 0, key, reduced, null);
                     row.setDatabase(database);
-                    rows.add(row);
+                    if (postFilter == null || postFilter.apply(row)) {
+                        rows.add(row);
+                    }
                     keysToReduce.clear();
                     valuesToReduce.clear();
 
@@ -920,7 +923,9 @@ public final class View {
             Object reduced = (reduceBlock != null) ? reduceBlock.reduce(keysToReduce, valuesToReduce, false) : null;
             QueryRow row = new QueryRow(null, 0, key, reduced, null);
             row.setDatabase(database);
-            rows.add(row);
+            if (postFilter == null || postFilter.apply(row)) {
+                rows.add(row);
+            }
         }
 
         return rows;
@@ -943,6 +948,7 @@ public final class View {
 
         Cursor cursor = null;
         List<QueryRow> rows = new ArrayList<QueryRow>();
+        Predicate<QueryRow> postFilter = options.getPostFilter();
 
         try {
             cursor = resultSetWithOptions(options);
@@ -957,7 +963,7 @@ public final class View {
 
             if (reduce || group) {
                 // Reduced or grouped query:
-                rows = reducedQuery(cursor, group, groupLevel);
+                rows = reducedQuery(cursor, group, groupLevel, postFilter);
             } else {
                 // regular query
                 cursor.moveToNext();
@@ -993,7 +999,9 @@ public final class View {
                     }
                     QueryRow row = new QueryRow(docId, sequence, keyDoc.jsonObject(), valueDoc.jsonObject(), docContents);
                     row.setDatabase(database);
-                    rows.add(row);
+                    if (postFilter == null || postFilter.apply(row)) {
+                        rows.add(row);
+                    }
                     cursor.moveToNext();
 
                 }

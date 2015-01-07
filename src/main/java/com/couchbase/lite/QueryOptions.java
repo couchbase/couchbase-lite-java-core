@@ -17,10 +17,10 @@
 
 package com.couchbase.lite;
 
+import com.couchbase.lite.Database.TDContentOptions;
+
 import java.util.EnumSet;
 import java.util.List;
-
-import com.couchbase.lite.Database.TDContentOptions;
 
 /**
  * Standard query options for views.
@@ -49,6 +49,8 @@ public class QueryOptions {
 
     private String startKeyDocId;
     private String endKeyDocId;
+
+    private Predicate<QueryRow> postFilter;
 
 
     public Object getStartKey() {
@@ -201,6 +203,14 @@ public class QueryOptions {
 
     public void setEndKeyDocId(String endKeyDocId) {
         this.endKeyDocId = endKeyDocId;
+    }
+
+    public Predicate<QueryRow> getPostFilter() {
+        return postFilter;
+    }
+
+    public void setPostFilter(Predicate<QueryRow> postFilter) {
+        this.postFilter = postFilter;
     }
 
 }

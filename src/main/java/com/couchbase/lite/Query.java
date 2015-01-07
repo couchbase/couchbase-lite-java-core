@@ -156,6 +156,12 @@ public class Query {
     */
     private int prefixMatchLevel;
 
+    /**
+     * An optional predicate that filters the resulting query rows.
+     * If present, it's called on every row returned from the index, and if it returns false the
+     * row is skipped.
+     */
+    private Predicate<QueryRow> postFilter;
 
 
     private long lastSequence;
@@ -206,6 +212,7 @@ public class Query {
         indexUpdateMode = query.indexUpdateMode;
         allDocsMode = query.allDocsMode;
         inclusiveEnd = query.inclusiveEnd;
+        postFilter = query.postFilter;
     }
 
     /**
@@ -348,6 +355,16 @@ public class Query {
     }
 
     @InterfaceAudience.Public
+    public Predicate<QueryRow> getPostFilter() {
+        return postFilter;
+    }
+
+    @InterfaceAudience.Public
+    public void setPostFilter(Predicate<QueryRow> postFilter) {
+        this.postFilter = postFilter;
+    }
+
+    @InterfaceAudience.Public
     public boolean shouldPrefetch() {
         return prefetch;
     }
@@ -471,6 +488,7 @@ public class Query {
         queryOptions.setAllDocsMode(getAllDocsMode());
         queryOptions.setStartKeyDocId(getStartKeyDocId());
         queryOptions.setEndKeyDocId(getEndKeyDocId());
+        queryOptions.setPostFilter(getPostFilter());
         return queryOptions;
     }
 
