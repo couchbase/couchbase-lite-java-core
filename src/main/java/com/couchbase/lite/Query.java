@@ -489,6 +489,7 @@ public class Query {
         queryOptions.setAllDocsMode(getAllDocsMode());
         queryOptions.setStartKeyDocId(getStartKeyDocId());
         queryOptions.setEndKeyDocId(getEndKeyDocId());
+        queryOptions.setPostFilter(getPostFilter());
         return queryOptions;
     }
 
