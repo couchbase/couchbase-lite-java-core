@@ -10,7 +10,12 @@ public class Version {
     private static final String VERSION_CODE="${VERSION_CODE}";  // replaced during build process
 
     static {
-        VERSION = String.format("%s-%s", getVersionName(), getVersionCode());
+        int versCode=getVersionCode();
+        if (versCode==-1) {
+            VERSION = String.format("%s-%s", getVersionName(), getVersionCode());
+        } else{
+            VERSION = String.format("%s", getVersionName());
+        }
     }
 
     public static String getVersionName() {
