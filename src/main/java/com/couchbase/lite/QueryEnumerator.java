@@ -2,6 +2,8 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
@@ -133,4 +135,12 @@ public class QueryEnumerator implements Iterator<QueryRow> {
     }
 
 
+    /**
+     * in CBLQuery.m
+     * - (void) sortUsingDescriptors: (NSArray*)sortDescriptors
+     */
+    public void sortUsingDescriptors(Comparator<QueryRow> sortDescriptors){
+        // Now the sorting is trivial:
+        Collections.sort(rows, sortDescriptors);
+    }
 }

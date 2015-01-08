@@ -19,6 +19,7 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.Database.TDContentOptions;
 
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -50,6 +51,7 @@ public class QueryOptions {
     private String startKeyDocId;
     private String endKeyDocId;
 
+    private Comparator<QueryRow> sortDescriptors;
     private Predicate<QueryRow> postFilter;
 
 
@@ -213,4 +215,11 @@ public class QueryOptions {
         this.postFilter = postFilter;
     }
 
+    public Comparator<QueryRow> getSortDescriptors() {
+        return sortDescriptors;
+    }
+
+    public void setSortDescriptors(Comparator<QueryRow> sortDescriptors) {
+        this.sortDescriptors = sortDescriptors;
+    }
 }
