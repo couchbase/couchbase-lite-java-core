@@ -33,18 +33,23 @@ public class LoggerFactory {
                 // Return default System logger.
                 Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
                 return new SystemLogger();
+            } else {
+              try {
+                byte[] bytes = TextUtils.read(inputStream);
+                classname = new String(bytes);
+                if (classname == null || classname.isEmpty()) {
+                    // Return default System logger.
+                    Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
+                    return new SystemLogger();
+                }
+                Log.v(Database.TAG, "Loading logger: %s", classname);
+                Class clazz = Class.forName(classname);
+                Logger logger = (Logger) clazz.newInstance();
+                return logger;
+              } finally {
+                inputStream.close();
+              }
             }
-            byte[] bytes = TextUtils.read(inputStream);
-            classname = new String(bytes);
-            if (classname == null || classname.isEmpty()) {
-                // Return default System logger.
-                Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
-                return new SystemLogger();
-            }
-            Log.v(Database.TAG, "Loading logger: %s", classname);
-            Class clazz = Class.forName(classname);
-            Logger logger = (Logger) clazz.newInstance();
-            return logger;
         } catch (Exception e) {
             throw new RuntimeException("Failed to logger.  Resource: " + resource + " classname: " + classname, e);
         }
