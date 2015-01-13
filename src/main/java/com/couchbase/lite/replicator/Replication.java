@@ -12,6 +12,7 @@ import com.couchbase.lite.util.Log;
 
 import java.net.URL;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -69,6 +70,20 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected Throwable lastError;
     protected Direction direction;
 
+    public enum ReplicationField {
+        FILTER_NAME,
+        FILTER_PARAMS,
+        DOC_IDS,
+        REQUEST_HEADERS,
+        AUTHENTICATOR,
+        CREATE_TARGET
+    }
+
+    /**
+     * Properties of the replicator that are saved across restarts
+     */
+    protected Map<ReplicationField, Object> properties;
+
 
     /**
      * Constructor
@@ -104,6 +119,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.lifecycle = Lifecycle.ONESHOT;
         this.direction = direction;
+        this.properties = new EnumMap<ReplicationField, Object>(ReplicationField.class);
 
         setClientFactory(clientFactory);
 
@@ -137,9 +153,12 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 throw new RuntimeException(String.format("Unknown direction: %s", direction));
         }
 
+        addProperties(replicationInternal);
+
         replicationInternal.addChangeListener(this);
 
     }
+
 
     /**
      * Starts the replication, asynchronously.
@@ -264,6 +283,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Public
     public void setAuthenticator(Authenticator authenticator) {
+        properties.put(ReplicationField.AUTHENTICATOR, authenticator);
         replicationInternal.setAuthenticator(authenticator);
     }
 
@@ -288,6 +308,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Public
     public void setCreateTarget(boolean createTarget) {
+        properties.put(ReplicationField.CREATE_TARGET, createTarget);
         replicationInternal.setCreateTarget(createTarget);
     };
 
@@ -517,6 +538,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Public
     public void setFilter(String filterName) {
+        properties.put(ReplicationField.FILTER_NAME, filterName);
         replicationInternal.setFilter(filterName);
     }
 
@@ -525,6 +547,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Public
     public void setDocIds(List<String> docIds) {
+        properties.put(ReplicationField.DOC_IDS, docIds);
         replicationInternal.setDocIds(docIds);
     }
 
@@ -539,6 +562,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * Set parameters to pass to the filter function.
      */
     public void setFilterParams(Map<String, Object> filterParams) {
+        properties.put(ReplicationField.FILTER_PARAMS, filterParams);
         replicationInternal.setFilterParams(filterParams);
     }
 
@@ -639,6 +663,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Public
     public void setHeaders(Map<String, Object> requestHeadersParam) {
+        properties.put(ReplicationField.REQUEST_HEADERS, requestHeadersParam);
         replicationInternal.setHeaders(requestHeadersParam);
     }
 
@@ -702,5 +727,45 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     public void networkUnreachable() {
         goOffline();
     }
+
+    /**
+     * Add any properties associated with this Replication to the given
+     * ReplicationInternal object -- currently used to preserve properties
+     * of a Replication across restarts of the ReplicationInternal object.
+     *
+     * @param replicationInternal
+     */
+    private void addProperties(ReplicationInternal replicationInternal) {
+
+        for (ReplicationField key : properties.keySet()) {
+
+            Object value = properties.get(key);
+
+            switch (key) {
+                case FILTER_NAME:
+                    replicationInternal.setFilter((String)value);
+                    break;
+                case FILTER_PARAMS:
+                    replicationInternal.setFilterParams((Map)value);
+                    break;
+                case DOC_IDS:
+                    replicationInternal.setDocIds((List)value);
+                    break;
+                case AUTHENTICATOR:
+                    replicationInternal.setAuthenticator((Authenticator)value);
+                    break;
+                case CREATE_TARGET:
+                    replicationInternal.setCreateTarget((Boolean)value);
+                    break;
+                case REQUEST_HEADERS:
+                    replicationInternal.setHeaders((Map)value);
+                    break;
+
+            }
+
+        }
+
+    }
+
 
 }
