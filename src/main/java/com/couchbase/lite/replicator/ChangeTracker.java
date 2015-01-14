@@ -71,7 +71,6 @@ public class ChangeTracker implements Runnable {
     private boolean usePOST;
     private int heartBeatSeconds;
     private int limit;
-    private boolean caughtUp = false;
     private boolean continuous = false;  // is enclosing replication continuous?
 
     private Authenticator authenticator;
@@ -343,10 +342,7 @@ public class ChangeTracker implements Runnable {
 
                                 // TODO: this logic is questionable, there's lots
                                 // TODO: of differences in the iOS changetracker code,
-                                if (!caughtUp) {
-                                    caughtUp = true;
-                                    client.changeTrackerCaughtUp();
-                                }
+                                client.changeTrackerCaughtUp();
 
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
                                 backoff.resetBackoff();
@@ -375,10 +371,7 @@ public class ChangeTracker implements Runnable {
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
 
-                            if (!caughtUp) {
-                                caughtUp = true;
-                                client.changeTrackerCaughtUp();
-                            }
+                            client.changeTrackerCaughtUp();
 
                             if (isContinuous()) {  // if enclosing replication is continuous
                                 mode = ChangeTrackerMode.LongPoll;
