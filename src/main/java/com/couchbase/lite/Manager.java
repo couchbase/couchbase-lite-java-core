@@ -615,7 +615,11 @@ public final class Manager {
                 repl.setAuthenticator(authorizer);
             }
 
-            Map<String, Object> headers = (Map) properties.get("headers");
+            Map<String, Object> headers = null;
+            if(remoteMap != null){
+                headers = (Map)remoteMap.get("headers");
+            }
+
             if (headers != null && !headers.isEmpty()) {
                 repl.setHeaders(headers);
             }
