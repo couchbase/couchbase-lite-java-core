@@ -342,6 +342,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         dl.setAuthenticator(getAuthenticator());
 
+        // set compressed request - gzip
+        dl.setCompressedRequest(canSendCompressedRequests());
+
         Future future = remoteRequestExecutor.submit(dl);
         pendingFutures.add(future);
 

@@ -541,9 +541,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             }
         });
 
-        Future future = request.submit();
-        return future;
 
+        Future future = request.submit(canSendCompressedRequests());
+        return future;
     }
 
     /**
@@ -965,6 +965,18 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     abstract protected void processInbox(RevisionList inbox);
 
     /**
+     * gzip
+     *
+     * in CBL_Replicator.m
+     * - (BOOL) canSendCompressedRequests
+     */
+    public boolean canSendCompressedRequests(){
+        // https://github.com/couchbase/couchbase-lite-ios/issues/240#issuecomment-32506552
+        // gzip upload is only enabled when the server is Sync Gateway 0.92 or later
+        return serverIsSyncGatewayVersion("0.92");
+    }
+
+    /**
      * After successfully authenticating and getting remote checkpoint,
      * begin the work of transferring documents.
      */
@@ -1204,7 +1216,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 String versionString = serverType.substring(prefix.length());
                 return versionString.compareTo(minVersion) >= 0;
             }
-
         }
         return false;
     }
@@ -1547,7 +1558,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                         }
                     }).start();
                 }
-
             }
         }
     }

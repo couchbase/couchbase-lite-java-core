@@ -6,7 +6,6 @@ import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
-import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
@@ -31,17 +30,13 @@ import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.protocol.HttpContext;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPOutputStream;
 
 
 /**
@@ -66,6 +61,9 @@ public class RemoteRequest implements Runnable {
 
     // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
     private boolean dontLog404;
+
+    // if true, send compressed (gzip) request
+    private boolean compressedRequest = false;
 
     public RemoteRequest(ScheduledExecutorService workExecutor,
                          HttpClientFactory clientFactory, String method, URL url,
@@ -151,21 +149,6 @@ public class RemoteRequest implements Runnable {
             request = new HttpPost(url.toExternalForm());
         }
         return request;
-    }
-
-    protected void setBody(HttpUriRequest request) {
-        // set body if appropriate
-        if (body != null && request instanceof HttpEntityEnclosingRequestBase) {
-            byte[] bodyBytes = null;
-            try {
-                bodyBytes = Manager.getObjectMapper().writeValueAsBytes(body);
-            } catch (Exception e) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
-            }
-            ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
-            entity.setContentType("application/json");
-            ((HttpEntityEnclosingRequestBase) request).setEntity(entity);
-        }
     }
 
     /**
@@ -317,10 +300,86 @@ public class RemoteRequest implements Runnable {
                     "RemoteRequestCompletionBlock throw Exception",
                     e);
         }
-
     }
 
     public void setDontLog404(boolean dontLog404) {
         this.dontLog404 = dontLog404;
+    }
+
+    public boolean isCompressedRequest() {
+        return compressedRequest;
+    }
+
+    public void setCompressedRequest(boolean compressedRequest) {
+        this.compressedRequest = compressedRequest;
+    }
+
+    protected void setBody(HttpUriRequest request) {
+        // set body if appropriate
+        if (body != null && request instanceof HttpEntityEnclosingRequestBase) {
+            byte[] bodyBytes = null;
+            try {
+                bodyBytes = Manager.getObjectMapper().writeValueAsBytes(body);
+            } catch (Exception e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
+            }
+            ByteArrayEntity entity = null;
+            if(isCompressedRequest()){
+                entity = setCompressedBody(bodyBytes);
+            }
+            if(entity == null){
+                entity = setUncompressedBody(bodyBytes);
+            }
+            ((HttpEntityEnclosingRequestBase) request).setEntity(entity);
+        }
+    }
+    /**
+     * gzip
+     *
+     * in CBLRemoteRequest.m
+     * - (BOOL) compressBody
+     */
+    protected ByteArrayEntity setCompressedBody(byte[] bodyBytes){
+        if(bodyBytes.length < 100){
+            return null;
+        }
+
+        // Gzipping
+        byte[] encodedBytes = generateGzippedData(bodyBytes);
+
+        if(encodedBytes == null || encodedBytes.length >= bodyBytes.length) {
+            return null;
+        }
+
+        ByteArrayEntity entity = new ByteArrayEntity(encodedBytes);
+        entity.setContentType("application/json");
+        entity.setContentEncoding("gzip");
+        return entity;
+    }
+
+    protected ByteArrayEntity setUncompressedBody(byte[] bodyBytes){
+        ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
+        entity.setContentType("application/json");
+        return entity;
+    }
+
+
+    protected byte[] generateGzippedData(byte[] sourceBytes){
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try{
+            try {
+                GZIPOutputStream gzip = new GZIPOutputStream(out);
+                gzip.write(sourceBytes);
+                gzip.close();
+            }
+            catch (IOException ex){
+                return null;
+            }
+
+            return  out.toByteArray();
+        }
+        finally {
+            try{ out.close(); }catch(IOException ex){}
+        }
     }
 }
