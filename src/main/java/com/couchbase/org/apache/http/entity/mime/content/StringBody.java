@@ -27,6 +27,8 @@
 
 package com.couchbase.org.apache.http.entity.mime.content;
 
+import com.couchbase.org.apache.http.entity.mime.MIME;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,8 +38,6 @@ import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 
-import com.couchbase.org.apache.http.entity.mime.MIME;
-
 /**
  *
  * @since 4.0
@@ -46,6 +46,7 @@ public class StringBody extends AbstractContentBody {
 
     private final byte[] content;
     private final Charset charset;
+    private String contentEncoding = null;
 
     /**
      * @since 4.1
@@ -99,6 +100,20 @@ public class StringBody extends AbstractContentBody {
         this.content = text.getBytes(charset.name());
         this.charset = charset;
     }
+
+    public StringBody(final byte[] content, final String mimeType, Charset charset){
+        super(mimeType);
+        this.content = content;
+        this.charset = charset;
+    }
+
+    public StringBody(final byte[] content, final String mimeType, Charset charset, String contentEncoding){
+        super(mimeType);
+        this.content = content;
+        this.charset = charset;
+        this.contentEncoding = contentEncoding;
+    }
+
 
     /**
      * Create a StringBody from the specified text and character set.
@@ -154,6 +169,9 @@ public class StringBody extends AbstractContentBody {
     }
 
     public String getTransferEncoding() {
+        if(contentEncoding!= null){
+            return contentEncoding;
+        }
         return MIME.ENC_8BIT;
     }
 
@@ -169,4 +187,8 @@ public class StringBody extends AbstractContentBody {
         return null;
     }
 
+    @Override
+    public String getContentEncoding() {
+        return contentEncoding;
+    }
 }

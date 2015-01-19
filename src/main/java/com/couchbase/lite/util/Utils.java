@@ -10,6 +10,10 @@ import com.couchbase.lite.storage.SQLiteStorageEngine;
 import org.apache.http.StatusLine;
 import org.apache.http.client.HttpResponseException;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.zip.GZIPOutputStream;
+
 public class Utils {
 
     /**
@@ -154,4 +158,22 @@ public class Utils {
         return orig.substring(0, maxLength);
     }
 
+    public static byte[] generateGzippedData(byte[] sourceBytes){
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try{
+            try {
+                GZIPOutputStream gzip = new GZIPOutputStream(out);
+                gzip.write(sourceBytes);
+                gzip.close();
+            }
+            catch (IOException ex){
+                return null;
+            }
+
+            return  out.toByteArray();
+        }
+        finally {
+            try{ out.close(); }catch(IOException ex){}
+        }
+    }
 }

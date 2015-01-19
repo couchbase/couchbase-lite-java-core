@@ -16,6 +16,7 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 import com.couchbase.org.apache.http.entity.mime.content.FileBody;
 import com.couchbase.org.apache.http.entity.mime.content.StringBody;
@@ -563,12 +564,20 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     try {
                         String json  = Manager.getObjectMapper().writeValueAsString(revProps);
                         Charset utf8charset = Charset.forName("UTF-8");
-                        multiPart.addPart("param1", new StringBody(json, "application/json", utf8charset));
+                        byte[] uncompressed = json.getBytes(utf8charset);
+                        byte[] compressed = null;
+                        String contentEncoding = null;
 
+                        if(uncompressed.length > 100 && canSendCompressedRequests()){
+                            compressed = Utils.generateGzippedData(uncompressed);
+                            if(compressed.length < uncompressed.length){
+                                contentEncoding = "gzip";
+                            }
+                        }
+                        multiPart.addPart("param1", new StringBody(compressed, "application/json", utf8charset, contentEncoding));
                     } catch (IOException e) {
                         throw new IllegalArgumentException(e);
                     }
-
                 }
 
                 BlobStore blobStore = this.db.getAttachments();

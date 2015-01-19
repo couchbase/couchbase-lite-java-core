@@ -58,6 +58,7 @@ public class FormBodyPart {
         generateContentDisp(body);
         generateContentType(body);
         generateTransferEncoding(body);
+        generateContentEncoding(body);
     }
 
     public String getName() {
@@ -103,5 +104,9 @@ public class FormBodyPart {
     protected void generateTransferEncoding(final ContentBody body) {
         addField(MIME.CONTENT_TRANSFER_ENC, body.getTransferEncoding()); // TE cannot be null
     }
-
+    protected void generateContentEncoding(final ContentBody body) {
+        if(body.getContentEncoding() != null) {
+            addField(MIME.CONTENT_ENCODING, body.getContentEncoding());
+        }
+    }
 }

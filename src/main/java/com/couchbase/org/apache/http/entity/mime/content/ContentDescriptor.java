@@ -86,4 +86,6 @@ public interface ContentDescriptor {
      */
     long getContentLength();
 
+    // Content-Encoding
+    String getContentEncoding();
 }

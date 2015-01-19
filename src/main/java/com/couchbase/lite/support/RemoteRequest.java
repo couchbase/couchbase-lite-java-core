@@ -6,6 +6,7 @@ import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
@@ -30,13 +31,11 @@ import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.protocol.HttpContext;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.zip.GZIPOutputStream;
 
 
 /**
@@ -345,7 +344,7 @@ public class RemoteRequest implements Runnable {
         }
 
         // Gzipping
-        byte[] encodedBytes = generateGzippedData(bodyBytes);
+        byte[] encodedBytes = Utils.generateGzippedData(bodyBytes);
 
         if(encodedBytes == null || encodedBytes.length >= bodyBytes.length) {
             return null;
@@ -361,25 +360,5 @@ public class RemoteRequest implements Runnable {
         ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
         entity.setContentType("application/json");
         return entity;
-    }
-
-
-    protected byte[] generateGzippedData(byte[] sourceBytes){
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try{
-            try {
-                GZIPOutputStream gzip = new GZIPOutputStream(out);
-                gzip.write(sourceBytes);
-                gzip.close();
-            }
-            catch (IOException ex){
-                return null;
-            }
-
-            return  out.toByteArray();
-        }
-        finally {
-            try{ out.close(); }catch(IOException ex){}
-        }
     }
 }

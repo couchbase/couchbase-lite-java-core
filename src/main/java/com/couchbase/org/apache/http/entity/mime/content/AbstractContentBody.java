@@ -65,4 +65,5 @@ public abstract class AbstractContentBody implements ContentBody {
         return this.subType;
     }
 
+    public String getContentEncoding(){return null;}
 }
