@@ -4,6 +4,7 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Future;
 
@@ -157,6 +158,15 @@ public class Query {
     private int prefixMatchLevel;
 
     /**
+     * An optional array of NSSortDescriptor objects; overrides the default by-key ordering.
+     * Key-paths are interpreted relative to a CBLQueryRow object, so they should start with
+     * "value" to refer to the value, or "key" to refer to the key.
+     * A limited form of array indexing is supported, so you can refer to "key[1]" or "value[0]" if
+     * the key or value are arrays. This only works with indexes from 0 to 3.
+     */
+    private Comparator<QueryRow> sortDescriptors;
+
+    /**
      * An optional predicate that filters the resulting query rows.
      * If present, it's called on every row returned from the index, and if it returns false the
      * row is skipped.
@@ -213,6 +223,7 @@ public class Query {
         allDocsMode = query.allDocsMode;
         inclusiveEnd = query.inclusiveEnd;
         postFilter = query.postFilter;
+        sortDescriptors = query.sortDescriptors;
     }
 
     /**
@@ -365,6 +376,16 @@ public class Query {
     }
 
     @InterfaceAudience.Public
+    public Comparator<QueryRow> getSortDescriptors() {
+        return sortDescriptors;
+    }
+
+    @InterfaceAudience.Public
+    public void setSortDescriptors(Comparator<QueryRow> sortDescriptors) {
+        this.sortDescriptors = sortDescriptors;
+    }
+
+    @InterfaceAudience.Public
     public boolean shouldPrefetch() {
         return prefetch;
     }
@@ -394,7 +415,11 @@ public class Query {
         String viewName = (view != null) ? view.getName() : null;
         List<QueryRow> rows = database.queryViewNamed(viewName, getQueryOptions(), outSequence);
         lastSequence = outSequence.get(0);
-        return new QueryEnumerator(database, rows, lastSequence);
+        QueryEnumerator result = new QueryEnumerator(database, rows, lastSequence);
+        if(sortDescriptors != null){
+            result.sortUsingDescriptors(sortDescriptors);
+        }
+        return result;
     }
 
     /**
@@ -448,6 +473,9 @@ public class Query {
                     List<QueryRow> rows = database.queryViewNamed(viewName, options, outSequence);
                     long sequenceNumber = outSequence.get(0);
                     QueryEnumerator enumerator = new QueryEnumerator(database, rows, sequenceNumber);
+                    if(sortDescriptors != null){
+                        enumerator.sortUsingDescriptors(sortDescriptors);
+                    }
                     onComplete.completed(enumerator, null);
 
                 } catch (Throwable t) {
@@ -488,6 +516,7 @@ public class Query {
         queryOptions.setAllDocsMode(getAllDocsMode());
         queryOptions.setStartKeyDocId(getStartKeyDocId());
         queryOptions.setEndKeyDocId(getEndKeyDocId());
+        queryOptions.setSortDescriptors(getSortDescriptors());
         queryOptions.setPostFilter(getPostFilter());
         return queryOptions;
     }
@@ -500,8 +529,4 @@ public class Query {
             view.delete();
         }
     }
-
-
-
-
 }
