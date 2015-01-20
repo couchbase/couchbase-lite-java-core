@@ -42,6 +42,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * @exclude
  */
 public class RemoteRequest implements Runnable {
+    public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
 
     protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
@@ -323,7 +324,7 @@ public class RemoteRequest implements Runnable {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
             }
             ByteArrayEntity entity = null;
-            if(isCompressedRequest()){
+            if(isCompressedRequest() && bodyBytes.length > MIN_JSON_LENGTH_TO_COMPRESS){
                 entity = setCompressedBody(bodyBytes);
             }
             if(entity == null){

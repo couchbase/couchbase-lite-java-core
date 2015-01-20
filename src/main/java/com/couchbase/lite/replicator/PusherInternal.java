@@ -13,6 +13,7 @@ import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.HttpClientFactory;
+import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
@@ -568,7 +569,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         byte[] compressed = null;
                         String contentEncoding = null;
 
-                        if(uncompressed.length > 100 && canSendCompressedRequests()){
+                        if(uncompressed.length > RemoteRequest.MIN_JSON_LENGTH_TO_COMPRESS && canSendCompressedRequests()){
                             compressed = Utils.compressByGzip(uncompressed);
                             if(compressed.length < uncompressed.length){
                                 contentEncoding = "gzip";

@@ -14,7 +14,6 @@ import org.apache.http.client.HttpResponseException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
@@ -183,6 +182,7 @@ public class Utils {
             try{ out.close(); }catch(IOException ex){}
         }
     }
+
     // from gzip
     public static int CHUNK_SIZE = 8192; // 1024 * 8
     public static byte[] decompressByGzip(byte[] sourceBytes){
@@ -206,26 +206,7 @@ public class Utils {
             try{ out.close(); }catch(IOException ex){}
         }
     }
-    public static byte[] decompressByGzip(InputStream sourceStream){
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
-            try {
-                byte[] buffer = new byte[CHUNK_SIZE];
-                GZIPInputStream gzip = new GZIPInputStream(sourceStream);
-                int len = 0;
-                while ((len = gzip.read(buffer, 0, CHUNK_SIZE)) != -1) {
-                    out.write(buffer, 0, len);
-                }
-            }
-            catch (IOException ex){
-                return null;
-            }
-            return out.toByteArray();
-        }
-        finally {
-            try{ out.close(); }catch(IOException ex){}
-        }
-    }
+
     public static Map<String, String> headersToMap(Header[] headers){
         Map<String, String> map = new HashMap<String, String>();
         for(int i = 0; i < headers.length; i++){
