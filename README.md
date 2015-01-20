@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/couchbase/couchbase-lite-java-core.png?label=ready&title=Ready)](https://waffle.io/couchbase/couchbase-lite-java-core)
 # What is it?
 
 The [Couchbase Lite Android](https://github.com/couchbase/couchbase-lite-android) library is split into two parts:
