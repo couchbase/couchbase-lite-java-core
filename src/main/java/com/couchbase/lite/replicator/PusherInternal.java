@@ -569,7 +569,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         String contentEncoding = null;
 
                         if(uncompressed.length > 100 && canSendCompressedRequests()){
-                            compressed = Utils.generateGzippedData(uncompressed);
+                            compressed = Utils.compressByGzip(uncompressed);
                             if(compressed.length < uncompressed.length){
                                 contentEncoding = "gzip";
                             }

@@ -44,7 +44,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
             throw new IllegalArgumentException("Invalid request method: " + method);
         }
 
-        request.addHeader("Accept", "*/*");
+        request.addHeader("Accept", "*/*"); // should be "application/json"??
 
         executeRequest(httpClient, request);
 

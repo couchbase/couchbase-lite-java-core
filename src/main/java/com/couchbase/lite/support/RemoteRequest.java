@@ -344,7 +344,7 @@ public class RemoteRequest implements Runnable {
         }
 
         // Gzipping
-        byte[] encodedBytes = Utils.generateGzippedData(bodyBytes);
+        byte[] encodedBytes = Utils.compressByGzip(bodyBytes);
 
         if(encodedBytes == null || encodedBytes.length >= bodyBytes.length) {
             return null;
