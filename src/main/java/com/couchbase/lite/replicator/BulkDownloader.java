@@ -12,6 +12,7 @@ import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -175,13 +176,11 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                         inputStream = entity.getContent();
 
                         // decompress if contentEncoding is gzip
-                        Header contentEncoding = entity.getContentEncoding();
-                        if(contentEncoding != null && contentEncoding.getValue().contains("gzip")){
+                        if(Utils.isGzip(entity)){
                             inputStream = new GZIPInputStream(inputStream);
                         }
 
                         try {
-
                             fullBody = Manager.getObjectMapper().readValue(inputStream,
                                     Object.class);
                             respondWithResult(fullBody, error, response);

@@ -63,7 +63,6 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             // Multipart, so initialize the parser:
             multipartReader = new MultipartReader(contentType, this);
             attachmentsByName = new HashMap<String, BlobStoreWriter>();
-            attachmentsByName = new HashMap<String, BlobStoreWriter>();
             attachmentsByMd5Digest = new HashMap<String, BlobStoreWriter>();
         }
         else if (contentType == null ||
@@ -81,8 +80,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     }
     protected void startJSONBufferWithHeaders(Map<String, String> headers){
         jsonBuffer = new ByteArrayBuffer(1024);
-        String contentEncoding = headers.get("Content-Encoding");
-        jsonCompressed = contentEncoding != null &&  contentEncoding.indexOf("gzip") >= 0;
+        jsonCompressed = Utils.isGzip(headers.get("Content-Encoding"));
     }
 
     public void appendData(byte[] data) {

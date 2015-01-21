@@ -340,7 +340,7 @@ public class RemoteRequest implements Runnable {
      * - (BOOL) compressBody
      */
     protected ByteArrayEntity setCompressedBody(byte[] bodyBytes){
-        if(bodyBytes.length < 100){
+        if(bodyBytes.length < MIN_JSON_LENGTH_TO_COMPRESS){
             return null;
         }
 

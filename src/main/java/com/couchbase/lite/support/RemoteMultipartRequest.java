@@ -25,7 +25,6 @@ public class RemoteMultipartRequest extends RemoteRequest {
 
     @Override
     public void run() {
-
         HttpClient httpClient = clientFactory.getHttpClient();
 
         preemptivelySetAuthCredentials(httpClient);
@@ -44,11 +43,8 @@ public class RemoteMultipartRequest extends RemoteRequest {
             throw new IllegalArgumentException("Invalid request method: " + method);
         }
 
-        request.addHeader("Accept", "*/*"); // should be "application/json"??
+        request.addHeader("Accept", "*/*");
 
         executeRequest(httpClient, request);
-
     }
-
-
 }

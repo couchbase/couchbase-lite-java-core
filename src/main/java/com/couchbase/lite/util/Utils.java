@@ -8,6 +8,7 @@ import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.StatusLine;
 import org.apache.http.client.HttpResponseException;
 
@@ -161,6 +162,21 @@ public class Utils {
             return orig;
         }
         return orig.substring(0, maxLength);
+    }
+
+    // check if contentEncoding is gzip
+    public static boolean isGzip(HttpEntity entity){
+        return isGzip(entity.getContentEncoding());
+    }
+
+    // check if contentEncoding is gzip
+    public static boolean isGzip(Header contentEncoding){
+        return contentEncoding != null && isGzip(contentEncoding.getValue());
+    }
+
+    // check if contentEncoding is gzip
+    public static boolean isGzip(String contentEncoding){
+        return contentEncoding != null && contentEncoding.contains("gzip");
     }
 
     // to gzip
