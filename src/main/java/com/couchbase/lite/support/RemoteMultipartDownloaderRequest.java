@@ -3,12 +3,12 @@ package com.couchbase.lite.support;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -20,6 +20,7 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.zip.GZIPInputStream;
 
 public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
@@ -39,12 +40,13 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
         preemptivelySetAuthCredentials(httpClient);
 
-        request.addHeader("Accept", "*/*");
+        request.addHeader("Accept", "multipart/related, application/json");
+        request.addHeader("X-Accept-Part-Encoding", "gzip");
+        request.addHeader("Accept-Encoding", "gzip, deflate");
 
         addRequestHeaders(request);
 
         executeRequest(httpClient, request);
-
     }
 
     protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
@@ -88,7 +90,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
                     try {
                         MultipartDocumentReader reader = new MultipartDocumentReader(response, db);
-                        reader.setContentType(contentTypeHeader.getValue());
+                        reader.setHeaders(Utils.headersToMap(response.getAllHeaders()));
                         inputStream = entity.getContent();
 
                         int bufLen = 1024;
@@ -115,15 +117,19 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         } catch (IOException e) {
                         }
                     }
-
-
                 }
                 else {
                     if (entity != null) {
+                        inputStream = entity.getContent();
+
+                        // decompress if contentEncoding is gzip
+                        Header contentEncoding = entity.getContentEncoding();
+                        if(contentEncoding != null && contentEncoding.getValue().contains("gzip")){
+                            inputStream = new GZIPInputStream(inputStream);
+                        }
+
                         try {
-                            inputStream = entity.getContent();
-                            fullBody = Manager.getObjectMapper().readValue(inputStream,
-                                    Object.class);
+                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                             respondWithResult(fullBody, error, response);
                         } finally {
                             try {

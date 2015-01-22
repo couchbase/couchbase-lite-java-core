@@ -26,11 +26,10 @@
  */
 package com.couchbase.org.apache.http.entity.mime.content;
 
+import com.couchbase.org.apache.http.entity.mime.MIME;
+
 import java.io.IOException;
 import java.io.OutputStream;
-
-import com.couchbase.org.apache.http.entity.mime.MIME;
-import com.couchbase.org.apache.http.entity.mime.content.AbstractContentBody;
 
 /**
  * Body part that is built using a byte array containing a file.
@@ -94,5 +93,4 @@ public class ByteArrayBody extends AbstractContentBody {
     public long getContentLength() {
         return data.length;
     }
-
 }

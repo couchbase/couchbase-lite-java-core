@@ -5,6 +5,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Misc;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.util.ByteArrayBuffer;
@@ -21,6 +22,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     private MultipartReader multipartReader;
     private BlobStoreWriter curAttachment;
     private ByteArrayBuffer jsonBuffer;
+    private boolean jsonCompressed;
     private Map<String, Object> document;
     private Database database;
     private Map<String, BlobStoreWriter> attachmentsByName;
@@ -37,26 +39,48 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     }
 
     public void parseJsonBuffer() {
+        byte[] json = jsonBuffer.toByteArray();
+
+        if(jsonCompressed){
+            json = Utils.decompressByGzip(json);
+            if(json == null){
+                throw new IllegalStateException("Received corrupt gzip-encoded JSON part");
+            }
+        }
+
         try {
-            document = Manager.getObjectMapper().readValue(jsonBuffer.toByteArray(), Map.class);
+            document = Manager.getObjectMapper().readValue(json, Map.class);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to parse json buffer", e);
         }
+
         jsonBuffer = null;
     }
 
-    public void setContentType(String contentType) {
-        if (contentType.startsWith("multipart/")) {
+    public void setHeaders(Map<String, String> headers){
+        String contentType = headers.get("Content-Type");
+        if(contentType.startsWith("multipart/")){
+            // Multipart, so initialize the parser:
             multipartReader = new MultipartReader(contentType, this);
             attachmentsByName = new HashMap<String, BlobStoreWriter>();
             attachmentsByMd5Digest = new HashMap<String, BlobStoreWriter>();
-        } else if (contentType == null || contentType.startsWith("application/json")
-                    || contentType.startsWith("text/plain")) {
+        }
+        else if (contentType == null ||
+                contentType.startsWith("application/json") ||
+                contentType.startsWith("text/plain")) {
+
             // No multipart, so no attachments. Body is pure JSON. (We allow text/plain because CouchDB
             // sends JSON responses using the wrong content-type.)
-        } else {
-            throw new IllegalArgumentException("contentType must start with multipart/");
+            startJSONBufferWithHeaders(headers);
         }
+        else {
+            throw new IllegalArgumentException("Unknown/invalid MIME type");
+        }
+
+    }
+    protected void startJSONBufferWithHeaders(Map<String, String> headers){
+        jsonBuffer = new ByteArrayBuffer(1024);
+        jsonCompressed = Utils.isGzip(headers.get("Content-Encoding"));
     }
 
     public void appendData(byte[] data) {
@@ -173,7 +197,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     public void startedPart(Map<String, String> headers) {
 
         if (document == null) {
-           jsonBuffer = new ByteArrayBuffer(1024);
+            startJSONBufferWithHeaders(headers);
         }
         else {
             curAttachment = database.getAttachmentWriter();

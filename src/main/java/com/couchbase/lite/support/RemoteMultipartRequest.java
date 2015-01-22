@@ -25,7 +25,6 @@ public class RemoteMultipartRequest extends RemoteRequest {
 
     @Override
     public void run() {
-
         HttpClient httpClient = clientFactory.getHttpClient();
 
         preemptivelySetAuthCredentials(httpClient);
@@ -47,8 +46,5 @@ public class RemoteMultipartRequest extends RemoteRequest {
         request.addHeader("Accept", "*/*");
 
         executeRequest(httpClient, request);
-
     }
-
-
 }

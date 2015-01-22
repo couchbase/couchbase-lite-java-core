@@ -106,8 +106,19 @@ public class RemoteRequestRetry<T> implements Future<T> {
     }
 
     public Future submit() {
+        return submit(false);
+    }
+
+    /**
+     * @param gzip true - send gzipped request
+     */
+    public Future submit(boolean gzip) {
 
         RemoteRequest request = generateRemoteRequest();
+
+        if(gzip){
+            request.setCompressedRequest(true);
+        }
 
         Future future = requestExecutor.submit(request);
         pendingRequests.add(future);

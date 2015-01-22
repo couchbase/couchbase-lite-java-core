@@ -27,13 +27,13 @@
 
 package com.couchbase.org.apache.http.entity.mime.content;
 
+import com.couchbase.org.apache.http.entity.mime.MIME;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-
-import com.couchbase.org.apache.http.entity.mime.MIME;
 
 /**
  *
@@ -129,5 +129,4 @@ public class FileBody extends AbstractContentBody {
     public File getFile() {
         return this.file;
     }
-
 }

@@ -31,23 +31,18 @@ import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.protocol.HttpContext;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 
 /**
  * @exclude
  */
 public class RemoteRequest implements Runnable {
+    public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
 
     protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
@@ -66,6 +61,9 @@ public class RemoteRequest implements Runnable {
 
     // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
     private boolean dontLog404;
+
+    // if true, send compressed (gzip) request
+    private boolean compressedRequest = false;
 
     public RemoteRequest(ScheduledExecutorService workExecutor,
                          HttpClientFactory clientFactory, String method, URL url,
@@ -151,21 +149,6 @@ public class RemoteRequest implements Runnable {
             request = new HttpPost(url.toExternalForm());
         }
         return request;
-    }
-
-    protected void setBody(HttpUriRequest request) {
-        // set body if appropriate
-        if (body != null && request instanceof HttpEntityEnclosingRequestBase) {
-            byte[] bodyBytes = null;
-            try {
-                bodyBytes = Manager.getObjectMapper().writeValueAsBytes(body);
-            } catch (Exception e) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
-            }
-            ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
-            entity.setContentType("application/json");
-            ((HttpEntityEnclosingRequestBase) request).setEntity(entity);
-        }
     }
 
     /**
@@ -317,10 +300,66 @@ public class RemoteRequest implements Runnable {
                     "RemoteRequestCompletionBlock throw Exception",
                     e);
         }
-
     }
 
     public void setDontLog404(boolean dontLog404) {
         this.dontLog404 = dontLog404;
+    }
+
+    public boolean isCompressedRequest() {
+        return compressedRequest;
+    }
+
+    public void setCompressedRequest(boolean compressedRequest) {
+        this.compressedRequest = compressedRequest;
+    }
+
+    protected void setBody(HttpUriRequest request) {
+        // set body if appropriate
+        if (body != null && request instanceof HttpEntityEnclosingRequestBase) {
+            byte[] bodyBytes = null;
+            try {
+                bodyBytes = Manager.getObjectMapper().writeValueAsBytes(body);
+            } catch (Exception e) {
+                Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
+            }
+            ByteArrayEntity entity = null;
+            if(isCompressedRequest() && bodyBytes.length > MIN_JSON_LENGTH_TO_COMPRESS){
+                entity = setCompressedBody(bodyBytes);
+            }
+            if(entity == null){
+                entity = setUncompressedBody(bodyBytes);
+            }
+            ((HttpEntityEnclosingRequestBase) request).setEntity(entity);
+        }
+    }
+    /**
+     * gzip
+     *
+     * in CBLRemoteRequest.m
+     * - (BOOL) compressBody
+     */
+    protected ByteArrayEntity setCompressedBody(byte[] bodyBytes){
+        if(bodyBytes.length < MIN_JSON_LENGTH_TO_COMPRESS){
+            return null;
+        }
+
+        // Gzipping
+        byte[] encodedBytes = Utils.compressByGzip(bodyBytes);
+
+        if(encodedBytes == null || encodedBytes.length >= bodyBytes.length) {
+            return null;
+        }
+
+        ByteArrayEntity entity = new ByteArrayEntity(encodedBytes);
+        entity.setContentType("application/json");
+        entity.setContentEncoding("gzip");
+        return entity;
+    }
+
+    protected ByteArrayEntity setUncompressedBody(byte[] bodyBytes){
+        ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
+        entity.setContentType("application/json");
+        return entity;
     }
 }

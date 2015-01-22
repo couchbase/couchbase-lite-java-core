@@ -12,6 +12,7 @@ import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.Utils;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.GZIPInputStream;
 
 /**
  * A special type of RemoteRequest that knows how to call the _bulk_get endpoint.
@@ -79,8 +81,8 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");
-        //TODO: implement gzip support for server response see issue #172
-        //request.addHeader("X-Accept-Part-Encoding", "gzip");
+        request.addHeader("X-Accept-Part-Encoding", "gzip");
+        request.addHeader("Accept-Encoding", "gzip, deflate");
 
         addRequestHeaders(request);
 
@@ -170,8 +172,15 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 else {
                     Log.v(Log.TAG_SYNC, "contentTypeHeader is not multipart = %s",contentTypeHeader.getValue());
                     if (entity != null) {
+
+                        inputStream = entity.getContent();
+
+                        // decompress if contentEncoding is gzip
+                        if(Utils.isGzip(entity)){
+                            inputStream = new GZIPInputStream(inputStream);
+                        }
+
                         try {
-                            inputStream = entity.getContent();
                             fullBody = Manager.getObjectMapper().readValue(inputStream,
                                     Object.class);
                             respondWithResult(fullBody, error, response);
@@ -212,7 +221,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         Log.v(Log.TAG_SYNC, "%s: Starting new document; headers =%s", this, headers);
         Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
         _docReader = new MultipartDocumentReader(null, _db);
-        _docReader.setContentType((String) headers.get("Content-Type"));
+        _docReader.setHeaders(headers);
         _docReader.startedPart(headers);
     }
 
