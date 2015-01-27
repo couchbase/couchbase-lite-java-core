@@ -325,7 +325,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
-                                revisionFailed();
                                 completedChangesCount.addAndGet(remainingRevs.size());
                             }
 
@@ -427,7 +426,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                         if (e != null) {
                             setError(e);
-                            revisionFailed();
 
                             // TODO: There is a known bug caused by the line below, which is
                             // TODO: causing testMockSinglePullCouchDb to fail when running on a Nexus5 device.
@@ -500,7 +498,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 if (history.isEmpty() && rev.getGeneration() > 1) {
                     Log.w(Log.TAG_SYNC, "%s: Missing revision history in response for: %s", this, rev);
                     setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));
-                    revisionFailed();
                     continue;
                 }
 
@@ -514,7 +511,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         Log.i(Log.TAG_SYNC, "%s: Remote rev failed validation: %s", this, rev);
                     } else {
                         Log.w(Log.TAG_SYNC, "%s: failed to write %s: status=%s", this, rev, e.getCBLStatus().getCode());
-                        revisionFailed();
                         setError(new HttpResponseException(e.getCBLStatus().getCode(), null));
                         continue;
                     }
@@ -566,7 +562,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     private void revisionFailed(RevisionInternal rev, Throwable throwable) {
         if (Utils.isTransientError(throwable)) {
-            revisionFailed();  // retry later
+            // retry later
         } else {
             Log.v(Log.TAG_SYNC, "%s: giving up on %s: %s", this, rev, throwable);
             pendingSequences.removeSequence(rev.getSequence());
