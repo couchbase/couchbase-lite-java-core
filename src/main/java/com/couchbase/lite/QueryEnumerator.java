@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * An enumerator for Couchbase Lite View Query results.
  */
-public class QueryEnumerator implements Iterator<QueryRow> {
+public class QueryEnumerator implements Iterator<QueryRow>, Iterable<QueryRow> {
 
     private Database database;
     private List<QueryRow> rows;
@@ -132,5 +132,8 @@ public class QueryEnumerator implements Iterator<QueryRow> {
         nextRow = 0;
     }
 
-
+    @Override
+    public Iterator<QueryRow> iterator() {
+        return this;
+    }
 }
