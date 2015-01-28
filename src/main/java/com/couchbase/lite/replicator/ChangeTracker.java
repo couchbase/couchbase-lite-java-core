@@ -255,6 +255,9 @@ public class ChangeTracker implements Runnable {
             if (usePOST) {
                 HttpPost postRequest = new HttpPost(url.toString());
                 postRequest.setHeader("Content-Type", "application/json");
+                postRequest.addHeader("User-Agent", Manager.USER_AGENT);
+                // TODO: why not apply gzip? iOS also does not apply gizp for /{db}/_changes
+
                 StringEntity entity;
                 try {
                     entity = new StringEntity(changesFeedPOSTBody());
@@ -325,15 +328,15 @@ public class ChangeTracker implements Runnable {
 
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
-                InputStream input = null;
+                InputStream inputStream = null;
                 if (entity != null) {
                     try {
-                        input = entity.getContent();
+                        inputStream = entity.getContent();
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
 
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
-                            Map<String, Object> fullBody = Manager.getObjectMapper().readValue(input, Map.class);
+                            Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
                             boolean responseOK = receivedPollResponse(fullBody);
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);
@@ -356,7 +359,7 @@ public class ChangeTracker implements Runnable {
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
                             JsonFactory jsonFactory = Manager.getObjectMapper().getJsonFactory();
-                            JsonParser jp = jsonFactory.createJsonParser(input);
+                            JsonParser jp = jsonFactory.createJsonParser(inputStream);
 
                             while (jp.nextToken() != JsonToken.START_ARRAY) {
                                 // ignore these tokens

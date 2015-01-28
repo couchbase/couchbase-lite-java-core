@@ -42,6 +42,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
         request.addHeader("Accept", "multipart/related, application/json");
         request.addHeader("X-Accept-Part-Encoding", "gzip");
+        request.addHeader("User-Agent", Manager.USER_AGENT);
         request.addHeader("Accept-Encoding", "gzip, deflate");
 
         addRequestHeaders(request);
@@ -127,7 +128,6 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         if(contentEncoding != null && contentEncoding.getValue().contains("gzip")){
                             inputStream = new GZIPInputStream(inputStream);
                         }
-
                         try {
                             fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                             respondWithResult(fullBody, error, response);

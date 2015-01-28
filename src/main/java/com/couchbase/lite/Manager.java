@@ -68,6 +68,8 @@ public final class Manager {
 
     public static final String VERSION = Version.VERSION;
 
+    public static final String USER_AGENT = "CouchbaseLite/" + Version.getVersionName();
+
     private static final ObjectMapper mapper = new ObjectMapper();
     private ManagerOptions options;
     private File directoryFile;
