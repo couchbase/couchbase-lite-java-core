@@ -442,7 +442,7 @@ public class Query {
                         throw new IllegalStateException("The database has been closed.");
                     }
 
-                    String viewName = view.getName();
+                    String viewName = view != null ? view.getName() : null;
                     QueryOptions options = getQueryOptions();
                     List<Long> outSequence = new ArrayList<Long>();
                     List<QueryRow> rows = database.queryViewNamed(viewName, options, outSequence);
