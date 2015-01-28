@@ -82,6 +82,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");
         request.addHeader("X-Accept-Part-Encoding", "gzip");
+        request.addHeader("User-Agent", Manager.USER_AGENT);
         request.addHeader("Accept-Encoding", "gzip, deflate");
 
         addRequestHeaders(request);
@@ -174,12 +175,10 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                     if (entity != null) {
 
                         inputStream = entity.getContent();
-
                         // decompress if contentEncoding is gzip
                         if(Utils.isGzip(entity)){
                             inputStream = new GZIPInputStream(inputStream);
                         }
-
                         try {
                             fullBody = Manager.getObjectMapper().readValue(inputStream,
                                     Object.class);

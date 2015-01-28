@@ -36,6 +36,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.zip.GZIPInputStream;
 
 
 /**
@@ -94,6 +95,8 @@ public class RemoteRequest implements Runnable {
             preemptivelySetAuthCredentials(httpClient);
 
             request.addHeader("Accept", "multipart/related, application/json");
+            request.addHeader("User-Agent", Manager.USER_AGENT);
+            request.addHeader("Accept-Encoding", "gzip, deflate");
 
             addRequestHeaders(request);
 
@@ -207,16 +210,19 @@ public class RemoteRequest implements Runnable {
                 respondWithResult(fullBody, error, response);
                 return;
             } else {
-                HttpEntity temp = response.getEntity();
-                if (temp != null) {
-                    InputStream stream = null;
+                HttpEntity entity = response.getEntity();
+                if (entity != null) {
+                    InputStream inputStream = null;
                     try {
-                        stream = temp.getContent();
-                        fullBody = Manager.getObjectMapper().readValue(stream,
-                                Object.class);
+                        inputStream = entity.getContent();
+                        // decompress if contentEncoding is gzip
+                        if(Utils.isGzip(entity)){
+                            inputStream = new GZIPInputStream(inputStream);
+                        }
+                        fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                     } finally {
                         try {
-                            stream.close();
+                            inputStream.close();
                         } catch (IOException e) {
                         }
                     }
