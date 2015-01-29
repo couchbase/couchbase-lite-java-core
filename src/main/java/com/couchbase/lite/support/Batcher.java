@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -167,6 +166,17 @@ public class Batcher<T> {
         }
     }
 
+    /**
+     * this is mainly for debugging
+     */
+    public int sizeOfPendingFutures() {
+        synchronized(this) {
+            if(pendingFutures == null) {
+                return 0;
+            }
+            return pendingFutures.size();
+        }
+    }
 
     private void processNow() {
 
@@ -222,7 +232,6 @@ public class Batcher<T> {
             Log.v(Log.TAG_BATCHER, "%s: going to process with delay: %d", this, delayToUse);
             ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
             pendingFutures.add(pendingFuture);
-
         }
     }
 
@@ -285,7 +294,7 @@ public class Batcher<T> {
      * and not exhausting downstream system resources such as sockets and http response buffers
      * by processing too many batches concurrently.
      */
-    private int delayToUse() {
+    public int delayToUse() {
 
         //initially set the delayMs to the default value for this Batcher
         int delayToUse = delayMs;
@@ -306,8 +315,6 @@ public class Batcher<T> {
             Log.v(Log.TAG_BATCHER, "%s: delayToUse() delta: %d, delayToUse: %d, delayMs: %d", this, delta, delayToUse, delayMs);
 
         }
-
-
         return delayToUse;
     }
 }

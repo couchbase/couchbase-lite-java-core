@@ -1102,21 +1102,21 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.e(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
 
-                Log.d(Log.TAG_SYNC, "entered the RUNNING state, calling start()");
+                Log.v(Log.TAG_SYNC, "entered the RUNNING state, calling start()");
                 ReplicationInternal.this.start();
-                Log.d(Log.TAG_SYNC, "called start(), calling notifyChangeListenersStateTransition");
+                Log.v(Log.TAG_SYNC, "called start(), calling notifyChangeListenersStateTransition");
                 notifyChangeListenersStateTransition(transition);
-                Log.d(Log.TAG_SYNC, "called notifyChangeListenersStateTransition");
+                Log.v(Log.TAG_SYNC, "called notifyChangeListenersStateTransition");
             }
         });
 
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
-                Log.d(Log.TAG_SYNC, "replicator exiting the RUNNING method");
+                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "replicator exiting the RUNNING method");
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
@@ -1124,6 +1124,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 retryReplicationIfError();
+                if(transition.getSource() == transition.getDestination()) {
+                    // ignore IDLE to IDLE
+                    return;
+                }
                 notifyChangeListenersStateTransition(transition);
 
                 // #352
@@ -1140,6 +1144,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
+                if(transition.getSource() == transition.getDestination()) {
+                    // ignore IDLE to IDLE
+                    return;
+                }
                 notifyChangeListenersStateTransition(transition);
             }
         });
