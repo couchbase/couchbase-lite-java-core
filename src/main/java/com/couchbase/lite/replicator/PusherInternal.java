@@ -369,7 +369,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Map<String, Object> results = (Map<String, Object>) response;
                 if (e != null) {
                     setError(e);
-                    revisionFailed();
                 }
                 else {
                     if (results.size() != 0) {
@@ -405,7 +404,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                 properties = new HashMap<String, Object>(rev.getProperties());
                             } catch (CouchbaseLiteException e1) {
                                 Log.w(Log.TAG_SYNC, "%s Couldn't get local contents of %s", rev, PusherInternal.this);
-                                revisionFailed();
                                 continue;
                             }
 
@@ -524,7 +522,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 }
                 if (e != null) {
                     setError(e);
-                    revisionFailed();
                 } else {
                     Log.v(Log.TAG_SYNC, "%s: POSTed to _bulk_docs", PusherInternal.this);
                 }
@@ -633,7 +630,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         } else {
                             Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
                             setError(e);
-                            revisionFailed();
                         }
                     } else {
                         Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
@@ -659,7 +655,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // Get the revision's properties:
         if (!db.inlineFollowingAttachmentsIn(rev)) {
             error = new CouchbaseLiteException(Status.BAD_ATTACHMENT);
-            revisionFailed();
             return;
         }
 
@@ -671,7 +666,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                         if (e != null) {
                             setError(e);
-                            revisionFailed();
                         } else {
                             Log.v(Log.TAG_SYNC, "%s: Sent %s (JSON), response=%s", this, rev, result);
                             removePending(rev);
