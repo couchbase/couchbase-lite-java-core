@@ -287,7 +287,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     Log.v(Log.TAG_SYNC, "*** %s: BEGIN processInbox (%d sequences)", this, inbox.size());
                     processInbox(new RevisionList(inbox));
                     Log.v(Log.TAG_SYNC, "*** %s: END processInbox (lastSequence=%s)", this, lastSequence);
-                    Log.v(Log.TAG_SYNC, "%s: batcher calling updateActive()", this);
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC,"ERROR: processInbox failed: ",e);
                     throw new RuntimeException(e);
@@ -1234,7 +1233,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     public void addToInbox(RevisionInternal rev) {
         Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s.  Thread: %s", this, rev, Thread.currentThread());
         batcher.queueObject(rev);
-        Log.v(Log.TAG_SYNC, "%s: addToInbox() calling updateActive()", this);
     }
 
     /**

@@ -561,9 +561,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void revisionFailed(RevisionInternal rev, Throwable throwable) {
-        if (Utils.isTransientError(throwable)) {
-            // retry later
-        } else {
+        if (!Utils.isTransientError(throwable)) {
             Log.v(Log.TAG_SYNC, "%s: giving up on %s: %s", this, rev, throwable);
             pendingSequences.removeSequence(rev.getSequence());
         }
