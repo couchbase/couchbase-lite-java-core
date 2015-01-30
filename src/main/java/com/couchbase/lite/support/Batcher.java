@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -218,7 +217,8 @@ public class Batcher<T> {
         // we have more items in inbox, lets schedule another processing attempt
         if (inbox.size() > 0) {
             Log.v(Log.TAG_BATCHER, "%s: finished processing a batch, but inbox size > 0: %d", this, inbox.size());
-            int delayToUse = delayToUse();
+            //int delayToUse = delayToUse();
+            int delayToUse = 0;
             Log.v(Log.TAG_BATCHER, "%s: going to process with delay: %d", this, delayToUse);
             ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
             pendingFutures.add(pendingFuture);
