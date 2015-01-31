@@ -839,63 +839,45 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     @Override
     public void changeTrackerCaughtUp() {
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
-            }
-        });
-
+        Log.e(Log.TAG_SYNC, "changeTrackerCaughtUp");
         // for continuous replications, once the change tracker is caught up, we
         // should try to go into the idle state.
         if (isContinuous()) {
-
             // this has to be on a different thread than the replicator thread, or else it's a deadlock
             // because it might be waiting for jobs that have been scheduled, and not
             // yet executed (and which will never execute because this will block processing).
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-
                     try {
-
                         if (batcher != null) {
-                            Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                            // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
+                            try { Thread.sleep(batcher.delayToUse()); }catch(Exception e){}
+                            Log.e(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
                             batcher.waitForPendingFutures();
                         }
 
-                        Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
+                        Log.e(Log.TAG_SYNC, "waitForPendingFutures()");
                         waitForPendingFutures();
 
                         if (downloadsToInsert != null) {
-                            Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                            // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
+                            try { Thread.sleep(downloadsToInsert.delayToUse()); }catch(Exception e){}
+                            Log.e(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
                             downloadsToInsert.waitForPendingFutures();
                         }
-
-                    } catch (Exception e) {
+                    }
+                    catch (Exception e) {
                         Log.e(Log.TAG_SYNC, "Exception waiting for jobs to drain: %s", e);
                         e.printStackTrace();
-
-                    } finally {
-
+                    }
+                    finally {
                         fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
                     }
-
                     Log.e(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
-
-
                 }
             }).start();
-
         }
-
-
-
     }
 
     protected void stopGraceful() {

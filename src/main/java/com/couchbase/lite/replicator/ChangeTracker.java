@@ -328,17 +328,19 @@ public class ChangeTracker implements Runnable {
 
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
-                InputStream inputStream = null;
                 if (entity != null) {
                     try {
-                        inputStream = entity.getContent();
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
-
+                        InputStream inputStream = entity.getContent();
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
-                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
-                            Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
-                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
-                            boolean responseOK = receivedPollResponse(fullBody);
+                            boolean responseOK = false; // default value
+                            // check content length, ObjectMapper().readValue() throws Exception if size is 0.
+                            if(entity.getContentLength() > 0) {
+                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
+                                Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
+                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
+                                responseOK = receivedPollResponse(fullBody);
+                            }
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);
 
                             if (mode == ChangeTrackerMode.LongPoll && responseOK) {
