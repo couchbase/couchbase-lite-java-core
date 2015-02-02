@@ -24,6 +24,7 @@ import com.couchbase.lite.util.Log;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -141,7 +142,7 @@ public final class SavedRevision extends Revision {
             }
             checkedProperties = true;
         }
-        return Collections.unmodifiableMap(properties);
+        return nestedUnmodifiableMap(properties);
     }
 
     /**
@@ -201,7 +202,33 @@ public final class SavedRevision extends Revision {
 
     }
 
+    @SuppressWarnings("unchecked")
+    private static <K,V> Map<K,V> nestedUnmodifiableMap(Map<? extends K, ? extends V> m) {
+        // Don't make a copy of m until we have to modify it.
+        Map<K,V> copy = null;
 
+        for (Map.Entry<? extends K,? extends V> entry : m.entrySet()) {
+            if (entry.getValue() instanceof Map) {
+                if (copy == null) {
+                    copy = new HashMap<K,V>(m);
+                }
+                Map newValue = nestedUnmodifiableMap((Map) entry.getValue());
+                try {
+                    copy.put(entry.getKey(), (V) newValue);
+                } catch (ClassCastException e) {
+                    // Unfortunately, since there's no way to check if the cast to V is safe, all we
+                    // can do is catch failures when they happen. Given that this is only called by
+                    // the framework on maps it created, the cast should always be safe, though.
+                }
+            }
+        }
+
+        if (copy != null) {
+            return Collections.unmodifiableMap(copy);
+        }
+
+        return Collections.unmodifiableMap(m);
+    }
 }
 
 
