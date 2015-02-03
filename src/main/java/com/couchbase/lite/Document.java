@@ -146,10 +146,12 @@ public class Document {
      * Any keys in the dictionary that begin with "_", such as "_id" and "_rev", contain CouchbaseLite metadata.
      *
      * @return contents of the current revision of the document.
+     *         null if currentRevision is null
      */
     @InterfaceAudience.Public
     public Map<String,Object> getProperties() {
-        return getCurrentRevision().getProperties();
+        SavedRevision currentRevision = getCurrentRevision();
+        return currentRevision == null ? null : currentRevision.getProperties();
     }
 
     /**
