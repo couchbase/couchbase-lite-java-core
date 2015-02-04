@@ -1408,8 +1408,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             }
 
             // 'status' property is nonstandard; Couchbase Lite returns it, others don't.
-            String statusString = (String) item.get("status");
-            int status = Integer.parseInt(statusString);
+            Object objStatus = item.get("status");
+            assert(objStatus instanceof  Integer);
+            int status = ((Integer) objStatus).intValue();
             if (status >= 400) {
                 return new Status(status);
             }
