@@ -31,6 +31,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -987,6 +988,31 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         // start change tracker
         beginReplicating();
+    }
+
+    @Override
+    public void changed(EventType type, Object o, BlockingQueue queue) {
+        // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
+
+        if(type == EventType.PUT || type == EventType.ADD) {
+            // in case of one shot, not necessary to switch state and call waitForPendingFutures.
+            if(isContinuous()) {
+                if (!queue.isEmpty()) {
+                    // trigger to RUNNING if state is IDLE
+                    fireTrigger(ReplicationTrigger.RESUME);
+
+                    // run waitForPendingFutures.
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            waitForPendingFutures();
+                            // trigger to RUNNING if state is not IDLE
+                            fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                        }
+                    }).start();
+                }
+            }
+        }
     }
 
 }
