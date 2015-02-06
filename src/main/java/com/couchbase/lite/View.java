@@ -906,7 +906,7 @@ public final class View {
 
         }
 
-        if(keysToReduce.size() > 0) {
+        if(keysToReduce != null && keysToReduce.size() > 0) {
             // Finish the last group (or the entire list, if no grouping):
             Object key = group ? groupKey(lastKey, groupLevel) : null;
             Object reduced = (reduceBlock != null) ? reduceBlock.reduce(keysToReduce, valuesToReduce, false) : null;
