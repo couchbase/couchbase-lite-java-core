@@ -441,55 +441,50 @@ public final class View {
         Cursor cursor = null;
 
         try {
-
-            long lastSequence = getLastSequenceIndexed();
+            long last = getLastSequenceIndexed();
             long dbMaxSequence = database.getLastSequenceNumber();
-            if(lastSequence == dbMaxSequence) {
+            long minLastSequence = dbMaxSequence;
+
+            // First remove obsolete emitted results from the 'maps' table:
+            if (last < 0) {
+                String msg = String.format("last < 0 (%s)", last);
+                throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
+            }
+            else if(last < dbMaxSequence) {
+                minLastSequence = Math.min(minLastSequence, last);
+
+                if (last == 0) {
+
+                    // If the lastSequence has been reset to 0, make sure to remove
+                    // any leftover rows:
+                    String[] whereArgs = {Integer.toString(getViewId())};
+                    database.getDatabase().delete("maps", "view_id=?", whereArgs);
+                } else {
+                    // Delete all obsolete map results (ones from since-replaced
+                    // revisions):
+                    String[] args = {Integer.toString(getViewId()),
+                            Long.toString(last),
+                            Long.toString(last)};
+                    database.getDatabase().execSQL(
+                            "DELETE FROM maps WHERE view_id=? AND sequence IN ("
+                                    + "SELECT parent FROM revs WHERE sequence>? "
+                                    + "AND parent>0 AND parent<=?)", args);
+                }
+            }
+
+            if(minLastSequence == dbMaxSequence) {
                 // nothing to do (eg,  kCBLStatusNotModified)
-                Log.v(Log.TAG_VIEW, "lastSequence (%s) == dbMaxSequence (%s), nothing to do",
-                        lastSequence, dbMaxSequence);
+                Log.v(Log.TAG_VIEW, "minLastSequence (%s) == dbMaxSequence (%s), nothing to do", minLastSequence, dbMaxSequence);
                 result.setCode(Status.NOT_MODIFIED);
                 return;
             }
-
-            // First remove obsolete emitted results from the 'maps' table:
-            long sequence = lastSequence;
-            if (lastSequence < 0) {
-                String msg = String.format("lastSequence < 0 (%s)", lastSequence);
-                throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
-            }
-
-            if (lastSequence == 0) {
-                // If the lastSequence has been reset to 0, make sure to remove
-                // any leftover rows:
-                String[] whereArgs = { Integer.toString(getViewId()) };
-                database.getDatabase().delete("maps", "view_id=?", whereArgs);
-            } else {
-                // Delete all obsolete map results (ones from since-replaced
-                // revisions):
-                String[] args = { Integer.toString(getViewId()),
-                        Long.toString(lastSequence),
-                        Long.toString(lastSequence) };
-                database.getDatabase().execSQL(
-                        "DELETE FROM maps WHERE view_id=? AND sequence IN ("
-                                + "SELECT parent FROM revs WHERE sequence>? "
-                                + "AND parent>0 AND parent<=?)", args);
-            }
-
-            int deleted = 0;
-            cursor = database.getDatabase().rawQuery("SELECT changes()", null);
-            cursor.moveToNext();
-            deleted = cursor.getInt(0);
-            cursor.close();
 
             // This is the emit() block, which gets called from within the
             // user-defined map() block
             // that's called down below.
             AbstractTouchMapEmitBlock emitBlock = new AbstractTouchMapEmitBlock() {
-
                 @Override
                 public void emit(Object key, Object value) {
-
                     try {
                         String valueJson;
                         String keyJson = Manager.getObjectMapper().writeValueAsString(key);
@@ -498,9 +493,6 @@ public final class View {
                         } else{
                             valueJson = Manager.getObjectMapper().writeValueAsString(value);
                         }
-                        //Log.v(Log.TAG_VIEW, "    emit(" + keyJson + ", "
-                        //        + valueJson + ")");
-
                         ContentValues insertValues = new ContentValues();
                         insertValues.put("view_id", getViewId());
                         insertValues.put("sequence", sequence);
@@ -516,21 +508,20 @@ public final class View {
 
             // Now scan every revision added since the last time the view was
             // indexed:
-            String[] selectArgs = { Long.toString(lastSequence) };
-
-            cursor = database.getDatabase().rawQuery(
-                    "SELECT revs.doc_id, sequence, docid, revid, json, no_attachments FROM revs, docs "
-                            + "WHERE sequence>? AND current!=0 AND deleted=0 "
-                            + "AND revs.doc_id = docs.doc_id "
-                            + "ORDER BY revs.doc_id, revid DESC", selectArgs);
-
+            StringBuffer sql = new StringBuffer( "SELECT revs.doc_id, sequence, docid, revid, json, no_attachments, deleted FROM revs, docs WHERE sequence>? AND current!=0 ");
+            if(minLastSequence == 0) {
+                sql.append("AND deleted=0 ");
+            }
+            sql.append("AND revs.doc_id = docs.doc_id ORDER BY revs.doc_id, revid DESC");
+            String[] selectArgs = { Long.toString(minLastSequence) };
+            cursor = database.getDatabase().rawQuery(sql.toString(), selectArgs);
 
             boolean keepGoing = cursor.moveToNext();
             while (keepGoing) {
                 long docID = cursor.getLong(0);
 
                 // Reconstitute the document as a dictionary:
-                sequence = cursor.getLong(1);
+                long sequence = cursor.getLong(1);
                 String docId = cursor.getString(2);
                 if(docId.startsWith("_design/")) {  // design docs don't get indexed!
                     keepGoing = cursor.moveToNext();
@@ -540,14 +531,15 @@ public final class View {
                 byte[] json = cursor.getBlob(4);
 
                 boolean noAttachments = cursor.getInt(5) > 0;
+                boolean deleted = cursor.getInt(6) > 0;
 
                 while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
                     // Skip rows with the same doc_id -- these are losing conflicts.
                 }
 
-                if (lastSequence > 0) {
+                if (minLastSequence > 0) {
                     // Find conflicts with documents from previous indexings.
-                    String[] selectArgs2 = { Long.toString(docID), Long.toString(lastSequence) };
+                    String[] selectArgs2 = { Long.toString(docID), Long.toString(minLastSequence) };
 
                     Cursor cursor2 = null;
                     try {
@@ -568,15 +560,14 @@ public final class View {
                             };
                             database.getDatabase().execSQL(
                                     "DELETE FROM maps WHERE view_id=? AND sequence=?", args);
-                            if (RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
+                            if (deleted || RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
                                 // It still 'wins' the conflict, so it's the one that
                                 // should be mapped [again], not the current revision!
                                 revId = oldRevId;
                                 sequence = oldSequence;
-
+                                deleted = false;
                                 String[] selectArgs3 = { Long.toString(sequence) };
                                 json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
-
                             }
                         }
                     } finally {
@@ -584,8 +575,10 @@ public final class View {
                             cursor2.close();
                         }
                     }
+                }
 
-
+                if(deleted){
+                    continue;
                 }
 
                 // Get the document properties, to pass to the map function:
@@ -606,7 +599,6 @@ public final class View {
                     emitBlock.setSequence(sequence);
                     mapBlock.map(properties, emitBlock);
                 }
-
             }
 
             // Finally, record the last revision sequence number that was
@@ -615,18 +607,16 @@ public final class View {
             updateValues.put("lastSequence", dbMaxSequence);
             updateValues.put("total_docs", countTotalRows());
             String[] whereArgs = { Integer.toString(getViewId()) };
-            database.getDatabase().update("views", updateValues, "view_id=?",
-                    whereArgs);
+            database.getDatabase().update("views", updateValues, "view_id=?", whereArgs);
 
             // FIXME actually count number added :)
-            Log.v(Log.TAG_VIEW, "Finished re-indexing view: %s "
-                    + " up to sequence %s"
-                    + " (deleted %s added ?)", name, dbMaxSequence, deleted);
+            Log.v(Log.TAG_VIEW, "Finished re-indexing view: %s " + " up to sequence %s", name, dbMaxSequence);
             result.setCode(Status.OK);
-
-        } catch (SQLException e) {
+        }
+        catch (SQLException e) {
             throw new CouchbaseLiteException(e, new Status(Status.DB_ERROR));
-        } finally {
+        }
+        finally {
             if (cursor != null) {
                 cursor.close();
             }
@@ -637,7 +627,6 @@ public final class View {
                 database.endTransaction(result.isSuccessful());
             }
         }
-
     }
 
     /**
