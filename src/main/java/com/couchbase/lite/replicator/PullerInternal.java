@@ -990,6 +990,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         beginReplicating();
     }
 
+    /**
+     * Implementation of BlockingQueueListener.changed(EventType, Object, BlockingQueue) for Pull Replication
+     *
+     * Note: Pull replication needs to send IDLE after PUT /{db}/_local.
+     *       However sending IDLE from Push replicator breaks few unit test cases.
+     *       This is reason changed() method was override for pull replicatoin
+     */
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {
         // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
