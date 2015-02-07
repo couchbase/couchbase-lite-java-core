@@ -1208,7 +1208,14 @@ public final class Database {
     @InterfaceAudience.Private
     public boolean beginTransaction() {
         try {
-            database.beginTransaction();
+            // Outer transaction. Use SQLiteDatabase.beginTransaction()
+            if(transactionLevel == 0) {
+                database.beginTransaction();
+            }
+            // Inner transaction. Use SQLite's SAVEPOINT
+            else{
+                database.execSQL("SAVEPOINT tdb" + Integer.toString(transactionLevel + 1));
+            }
             ++transactionLevel;
             Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
         } catch (SQLException e) {
@@ -1229,16 +1236,39 @@ public final class Database {
 
         assert(transactionLevel > 0);
 
-        if(commit) {
-            Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
-            database.setTransactionSuccessful();
-            database.endTransaction();
-        }
-        else {
-            Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
-            try {
+        // Outer transaction. Use SQLiteDatabase.endTransaction()
+        if(transactionLevel == 1) {
+            if (commit) {
+                Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+                database.setTransactionSuccessful();
                 database.endTransaction();
-            } catch (SQLException e) {
+            } else {
+                Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+                try {
+                    database.endTransaction();
+                } catch (SQLException e) {
+                    Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                    return false;
+                }
+            }
+        }
+        // Inner transaction: Use SQLite's ROLLBACK and RELEASE
+        else{
+            if (commit) {
+                Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+            } else {
+                Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+                try {
+                    database.execSQL(";ROLLBACK TO tdb" + Integer.toString(transactionLevel));
+                } catch (SQLException e) {
+                    Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                    return false;
+                }
+            }
+            try{
+                database.execSQL("RELEASE tdb" + Integer.toString(transactionLevel));
+            }
+            catch (SQLException e) {
                 Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                 return false;
             }
