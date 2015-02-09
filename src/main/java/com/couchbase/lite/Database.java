@@ -1203,6 +1203,20 @@ public final class Database {
     /**
      * Begins a database transaction. Transactions can nest.
      * Every beginTransaction() must be balanced by a later endTransaction()
+     *
+     * Notes: 1. SQLiteDatabase.beginTransaction() supported nested transaction. But, in case
+     *           nested transaction rollbacked, it also rollbacks outer transaction too.
+     *           This is not ideal behavior for CBL
+     *        2. SAVEPOINT...RELEASE supports nested transaction. But Android API 14 and 15,
+     *           it throws Exception. I assume it is Android bug. As CBL need to support from API 10
+     *           . So it does not work for CBL.
+     *        3. Using Transaction for outer/1st level of transaction and inner/2nd level of transaction
+     *           works with CBL requirement.
+     *        4. CBL Android and Java uses Thread, So it is better to use SQLiteDatabase.beginTransaction()
+     *           for outer/1st level transaction. if we use BEGIN...COMMIT and SAVEPOINT...RELEASE,
+     *           we need to implement wrapper of BEGIN...COMMIT and SAVEPOINT...RELEASE to be
+     *           Thread-safe.
+     *
      * @exclude
      */
     @InterfaceAudience.Private
