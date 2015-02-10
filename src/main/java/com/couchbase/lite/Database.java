@@ -1222,16 +1222,19 @@ public final class Database {
     @InterfaceAudience.Private
     public boolean beginTransaction() {
         try {
-            // Outer transaction. Use SQLiteDatabase.beginTransaction()
+            // Outer (level 0)  transaction. Use SQLiteDatabase.beginTransaction()
             if(transactionLevel == 0) {
                 database.beginTransaction();
             }
-            // Inner transaction. Use SQLite's SAVEPOINT
+            // Inner (level 1 or higher) transaction. Use SQLite's SAVEPOINT
             else{
-                database.execSQL("SAVEPOINT tdb" + Integer.toString(transactionLevel + 1));
+                database.execSQL("SAVEPOINT tdb" + Integer.toString(transactionLevel));
             }
-            ++transactionLevel;
+
             Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+
+            ++transactionLevel;
+
         } catch (SQLException e) {
             Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
             return false;
@@ -1250,8 +1253,10 @@ public final class Database {
 
         assert(transactionLevel > 0);
 
-        // Outer transaction. Use SQLiteDatabase.endTransaction()
-        if(transactionLevel == 1) {
+        --transactionLevel;
+
+        // Outer (level 0) transaction. Use SQLiteDatabase.setTransactionSuccessful() and SQLiteDatabase.endTransaction()
+        if(transactionLevel == 0) {
             if (commit) {
                 Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
                 database.setTransactionSuccessful();
@@ -1266,7 +1271,7 @@ public final class Database {
                 }
             }
         }
-        // Inner transaction: Use SQLite's ROLLBACK and RELEASE
+        // Inner (level 1 or higher) transaction: Use SQLite's ROLLBACK and RELEASE
         else{
             if (commit) {
                 Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
@@ -1288,9 +1293,7 @@ public final class Database {
             }
         }
 
-        --transactionLevel;
         postChangeNotifications();
-
 
         return true;
     }
