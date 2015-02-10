@@ -1203,14 +1203,38 @@ public final class Database {
     /**
      * Begins a database transaction. Transactions can nest.
      * Every beginTransaction() must be balanced by a later endTransaction()
+     *
+     * Notes: 1. SQLiteDatabase.beginTransaction() supported nested transaction. But, in case
+     *           nested transaction rollbacked, it also rollbacks outer transaction too.
+     *           This is not ideal behavior for CBL
+     *        2. SAVEPOINT...RELEASE supports nested transaction. But Android API 14 and 15,
+     *           it throws Exception. I assume it is Android bug. As CBL need to support from API 10
+     *           . So it does not work for CBL.
+     *        3. Using Transaction for outer/1st level of transaction and inner/2nd level of transaction
+     *           works with CBL requirement.
+     *        4. CBL Android and Java uses Thread, So it is better to use SQLiteDatabase.beginTransaction()
+     *           for outer/1st level transaction. if we use BEGIN...COMMIT and SAVEPOINT...RELEASE,
+     *           we need to implement wrapper of BEGIN...COMMIT and SAVEPOINT...RELEASE to be
+     *           Thread-safe.
+     *
      * @exclude
      */
     @InterfaceAudience.Private
     public boolean beginTransaction() {
         try {
-            database.beginTransaction();
-            ++transactionLevel;
+            // Outer (level 0)  transaction. Use SQLiteDatabase.beginTransaction()
+            if(transactionLevel == 0) {
+                database.beginTransaction();
+            }
+            // Inner (level 1 or higher) transaction. Use SQLite's SAVEPOINT
+            else{
+                database.execSQL("SAVEPOINT cbl_" + Integer.toString(transactionLevel));
+            }
+
             Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+
+            ++transactionLevel;
+
         } catch (SQLException e) {
             Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
             return false;
@@ -1229,24 +1253,47 @@ public final class Database {
 
         assert(transactionLevel > 0);
 
-        if(commit) {
-            Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
-            database.setTransactionSuccessful();
-            database.endTransaction();
-        }
-        else {
-            Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
-            try {
+        --transactionLevel;
+
+        // Outer (level 0) transaction. Use SQLiteDatabase.setTransactionSuccessful() and SQLiteDatabase.endTransaction()
+        if(transactionLevel == 0) {
+            if (commit) {
+                Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+                database.setTransactionSuccessful();
                 database.endTransaction();
-            } catch (SQLException e) {
+            } else {
+                Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+                try {
+                    database.endTransaction();
+                } catch (SQLException e) {
+                    Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                    return false;
+                }
+            }
+        }
+        // Inner (level 1 or higher) transaction: Use SQLite's ROLLBACK and RELEASE
+        else{
+            if (commit) {
+                Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+            } else {
+                Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
+                try {
+                    database.execSQL(";ROLLBACK TO cbl_" + Integer.toString(transactionLevel));
+                } catch (SQLException e) {
+                    Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                    return false;
+                }
+            }
+            try{
+                database.execSQL("RELEASE cbl_" + Integer.toString(transactionLevel));
+            }
+            catch (SQLException e) {
                 Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                 return false;
             }
         }
 
-        --transactionLevel;
         postChangeNotifications();
-
 
         return true;
     }
