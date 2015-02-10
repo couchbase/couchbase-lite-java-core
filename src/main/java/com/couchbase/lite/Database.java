@@ -1228,7 +1228,7 @@ public final class Database {
             }
             // Inner (level 1 or higher) transaction. Use SQLite's SAVEPOINT
             else{
-                database.execSQL("SAVEPOINT tdb" + Integer.toString(transactionLevel));
+                database.execSQL("SAVEPOINT cbl_" + Integer.toString(transactionLevel));
             }
 
             Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
@@ -1278,14 +1278,14 @@ public final class Database {
             } else {
                 Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), transactionLevel);
                 try {
-                    database.execSQL(";ROLLBACK TO tdb" + Integer.toString(transactionLevel));
+                    database.execSQL(";ROLLBACK TO cbl_" + Integer.toString(transactionLevel));
                 } catch (SQLException e) {
                     Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                     return false;
                 }
             }
             try{
-                database.execSQL("RELEASE tdb" + Integer.toString(transactionLevel));
+                database.execSQL("RELEASE cbl_" + Integer.toString(transactionLevel));
             }
             catch (SQLException e) {
                 Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
