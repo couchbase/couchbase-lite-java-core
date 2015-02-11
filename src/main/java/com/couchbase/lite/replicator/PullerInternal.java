@@ -36,6 +36,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Pull Replication
@@ -584,13 +585,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // been added since the latest revisions we have locally.
         // See: http://wiki.apache.org/couchdb/HTTP_Document_API#Getting_Attachments_With_a_Document
         StringBuilder path = new StringBuilder("/" + URLEncoder.encode(rev.getDocId()) + "?rev=" + URLEncoder.encode(rev.getRevId()) + "&revs=true&attachments=true");
-        List<String> knownRevs = knownCurrentRevIDs(rev);
+
+        // If the document has attachments, add an 'atts_since' param with a list of
+        // already-known revisions, so the server can skip sending the bodies of any
+        // attachments we already have locally:
+        AtomicBoolean hasAttachment = new AtomicBoolean(false);
+        List<String> knownRevs = db.getPossibleAncestorRevisionIDs(rev, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
         if (knownRevs == null) {
             Log.w(Log.TAG_SYNC, "knownRevs == null, something is wrong, possibly the replicator has shut down");
             --httpConnectionCount;
             return;
         }
-        if (knownRevs.size() > 0) {
+        if (hasAttachment.get() && knownRevs.size() > 0) {
             path.append("&atts_since=");
             path.append(joinQuotedEscaped(knownRevs));
         }
