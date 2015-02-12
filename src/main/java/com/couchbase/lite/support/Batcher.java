@@ -30,7 +30,7 @@ public class Batcher<T> {
     private BlockingQueue<T> inbox;
     private BatchProcessor<T> processor;
     private boolean scheduled = false;
-    private long lastProcessedTime;
+    private long lastProcessedTime = 0;
     private BlockingQueue<ScheduledFuture> pendingFutures;
     private Lock lock = new ReentrantLock();
 
