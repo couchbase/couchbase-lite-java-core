@@ -1746,15 +1746,9 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public List<String>  getPossibleAncestorRevisionIDs (
-            RevisionInternal rev,
-            int limit,
-            AtomicBoolean hasAttachment
-            ) {
-
-        List<String> matchingRevs = new ArrayList<String>();
+    public List<String>  getPossibleAncestorRevisionIDs( RevisionInternal rev, int limit, AtomicBoolean hasAttachment )
+    {
         int generation = rev.getGeneration();
-
         if (generation <= 1)
             return null;
 
@@ -1762,30 +1756,33 @@ public final class Database {
         if (docNumericID <= 0)
             return null;
 
+        List<String> revIDs = new ArrayList<String>();
+
         int sqlLimit = limit > 0 ? (int)limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
         String sql = "SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?" +
         " and deleted=0 and json not null" +
         " ORDER BY sequence DESC LIMIT ?";
         String[] args = {Long.toString(docNumericID),generation+"-",Integer.toString(sqlLimit)};
 
-            Cursor cursor = null;
-            try {
-                cursor = database.rawQuery(sql, args);
+        Cursor cursor = null;
+        try {
+            cursor = database.rawQuery(sql, args);
+            cursor.moveToNext();
+            while(!cursor.isAfterLast()){
+                if (hasAttachment != null && revIDs.size() == 0){
+                    hasAttachment.set(sequenceHasAttachments(cursor.getLong(1)));
+                }
+                revIDs.add(cursor.getString(0));
                 cursor.moveToNext();
-                if (!cursor.isAfterLast()) {
-                    if (matchingRevs.size() == 0)
-                        hasAttachment.set(sequenceHasAttachments(cursor.getLong(1)));
-                    matchingRevs.add(cursor.getString(0));
-                }
-
-            } catch (SQLException e) {
-                Log.e(Database.TAG, "Error getting all revisions of document", e);
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
             }
-        return matchingRevs;
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error getting all revisions of document", e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return revIDs;
     }
 
 
