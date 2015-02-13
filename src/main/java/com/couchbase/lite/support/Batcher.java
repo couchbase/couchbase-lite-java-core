@@ -195,7 +195,7 @@ public class Batcher<T> {
                     T t = inbox.take();
                     toProcess.add(t);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    Log.w(Log.TAG_BATCHER, "%s: processNow(): %s", this, e.getMessage());
                 }
             }
         } else {
@@ -206,7 +206,7 @@ public class Batcher<T> {
                     T t = inbox.take();
                     toProcess.add(t);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    Log.w(Log.TAG_BATCHER, "%s: processNow(): %s", this, e.getMessage());
                 }
                 i += 1;
             }
