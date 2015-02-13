@@ -411,6 +411,10 @@ public class Router implements Database.ChangeListener {
             } else if(name.startsWith("_design") || name.startsWith("_local")) {
                 // This is also a document, just with a URL-encoded "/"
                 docID = name;
+            } else if (name.equals("_session")) {
+                // There are two possible uri to get a session, /<db>/_session or /_session.
+                // This is for /<db>/_session.
+                message = message.replaceFirst("_Document", name);
             } else {
                 // Special document name like "_all_docs":
                 message += name;
