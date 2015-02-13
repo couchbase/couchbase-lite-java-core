@@ -2559,6 +2559,7 @@ public final class Database {
         if (digest == null) {
             throw new CouchbaseLiteException(Status.BAD_ATTACHMENT);
         }
+
         if (pendingAttachmentsByDigest != null && pendingAttachmentsByDigest.containsKey(digest)) {
             BlobStoreWriter writer = pendingAttachmentsByDigest.get(digest);
             try {
@@ -2569,6 +2570,10 @@ public final class Database {
             } catch (Exception e) {
                 throw new CouchbaseLiteException(e, Status.STATUS_ATTACHMENT_ERROR);
             }
+        }
+        else{
+            Log.w(Database.TAG, "No pending attachment for digest: " + digest);
+            throw new CouchbaseLiteException(Status.BAD_ATTACHMENT);
         }
     }
 
