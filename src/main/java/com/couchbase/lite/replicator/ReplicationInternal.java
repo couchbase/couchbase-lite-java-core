@@ -1181,6 +1181,11 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
                 ReplicationInternal.this.clearDbRef();
+
+                if(transition.getSource() == transition.getDestination()) {
+                    // ignore STOPPED to STOPPED
+                    return;
+                }
                 notifyChangeListenersStateTransition(transition);
             }
         });
