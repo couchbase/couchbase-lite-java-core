@@ -1171,6 +1171,15 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+
+                // NOTE: Based on StateMachine configuration, this should not happen.
+                //       However, from Unit Test result, this could be happen.
+                //       We should revisit StateMachine configuration and also its Thread-safe-ability
+                if(transition.getSource() == transition.getDestination()) {
+                    // ignore STOPPING to STOPPING
+                    return;
+                }
+
                 ReplicationInternal.this.stopGraceful();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1182,6 +1191,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
                 ReplicationInternal.this.clearDbRef();
 
+                // NOTE: Based on StateMachine configuration, this should not happen.
+                //       However, from Unit Test result, this could be happen.
+                //       We should revisit StateMachine configuration and also its Thread-safe-ability
                 if(transition.getSource() == transition.getDestination()) {
                     // ignore STOPPED to STOPPED
                     return;
