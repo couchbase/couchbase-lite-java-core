@@ -259,7 +259,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         for (RevisionInternal work : workToStartNow) {
-            pullRemoteRevision(work);
+            if(work != null) {
+                pullRemoteRevision(work);
+            }
         }
     }
 
@@ -576,6 +578,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     @InterfaceAudience.Private
     public void pullRemoteRevision(final RevisionInternal rev) {
+
+        if(rev == null) return;
 
         Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision with rev: %s", this, rev);
 
