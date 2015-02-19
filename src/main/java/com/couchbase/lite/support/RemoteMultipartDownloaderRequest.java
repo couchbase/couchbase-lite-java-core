@@ -121,19 +121,18 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                 }
                 else {
                     if (entity != null) {
-                        inputStream = entity.getContent();
-
-                        // decompress if contentEncoding is gzip
-                        Header contentEncoding = entity.getContentEncoding();
-                        if(contentEncoding != null && contentEncoding.getValue().contains("gzip")){
-                            inputStream = new GZIPInputStream(inputStream);
-                        }
                         try {
+                            inputStream = entity.getContent();
+                            // decompress if contentEncoding is gzip
+                            Header contentEncoding = entity.getContentEncoding();
+                            if(contentEncoding != null && contentEncoding.getValue().contains("gzip")){
+                                inputStream = new GZIPInputStream(inputStream);
+                            }
                             fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                             respondWithResult(fullBody, error, response);
                         } finally {
                             try {
-                                inputStream.close();
+                                if(inputStream != null){ inputStream.close(); }
                             } catch (IOException e) {
                             }
                         }

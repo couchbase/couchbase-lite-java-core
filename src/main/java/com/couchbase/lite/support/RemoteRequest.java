@@ -222,7 +222,7 @@ public class RemoteRequest implements Runnable {
                         fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                     } finally {
                         try {
-                            inputStream.close();
+                            if(inputStream != null){ inputStream.close(); }
                         } catch (IOException e) {
                         }
                     }
