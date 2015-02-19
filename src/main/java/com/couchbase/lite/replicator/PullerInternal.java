@@ -577,6 +577,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @InterfaceAudience.Private
     public void pullRemoteRevision(final RevisionInternal rev) {
 
+        if(rev == null){
+            Log.w(Log.TAG_SYNC, "rev is null.");
+            return;
+        }
+
         Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision with rev: %s", this, rev);
 
         ++httpConnectionCount;
@@ -645,6 +650,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     @InterfaceAudience.Private
     protected void queueRemoteRevision(RevisionInternal rev) {
+
+        if(rev == null){
+            Log.w(Log.TAG_SYNC, "rev is null.");
+            return;
+        }
+
         if (rev.isDeleted()) {
             if (deletedRevsToPull == null) {
                 deletedRevsToPull = new ArrayList<RevisionInternal>(100);
