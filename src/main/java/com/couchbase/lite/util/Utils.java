@@ -183,13 +183,17 @@ public class Utils {
     public static byte[] compressByGzip(byte[] sourceBytes){
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try{
+            GZIPOutputStream gzip = null;
             try {
-                GZIPOutputStream gzip = new GZIPOutputStream(out);
+                gzip = new GZIPOutputStream(out);
                 gzip.write(sourceBytes);
                 gzip.close();
             }
             catch (IOException ex){
                 return null;
+            }
+            finally {
+                try{ if(gzip != null) { gzip.close(); } } catch(IOException ex) {}
             }
 
             return  out.toByteArray();
@@ -202,24 +206,29 @@ public class Utils {
     // from gzip
     public static int CHUNK_SIZE = 8192; // 1024 * 8
     public static byte[] decompressByGzip(byte[] sourceBytes){
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = null;
+        ByteArrayOutputStream out = null;
+        ByteArrayInputStream in = null;
+        GZIPInputStream gzip = null;
         try {
-            try {
-                byte[] buffer = new byte[CHUNK_SIZE];
-                ByteArrayInputStream in = new ByteArrayInputStream(sourceBytes);
-                GZIPInputStream gzip = new GZIPInputStream(in);
-                int len = 0;
-                while ((len = gzip.read(buffer, 0, CHUNK_SIZE)) != -1) {
-                    out.write(buffer, 0, len);
-                }
-            }
-            catch (IOException ex){
-                return null;
+            out    = new ByteArrayOutputStream();
+            buffer = new byte[CHUNK_SIZE];
+            in     = new ByteArrayInputStream(sourceBytes);
+            gzip   = new GZIPInputStream(in);
+            int len = 0;
+            while ((len = gzip.read(buffer, 0, CHUNK_SIZE)) != -1) {
+                out.write(buffer, 0, len);
             }
             return out.toByteArray();
         }
+        catch (IOException ex){
+            Log.w(Log.TAG, "Failed to decompress gzipped data: " + ex.getMessage());
+            return null;
+        }
         finally {
-            try{ out.close(); }catch(IOException ex){}
+            try{ if(out  != null) { out.close();  } } catch(IOException ex) {}
+            try{ if(in   != null) { in.close();   } } catch(IOException ex) {}
+            try{ if(gzip != null) { gzip.close(); } } catch(IOException ex) {}
         }
     }
 

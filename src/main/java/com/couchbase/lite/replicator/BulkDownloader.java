@@ -173,19 +173,17 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 else {
                     Log.v(Log.TAG_SYNC, "contentTypeHeader is not multipart = %s",contentTypeHeader.getValue());
                     if (entity != null) {
-
-                        inputStream = entity.getContent();
-                        // decompress if contentEncoding is gzip
-                        if(Utils.isGzip(entity)){
-                            inputStream = new GZIPInputStream(inputStream);
-                        }
                         try {
-                            fullBody = Manager.getObjectMapper().readValue(inputStream,
-                                    Object.class);
+                            inputStream = entity.getContent();
+                            // decompress if contentEncoding is gzip
+                            if(Utils.isGzip(entity)){
+                                inputStream = new GZIPInputStream(inputStream);
+                            }
+                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                             respondWithResult(fullBody, error, response);
                         } finally {
                             try {
-                                inputStream.close();
+                                if(inputStream != null) { inputStream.close(); }
                             } catch (IOException e) {
                             }
                         }
