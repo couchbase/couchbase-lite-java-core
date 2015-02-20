@@ -3721,6 +3721,7 @@ public final class Database {
 
             if(newSequence <= 0) {
                 // duplicate rev; see above
+                resultStatus.setCode(Status.OK);
                 notifyChange(newRev, winningRev, null, inConflict);
                 return newRev;
             }
