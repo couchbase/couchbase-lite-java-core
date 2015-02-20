@@ -156,6 +156,9 @@ public final class Database {
     /**
      * @exclude
      */
+    // First-time initialization:
+    // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
+    // monotonically increasing, never reused. See <http://www.sqlite.org/autoinc.html>)
     public static final String SCHEMA = "" +
             "CREATE TABLE docs ( " +
             "        doc_id INTEGER PRIMARY KEY, " +
@@ -168,7 +171,8 @@ public final class Database {
             "        parent INTEGER REFERENCES revs(sequence) ON DELETE SET NULL, " +
             "        current BOOLEAN, " +
             "        deleted BOOLEAN DEFAULT 0, " +
-            "        json BLOB); " +
+            "        json BLOB, " +
+            "        UNIQUE (doc_id, revid)); " +
             "    CREATE INDEX revs_by_id ON revs(revid, doc_id); " +
             "    CREATE INDEX revs_current ON revs(doc_id, current); " +
             "    CREATE INDEX revs_parent ON revs(parent); " +
@@ -3716,7 +3720,10 @@ public final class Database {
             }
 
             if(newSequence <= 0) {
-                return null; // duplicate rev; see above
+                // duplicate rev; see above
+                resultStatus.setCode(Status.OK);
+                notifyChange(newRev, winningRev, null, inConflict);
+                return newRev;
             }
 
             // Store any attachments:
