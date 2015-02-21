@@ -17,6 +17,8 @@
 
 package com.couchbase.lite;
 
+import com.couchbase.lite.util.Log;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -31,8 +33,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
-
-import com.couchbase.lite.util.Log;
 
 /**
  * A persistent content-addressable store for arbitrary-size data blobs.
@@ -102,7 +102,24 @@ public class BlobStore {
     }
 
     public String pathForKey(BlobKey key) {
-        return path + File.separator + BlobKey.convertToHex(key.getBytes()) + FILE_EXTENSION;
+        String hexKey = BlobKey.convertToHex(key.getBytes());
+
+        String filename = path + File.separator + hexKey + FILE_EXTENSION;
+
+        // CBL Android/Java used to use lowercase hex string. But it was inconsistent with CBL iOS.
+        // We fixed it in BlobKey.covertToHex().
+        // In case user will migrate from older version of CBL to newer version, it causes filename mismatch by upper or lower case.
+        // As pathForKey() method is called from many other functions, file mismatch check is added here.
+        File file = new File(filename);
+        if(!file.exists()){
+            String lowercaseFilename = path + File.separator + hexKey.toLowerCase() + FILE_EXTENSION;
+            File lowercaseFile = new File(lowercaseFilename);
+            if(lowercaseFile.exists()){
+                filename = lowercaseFilename;
+            }
+        }
+
+        return filename;
     }
 
     public long getSizeOfBlob(BlobKey key) {
