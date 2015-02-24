@@ -11,7 +11,7 @@ import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 
-import org.codehaus.jackson.map.ObjectMapper;
+import  com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.File;
 import java.io.FileNotFoundException;

@@ -36,7 +36,13 @@ public class JsonDocument {
                 tmp = new LazyJsonArray<Object>(json);
             } else {
                 try {
-                    tmp = Manager.getObjectMapper().readValue(json, Object.class);
+                    // this is for Jackson 2.5.0
+                    if(json.length > 0 && json[json.length - 1] == 0) {
+                        tmp = Manager.getObjectMapper().readValue(json, 0, json.length - 1, Object.class);
+                    }
+                    else {
+                        tmp = Manager.getObjectMapper().readValue(json, Object.class);
+                    }
                 } catch (Exception e) {
                     //cached will remain null
                     Log.w(Database.TAG, "Exception parsing json", e);
