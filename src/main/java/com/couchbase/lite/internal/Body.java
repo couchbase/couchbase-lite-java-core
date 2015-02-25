@@ -17,14 +17,13 @@
 
 package com.couchbase.lite.internal;
 
+import com.couchbase.lite.Manager;
+import com.fasterxml.jackson.databind.ObjectWriter;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-
-import org.codehaus.jackson.map.ObjectWriter;
-
-import com.couchbase.lite.Manager;
 
 /**
  * A request/response/document body, stored as either JSON or a Map<String,Object>
