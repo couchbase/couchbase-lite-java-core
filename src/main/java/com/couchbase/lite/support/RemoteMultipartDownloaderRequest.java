@@ -17,7 +17,6 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.zip.GZIPInputStream;
@@ -35,7 +34,6 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
     @Override
     public void run() {
-
         HttpClient httpClient = clientFactory.getHttpClient();
 
         preemptivelySetAuthCredentials(httpClient);
@@ -50,13 +48,13 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
         executeRequest(httpClient, request);
     }
 
+    private static final int BUF_LEN = 1024;
     protected void executeRequest(HttpClient httpClient, HttpUriRequest request) {
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
 
         try {
-
             if (request.isAborted()) {
                 respondWithResult(fullBody, new Exception(String.format("%s: Request %s has been aborted", this, request)), response);
                 return;
@@ -81,63 +79,58 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         status.getReasonPhrase());
                 respondWithResult(fullBody, error, response);
             } else {
+                HttpEntity entity = null;
+                try {
+                    entity = response.getEntity();
+                    if (entity != null) {
+                        InputStream inputStream = null;
+                        try {
+                            inputStream = entity.getContent();
 
-                HttpEntity entity = response.getEntity();
-                Header contentTypeHeader = entity.getContentType();
-                InputStream inputStream = null;
-
-                if (contentTypeHeader != null
-                        && contentTypeHeader.getValue().contains("multipart/related")) {
-
-                    try {
-                        MultipartDocumentReader reader = new MultipartDocumentReader(response, db);
-                        reader.setHeaders(Utils.headersToMap(response.getAllHeaders()));
-                        inputStream = entity.getContent();
-
-                        int bufLen = 1024;
-                        byte[] buffer = new byte[bufLen];
-                        int numBytesRead = 0;
-                        while ( (numBytesRead = inputStream.read(buffer))!= -1 ) {
-                            if (numBytesRead != bufLen) {
-                                byte[] bufferToAppend = Arrays.copyOfRange(buffer, 0, numBytesRead);
-                                reader.appendData(bufferToAppend);
-                            }
-                            else {
-                                reader.appendData(buffer);
+                            Header contentTypeHeader = entity.getContentType();
+                            if (contentTypeHeader != null) {
+                                // multipart
+                                if (contentTypeHeader.getValue().contains("multipart/related")) {
+                                    MultipartDocumentReader reader = new MultipartDocumentReader(response, db);
+                                    reader.setHeaders(Utils.headersToMap(response.getAllHeaders()));
+                                    byte[] buffer = new byte[BUF_LEN];
+                                    int numBytesRead = 0;
+                                    while ((numBytesRead = inputStream.read(buffer)) != -1) {
+                                        reader.appendData(buffer, 0, numBytesRead);
+                                    }
+                                    reader.finish();
+                                    fullBody = reader.getDocumentProperties();
+                                    respondWithResult(fullBody, error, response);
+                                }
+                                // non-multipart
+                                else {
+                                    GZIPInputStream gzipStream = null;
+                                    try {
+                                        // decompress if contentEncoding is gzip
+                                        Header contentEncoding = entity.getContentEncoding();
+                                        if (contentEncoding != null && contentEncoding.getValue().contains("gzip")) {
+                                            gzipStream = new GZIPInputStream(inputStream);
+                                            fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
+                                        } else {
+                                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
+                                        }
+                                        respondWithResult(fullBody, error, response);
+                                    } finally {
+                                        try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
+                                        gzipStream = null;
+                                    }
+                                }
                             }
                         }
-
-                        reader.finish();
-                        fullBody = reader.getDocumentProperties();
-
-                        respondWithResult(fullBody, error, response);
-
-                    } finally {
-                        try {
-                            inputStream.close();
-                        } catch (IOException e) {
+                        finally {
+                            try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
+                            inputStream = null;
                         }
                     }
                 }
-                else {
-                    if (entity != null) {
-                        try {
-                            inputStream = entity.getContent();
-                            // decompress if contentEncoding is gzip
-                            Header contentEncoding = entity.getContentEncoding();
-                            if(contentEncoding != null && contentEncoding.getValue().contains("gzip")){
-                                inputStream = new GZIPInputStream(inputStream);
-                            }
-                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
-                            respondWithResult(fullBody, error, response);
-                        } finally {
-                            try {
-                                if(inputStream != null){ inputStream.close(); }
-                            } catch (IOException e) {
-                            }
-                        }
-                    }
-
+                finally{
+                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
+                    entity = null;
                 }
             }
         } catch (IOException e) {
@@ -152,5 +145,4 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
             Log.d(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
         }
     }
-
 }

@@ -53,7 +53,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to parse json buffer", e);
         }
-
+        json = null;
         jsonBuffer = null;
     }
 
@@ -89,6 +89,14 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         }
         else {
             jsonBuffer.append(data, 0, data.length);
+        }
+    }
+    public void appendData(byte[] data, int off, int len) {
+        if (multipartReader != null) {
+            multipartReader.appendData(data, off, len);
+        }
+        else {
+            jsonBuffer.append(data, off, len);
         }
     }
 
@@ -179,7 +187,6 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 Log.w(Log.TAG_REMOTE_REQUEST, "Attachment '%s' sent inline (len=%d).  Large attachments " +
                         "should be sent in MIME parts for reduced memory overhead.", attachmentName, length);
             }
-
         }
 
         if (numAttachmentsInDoc < attachmentsByMd5Digest.size()) {
@@ -216,11 +223,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 }
             }
         }
-
-
     }
-
-
 
     @Override
     public void appendToPart(byte[] data) {
@@ -243,7 +246,5 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             attachmentsByMd5Digest.put(md5String, curAttachment);
             curAttachment = null;
         }
-
-
     }
 }

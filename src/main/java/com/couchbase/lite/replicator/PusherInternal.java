@@ -573,6 +573,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             }
                         }
                         multiPart.addPart("param1", new StringBody(compressed, "application/json", utf8charset, contentEncoding));
+                        uncompressed = null;
+                        compressed = null;
                     } catch (IOException e) {
                         throw new IllegalArgumentException(e);
                     }

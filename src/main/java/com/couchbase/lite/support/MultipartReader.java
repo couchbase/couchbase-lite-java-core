@@ -126,14 +126,17 @@ public class MultipartReader {
     }
 
     public void appendData(byte[] data) {
+        appendData(data, 0, data.length);
+    }
+    public void appendData(byte[] data, int off, int len) {
 
         if (buffer == null) {
             return;
         }
-        if (data.length == 0) {
+        if (len == 0) {
             return;
         }
-        buffer.append(data, 0, data.length);
+        buffer.append(data, off, len);
 
         MultipartReaderState nextState;
         do {

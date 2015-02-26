@@ -329,9 +329,10 @@ public class ChangeTracker implements Runnable {
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 if (entity != null) {
+                    InputStream inputStream = null;
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
-                        InputStream inputStream = entity.getContent();
+                        inputStream = entity.getContent();
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             boolean responseOK = false; // default value
                             // check content length, ObjectMapper().readValue() throws Exception if size is 0.
@@ -360,9 +361,8 @@ public class ChangeTracker implements Runnable {
                         } else {  // one-shot replications
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
-                            JsonFactory jsonFactory = Manager.getObjectMapper().getJsonFactory();
-                            JsonParser jp = jsonFactory.createJsonParser(inputStream);
-
+                            JsonFactory factory=new JsonFactory();
+                            JsonParser jp = factory.createParser(inputStream);
                             while (jp.nextToken() != JsonToken.START_ARRAY) {
                                 // ignore these tokens
                             }
@@ -372,6 +372,11 @@ public class ChangeTracker implements Runnable {
                                 if (!receivedChange(change)) {
                                     Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
                                 }
+                            }
+
+                            if(jp != null){
+                                jp.close();
+                                jp = null;
                             }
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
@@ -389,10 +394,10 @@ public class ChangeTracker implements Runnable {
 
                         backoff.resetBackoff();
                     } finally {
-                        try {
-                            entity.consumeContent();
-                        } catch (IOException ex) {
-                        }
+                        try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
+                        inputStream = null;
+                        if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
+                        entity = null;
                     }
                 }
             } catch (Exception e) {
