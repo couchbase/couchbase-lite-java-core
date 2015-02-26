@@ -19,25 +19,25 @@ public class MultipartReader {
         kAtEnd,
         kFailed
     }
-    private static Charset utf8 = Charset.forName("UTF-8");
-    private static byte[] kCRLFCRLF = new String("\r\n\r\n").getBytes(utf8);
+    private static final Charset utf8 = Charset.forName("UTF-8");
+    private static final byte[] kCRLFCRLF = new String("\r\n\r\n").getBytes(utf8);
 
-    private MultipartReaderState state;
-    private ByteArrayBuffer buffer;
-    private String contentType;
-    private byte[] boundary;
-    private MultipartReaderDelegate delegate;
-    public Map<String, String> headers;
+    private MultipartReaderState state = null;
+    private ByteArrayBuffer buffer = null;
+    private String contentType = null;
+    private byte[] boundary = null;
+    private byte[] boundaryWithoutLeadingCRLF = null;
+    private MultipartReaderDelegate delegate = null;
+    public Map<String, String> headers = null;
 
     public MultipartReader(String contentType, MultipartReaderDelegate delegate) {
-
         this.contentType = contentType;
         this.delegate = delegate;
+
         this.buffer = new ByteArrayBuffer(1024);
         this.state = MultipartReaderState.kAtStart;
 
         parseContentType();
-
     }
 
     public byte[] getBoundary() {
@@ -45,9 +45,11 @@ public class MultipartReader {
     }
 
     public byte[] getBoundaryWithoutLeadingCRLF() {
-        byte[] rawBoundary = getBoundary();
-        byte[] result = Arrays.copyOfRange(rawBoundary, 2, rawBoundary.length);
-        return result;
+        if(boundaryWithoutLeadingCRLF == null) {
+            byte[] rawBoundary = getBoundary();
+            boundaryWithoutLeadingCRLF = Arrays.copyOfRange(rawBoundary, 2, rawBoundary.length);
+        }
+        return boundaryWithoutLeadingCRLF;
     }
 
     public boolean finished() {
@@ -219,8 +221,10 @@ public class MultipartReader {
     }
 
     private void close() {
+        if(buffer!=null)buffer.clear();
         buffer = null;
         boundary = null;
+        boundaryWithoutLeadingCRLF = null;
     }
 
     private void parseContentType() {
