@@ -7,17 +7,15 @@ import com.couchbase.lite.Misc;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 
-import org.apache.http.HttpResponse;
 import org.apache.http.util.ByteArrayBuffer;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 public class MultipartDocumentReader implements MultipartReaderDelegate {
-
-    /** The response which contains the input stream we need to read from */
-    private HttpResponse response;
 
     private MultipartReader multipartReader;
     private BlobStoreWriter curAttachment;
@@ -28,11 +26,9 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     private Map<String, BlobStoreWriter> attachmentsByName;
     private Map<String, BlobStoreWriter> attachmentsByMd5Digest;
 
-    public MultipartDocumentReader(HttpResponse response, Database database) {
-        this.response = response;
+    public MultipartDocumentReader(Database database) {
         this.database = database;
     }
-
 
     public Map<String, Object> getDocumentProperties() {
         return document;
@@ -40,21 +36,33 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
     public void parseJsonBuffer() {
         byte[] json = jsonBuffer.toByteArray();
+        jsonBuffer.clear();
+        jsonBuffer = null;
 
         if(jsonCompressed){
-            json = Utils.decompressByGzip(json);
-            if(json == null){
-                throw new IllegalStateException("Received corrupt gzip-encoded JSON part");
+            ByteArrayInputStream byteArrayInputStream = null;
+            GZIPInputStream gzipInputStream = null;
+            try {
+                byteArrayInputStream = new ByteArrayInputStream(json);
+                gzipInputStream = new GZIPInputStream(byteArrayInputStream);
+                document = Manager.getObjectMapper().readValue(gzipInputStream, Map.class);
+            }
+            catch(IOException e){
+                throw new IllegalStateException("Failed to parse json buffer", e);
+            }
+            finally {
+                if(byteArrayInputStream   != null) try{ byteArrayInputStream.close();   } catch(IOException e){}
+                if(gzipInputStream != null) try{ gzipInputStream.close(); } catch(IOException e){}
+            }
+        }else{
+            try {
+                document = Manager.getObjectMapper().readValue(json, Map.class);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to parse json buffer", e);
             }
         }
 
-        try {
-            document = Manager.getObjectMapper().readValue(json, Map.class);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to parse json buffer", e);
-        }
         json = null;
-        jsonBuffer = null;
     }
 
     public void setHeaders(Map<String, String> headers){

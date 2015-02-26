@@ -91,7 +91,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                             if (contentTypeHeader != null) {
                                 // multipart
                                 if (contentTypeHeader.getValue().contains("multipart/related")) {
-                                    MultipartDocumentReader reader = new MultipartDocumentReader(response, db);
+                                    MultipartDocumentReader reader = new MultipartDocumentReader(db);
                                     reader.setHeaders(Utils.headersToMap(response.getAllHeaders()));
                                     byte[] buffer = new byte[BUF_LEN];
                                     int numBytesRead = 0;

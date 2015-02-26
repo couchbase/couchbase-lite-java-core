@@ -202,7 +202,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         }
         Log.v(Log.TAG_SYNC, "%s: Starting new document; headers =%s", this, headers);
         Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
-        _docReader = new MultipartDocumentReader(null, _db);
+        _docReader = new MultipartDocumentReader(_db);
         _docReader.setHeaders(headers);
         _docReader.startedPart(headers);
     }
