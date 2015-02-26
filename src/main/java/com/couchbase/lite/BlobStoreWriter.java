@@ -69,14 +69,17 @@ public class BlobStoreWriter {
 
     /** Appends data to the blob. Call this when new data is available. */
     public void appendData(byte[] data)  {
+        appendData(data, 0, data.length);
+    }
+    public void appendData(final byte[] data, int off, int len)  {
         try {
-            outStream.write(data);
+            outStream.write(data, off, len);
         } catch (IOException e) {
             throw new RuntimeException("Unable to write to stream.", e);
         }
-        length += data.length;
-        sha1Digest.update(data);
-        md5Digest.update(data);
+        length += len;
+        sha1Digest.update(data, off, len);
+        md5Digest.update(data, off, len);
     }
 
     void read(InputStream inputStream) {

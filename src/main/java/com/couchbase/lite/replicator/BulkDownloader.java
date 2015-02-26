@@ -212,12 +212,15 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
      */
 
     public void appendToPart(byte[] data) {
+        appendToPart(data, 0, data.length);
+    }
+
+    public void appendToPart(final byte[] data, int off, int len) {
         if (_docReader == null) {
             throw new IllegalStateException("_docReader is not defined");
         }
-        _docReader.appendData(data);
+        _docReader.appendData(data, off, len);
     }
-
     /**
      * This method is called when a part is complete.
      */

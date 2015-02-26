@@ -235,11 +235,16 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
     @Override
     public void appendToPart(byte[] data) {
+        appendToPart(data, 0, data.length);
+    }
+
+    @Override
+    public void appendToPart(final byte[] data, int off, int len) {
         if (jsonBuffer != null) {
-            jsonBuffer.append(data, 0, data.length);
+            jsonBuffer.append(data, off, len);
         }
         else {
-            curAttachment.appendData(data);
+            curAttachment.appendData(data, off, len);
         }
     }
 
