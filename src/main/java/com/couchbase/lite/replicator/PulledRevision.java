@@ -14,15 +14,15 @@ import java.util.Map;
 class PulledRevision extends RevisionInternal {
 
     public PulledRevision(Body body, Database database) {
-        super(body, database);
+        super(body);
     }
 
     public PulledRevision(String docId, String revId, boolean deleted, Database database) {
-        super(docId, revId, deleted, database);
+        super(docId, revId, deleted);
     }
 
     public PulledRevision(Map<String, Object> properties, Database database) {
-        super(properties, database);
+        super(properties);
     }
 
     protected String remoteSequenceID;

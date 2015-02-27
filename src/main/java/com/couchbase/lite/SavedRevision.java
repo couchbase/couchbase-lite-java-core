@@ -198,10 +198,7 @@ public final class SavedRevision extends Revision {
         } catch (CouchbaseLiteException e) {
             throw new RuntimeException(e);
         }
-
     }
-
-
 }
 
 

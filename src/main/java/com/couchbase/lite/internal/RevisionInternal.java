@@ -17,7 +17,6 @@
 
 package com.couchbase.lite.internal;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.util.CollectionUtils;
 
 import java.util.HashMap;
@@ -37,25 +36,23 @@ public class RevisionInternal {
     private boolean missing;
     private Body body;
     private long sequence;
-    private Database database;  // TODO: get rid of this field!
 
-    public RevisionInternal(String docId, String revId, boolean deleted, Database database) {
+    public RevisionInternal(String docId, String revId, boolean deleted) {
         this.docId = docId;
         this.revId = revId;
         this.deleted = deleted;
-        this.database = database;
     }
 
-    public RevisionInternal(Body body, Database database) {
+    public RevisionInternal(Body body) {
         this((String) body.getPropertyForKey("_id"),
                 (String) body.getPropertyForKey("_rev"),
                 (((Boolean) body.getPropertyForKey("_deleted") != null)
-                        && ((Boolean) body.getPropertyForKey("_deleted") == true)), database);
+                        && ((Boolean) body.getPropertyForKey("_deleted") == true)));
         this.body = body;
     }
 
-    public RevisionInternal(Map<String, Object> properties, Database database) {
-        this(new Body(properties), database);
+    public RevisionInternal(Map<String, Object> properties) {
+        this(new Body(properties));
     }
 
     public Map<String, Object> getProperties() {
@@ -161,7 +158,7 @@ public class RevisionInternal {
         //assert((docId != null) && (revId != null));
         assert (docId != null);
         assert ((this.docId == null) || (this.docId.equals(docId)));
-        RevisionInternal result = new RevisionInternal(docId, revId, deleted, database);
+        RevisionInternal result = new RevisionInternal(docId, revId, deleted);
         Map<String, Object> unmodifiableProperties = getProperties();
         Map<String, Object> properties = new HashMap<String, Object>();
         if (unmodifiableProperties != null) {
@@ -313,5 +310,4 @@ public class RevisionInternal {
         }
         return new HashMap<String, Object>();
     }
-
 }

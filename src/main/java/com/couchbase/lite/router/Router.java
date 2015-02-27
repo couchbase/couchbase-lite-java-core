@@ -941,7 +941,7 @@ public class Router implements Database.ChangeListener {
                 Status status = new Status(Status.OK);
                 Body docBody = new Body(doc);
                 if (noNewEdits) {
-                    rev = new RevisionInternal(docBody, db);
+                    rev = new RevisionInternal(docBody);
                     if(rev.getRevId() == null || rev.getDocId() == null || !rev.getDocId().equals(docID)) {
                         status =  new Status(Status.BAD_REQUEST);
                     } else {
@@ -1000,7 +1000,7 @@ public class Router implements Database.ChangeListener {
         for (String docID : body.keySet()) {
             List<String> revIDs = (List<String>)body.get(docID);
             for (String revID : revIDs) {
-                RevisionInternal rev = new RevisionInternal(docID, revID, false, db);
+                RevisionInternal rev = new RevisionInternal(docID, revID, false);
                 revs.add(rev);
             }
         }
@@ -1501,7 +1501,7 @@ public class Router implements Database.ChangeListener {
             prevRevID = getRevIDFromIfMatchHeader();
         }
 
-        RevisionInternal rev = new RevisionInternal(docID, null, deleting, db);
+        RevisionInternal rev = new RevisionInternal(docID, null, deleting);
         rev.setBody(body);
 
         RevisionInternal result = null;
@@ -1584,7 +1584,7 @@ public class Router implements Database.ChangeListener {
         } else {
             // PUT with new_edits=false -- forcible insertion of existing revision:
             Body body = new Body(bodyDict);
-            RevisionInternal rev = new RevisionInternal(body, _db);
+            RevisionInternal rev = new RevisionInternal(body);
             if(rev.getRevId() == null || rev.getDocId() == null || !rev.getDocId().equals(docID)) {
                 throw new CouchbaseLiteException(Status.BAD_REQUEST);
             }
