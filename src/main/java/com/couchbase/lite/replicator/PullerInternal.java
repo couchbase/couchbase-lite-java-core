@@ -348,10 +348,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         Future future = remoteRequestExecutor.submit(dl);
         pendingFutures.add(future);
-
     }
-
-
 
     // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
     private void queueDownloadedRevision(RevisionInternal rev) {
@@ -388,10 +385,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             }
         }
 
-        //TODO: rev.getBody().compact();
+        if(rev != null && rev.getBody() != null)
+            rev.getBody().compact();
 
         downloadsToInsert.queueObject(rev);
-
     }
 
 
@@ -543,12 +540,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 Log.d(Log.TAG_SYNC, "%s insertDownloads() updating completedChangesCount from %d -> %d ", this, getCompletedChangesCount().get(), newCompletedChangesCount);
 
                 addToCompletedChangesCount(downloads.size());
-
             }
-
         }
-
-
     }
 
     @InterfaceAudience.Private
@@ -613,6 +606,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     // Add to batcher ... eventually it will be fed to -insertDownloads:.
 
                     // TODO: [gotRev.body compact];
+                    if(gotRev.getBody() != null)
+                        gotRev.getBody().compact();
                     Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s", PullerInternal.this, gotRev, downloadsToInsert);
                     downloadsToInsert.queueObject(gotRev);
                 }

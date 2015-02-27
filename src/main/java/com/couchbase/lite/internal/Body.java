@@ -28,8 +28,8 @@ import java.util.Map;
 /**
  * A request/response/document body, stored as either JSON or a Map<String,Object>
  */
-public class Body {
-
+public class Body
+{
     private byte[] json;
     private Object object;
 
@@ -140,4 +140,13 @@ public class Body {
         return theProperties.get(key);
     }
 
+    public boolean compact(){
+        try {
+            getJson();
+        }catch (RuntimeException re){
+            return false;
+        }
+        this.object = null;
+        return true;
+    }
 }
