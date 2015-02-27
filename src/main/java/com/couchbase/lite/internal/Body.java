@@ -21,7 +21,6 @@ import com.couchbase.lite.Manager;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -126,8 +125,9 @@ public class Body
     public Map<String, Object> getProperties() {
         Object object = getObject();
         if(object instanceof Map) {
-            Map<String, Object> map = (Map<String, Object>) object;
-            return Collections.unmodifiableMap(map);
+            // NOTE: Recreating new Map is not memory efficient. And iOS also does not do.
+            //return Collections.unmodifiableMap(map);
+            return (Map<String, Object>) object;
         }
         return null;
     }
