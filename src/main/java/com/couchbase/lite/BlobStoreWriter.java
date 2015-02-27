@@ -19,27 +19,27 @@ import java.security.NoSuchAlgorithmException;
 public class BlobStoreWriter {
 
     /** The underlying blob store where it should be stored. */
-    private BlobStore store;
+    private BlobStore store =  null;
 
     /** The number of bytes in the blob. */
-    private int length;
+    private int length = 0;
 
     /** After finishing, this is the key for looking up the blob through the CBL_BlobStore. */
-    private BlobKey blobKey;
+    private BlobKey blobKey =  null;
 
     /** After finishing, store md5 digest result here */
-    private byte[] md5DigestResult;
+    private byte[] md5DigestResult =  null;
 
     /** Message digest for sha1 that is updated as data is appended */
-    private MessageDigest sha1Digest;
-    private MessageDigest md5Digest;
+    private MessageDigest sha1Digest =  null;
+    private MessageDigest md5Digest =  null;
 
-    private BufferedOutputStream outStream;
-    private File tempFile;
+    //private FileOutputStream     fos = null;
+    private BufferedOutputStream outStream = null;
+    private File tempFile =  null;
 
     public BlobStoreWriter(BlobStore store) {
         this.store = store;
-
         try {
             sha1Digest = MessageDigest.getInstance("SHA-1");
             sha1Digest.reset();
@@ -48,29 +48,27 @@ public class BlobStoreWriter {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
-
         try {
             openTempFile();
         } catch (FileNotFoundException e) {
             throw new IllegalStateException(e);
         }
-
     }
 
-    private void openTempFile() throws FileNotFoundException {
-
+    private void openTempFile() throws FileNotFoundException
+    {
         String uuid = Misc.TDCreateUUID();
         String filename = String.format("%s.blobtmp", uuid);
         File tempDir = store.tempDir();
         tempFile = new File(tempDir, filename);
         outStream = new BufferedOutputStream(new FileOutputStream(tempFile));
-
     }
 
     /** Appends data to the blob. Call this when new data is available. */
     public void appendData(byte[] data)  {
         appendData(data, 0, data.length);
     }
+
     public void appendData(final byte[] data, int off, int len)  {
         try {
             outStream.write(data, off, len);
@@ -98,6 +96,7 @@ public class BlobStoreWriter {
         } finally {
             try {
                 inputStream.close();
+                inputStream = null;
             } catch (IOException e) {
                 Log.w(Log.TAG_BLOB_STORE, "Exception closing input stream", e);
             }
@@ -107,9 +106,13 @@ public class BlobStoreWriter {
     /** Call this after all the data has been added. */
     public void finish() {
         try {
-            outStream.close();
+            if(outStream != null) {
+                // FileOutputStream is also closed cascadingly
+                outStream.close();
+                outStream = null;
+            }
         } catch (IOException e) {
-            Log.w(Log.TAG_BLOB_STORE, "Exception closing output stream", e);
+            Log.w(Log.TAG_BLOB_STORE, "Exception closing buffered output stream", e);
         }
         blobKey = new BlobKey(sha1Digest.digest());
         md5DigestResult = md5Digest.digest();
@@ -118,16 +121,20 @@ public class BlobStoreWriter {
     /** Call this to cancel before finishing the data. */
     public void cancel() {
         try {
-            outStream.close();
+            // FileOutputStream is also closed cascadingly
+            if(outStream != null) {
+                outStream.close();
+                outStream = null;
+            }
         } catch (IOException e) {
-            Log.w(Log.TAG_BLOB_STORE, "Exception closing output stream", e);
+            Log.w(Log.TAG_BLOB_STORE, "Exception closing buffered output stream", e);
         }
         tempFile.delete();
     }
 
     /** Installs a finished blob into the store. */
-    public void install() {
-
+    public void install()
+    {
         if (tempFile == null) {
             return;  // already installed
         }
@@ -144,7 +151,6 @@ public class BlobStoreWriter {
         }
 
         tempFile = null;
-
     }
 
     public String mD5DigestString() {

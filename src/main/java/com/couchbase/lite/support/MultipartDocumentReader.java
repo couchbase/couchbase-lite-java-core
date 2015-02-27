@@ -34,35 +34,35 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         return document;
     }
 
-    public void parseJsonBuffer() {
-        byte[] json = jsonBuffer.toByteArray();
-        jsonBuffer.clear();
-        jsonBuffer = null;
-
-        if(jsonCompressed){
-            ByteArrayInputStream byteArrayInputStream = null;
-            GZIPInputStream gzipInputStream = null;
-            try {
-                byteArrayInputStream = new ByteArrayInputStream(json);
-                gzipInputStream = new GZIPInputStream(byteArrayInputStream);
-                document = Manager.getObjectMapper().readValue(gzipInputStream, Map.class);
+    public void parseJsonBuffer()
+    {
+        ByteArrayInputStream inputStream = null;
+        try {
+            inputStream = new ByteArrayInputStream(jsonBuffer.buffer(), 0, jsonBuffer.length());
+            // compressed json
+            if (jsonCompressed) {
+                GZIPInputStream gzipStream = null;
+                try {
+                    gzipStream = new GZIPInputStream(inputStream);
+                    document = Manager.getObjectMapper().readValue(gzipStream, Map.class);
+                }
+                finally {
+                    if (gzipStream != null) { try { gzipStream.close(); } catch (IOException e) { } }
+                }
             }
-            catch(IOException e){
-                throw new IllegalStateException("Failed to parse json buffer", e);
-            }
-            finally {
-                if(byteArrayInputStream   != null) try{ byteArrayInputStream.close();   } catch(IOException e){}
-                if(gzipInputStream != null) try{ gzipInputStream.close(); } catch(IOException e){}
-            }
-        }else{
-            try {
-                document = Manager.getObjectMapper().readValue(json, Map.class);
-            } catch (IOException e) {
-                throw new IllegalStateException("Failed to parse json buffer", e);
+            //  plain json
+            else {
+                document = Manager.getObjectMapper().readValue(inputStream, Map.class);
             }
         }
-
-        json = null;
+        catch (IOException e) {
+            throw new IllegalStateException("Failed to parse json buffer", e);
+        }
+        finally {
+            if (inputStream != null) { try { inputStream.close(); } catch (IOException e) { } }
+            jsonBuffer.clear();
+            jsonBuffer = null;
+        }
     }
 
     public void setHeaders(Map<String, String> headers){
@@ -84,8 +84,8 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         else {
             throw new IllegalArgumentException("Unknown/invalid MIME type");
         }
-
     }
+
     protected void startJSONBufferWithHeaders(Map<String, String> headers){
         jsonBuffer = new ByteArrayBuffer(1024);
         jsonCompressed = Utils.isGzip(headers.get("Content-Encoding"));

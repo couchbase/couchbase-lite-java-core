@@ -147,7 +147,7 @@ public class MultipartReader {
                     // The entire message might start with a boundary without a leading CRLF.
                     byte[] boundaryWithoutLeadingCRLF = getBoundaryWithoutLeadingCRLF();
                     if (bufLen >= boundaryWithoutLeadingCRLF.length) {
-                        if (memcmp(buffer.toByteArray(), boundaryWithoutLeadingCRLF, boundaryWithoutLeadingCRLF.length)) {
+                        if (memcmp(buffer.buffer(), boundaryWithoutLeadingCRLF, boundaryWithoutLeadingCRLF.length)) {
                             deleteUpThrough(boundaryWithoutLeadingCRLF.length);
                             nextState = MultipartReaderState.kInHeaders;
                         } else {
@@ -179,7 +179,7 @@ public class MultipartReader {
                 }
                 case kInHeaders: {
                     // First check for the end-of-message string ("--" after separator):
-                    if (bufLen >= kEOM.length && memcmp(buffer.toByteArray(), kEOM, kEOM.length)) {
+                    if (bufLen >= kEOM.length && memcmp(buffer.buffer(), kEOM, kEOM.length)) {
                         state = MultipartReaderState.kAtEnd;
                         close();
                         return;
