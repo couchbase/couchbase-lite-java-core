@@ -595,19 +595,21 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     revisionFailed(rev, e);
                 } else {
                     Map<String, Object> properties = (Map<String, Object>) result;
-                    PulledRevision gotRev = new PulledRevision(properties, db);
+                    PulledRevision gotRev = new PulledRevision(properties);
                     gotRev.setSequence(rev.getSequence());
-                    // Add to batcher ... eventually it will be fed to -insertDownloads:.
 
-                    if(gotRev.getBody() != null)
-                        gotRev.getBody().compact();
+                    //if(gotRev.getBody() != null)
+                    //    gotRev.getBody().compact();
+
                     Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s", PullerInternal.this, gotRev, downloadsToInsert);
+
+                    // Add to batcher ... eventually it will be fed to -insertRevisions:.
                     downloadsToInsert.queueObject(gotRev);
                 }
 
-                // Note that we've finished this task; then start another one if there
-                // are still revisions waiting to be pulled:
+                // Note that we've finished this task:
                 --httpConnectionCount;
+                // Start another task if there are still revisions waiting to be pulled:
                 pullRemoteRevisions();
             }
         });
@@ -714,7 +716,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (revID == null) {
                 continue;
             }
-            PulledRevision rev = new PulledRevision(docID, revID, deleted, db);
+            PulledRevision rev = new PulledRevision(docID, revID, deleted);
             rev.setRemoteSequenceID(lastSequence);
             Log.d(Log.TAG_SYNC, "%s: adding rev to inbox %s", this, rev);
 
@@ -841,6 +843,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         e.printStackTrace();
                     }
                     finally {
+                        // TODO: this might cause inappropriate IDLE notification.
                         fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
                     }
                     Log.e(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");

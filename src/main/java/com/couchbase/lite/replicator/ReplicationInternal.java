@@ -65,8 +65,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     public static final String CHANNELS_QUERY_PARAM = "channels";
 
-    public static final String REPLICATOR_DATABASE_NAME = "_replicator";
-
     public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
 
     private static int lastSessionID = 0;
