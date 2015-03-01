@@ -27,8 +27,7 @@ import java.util.Map;
 /**
  * A request/response/document body, stored as either JSON or a Map<String,Object>
  */
-public class Body
-{
+public class Body{
     private byte[] json;
     private Object object;
 
@@ -148,5 +147,10 @@ public class Body
         }
         this.object = null;
         return true;
+    }
+
+    public void release(){
+        this.object = null;
+        this.json = null;
     }
 }

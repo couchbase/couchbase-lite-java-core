@@ -509,9 +509,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     }
                 }
 
+                if(rev.getBody() != null) rev.getBody().release();
+
                 // Mark this revision's fake sequence as processed:
                 pendingSequences.removeSequence(fakeSequence);
-
             }
 
             Log.v(Log.TAG_SYNC, "%s: finished inserting %d revisions", this, downloads.size());
@@ -697,8 +698,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         });
     }
 
-    protected void processChangeTrackerChange(final Map<String, Object> change) {
-
+    protected void processChangeTrackerChange(final Map<String, Object> change)
+    {
         String lastSequence = change.get("seq").toString();
         String docID = (String) change.get("id");
         if (docID == null) {
@@ -752,6 +753,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Log.d(Log.TAG_SYNC, "changeTrackerStopped.  lifecycle: %s", lifecycle);
         switch (lifecycle) {
             case ONESHOT:
+                // TODO: This is too early to fire STOP_GRACEFUL, Need to change.
                 Log.d(Log.TAG_SYNC, "fire STOP_GRACEFUL");
                 if (tracker.getLastError() != null) {
                     setError(tracker.getLastError());
@@ -763,14 +765,14 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     // in this case, we don't want to do anything here, since
                     // we told the change tracker to go offline ..
                     Log.d(Log.TAG_SYNC, "Change tracker stopped because we are going offline");
-                } else {
+                }
+                else {
                     // otherwise, try to restart the change tracker, since it should
                     // always be running in continuous replications
                     String msg = String.format("Change tracker stopped during continuous replication");
                     Log.e(Log.TAG_SYNC, msg);
                     parentReplication.setLastError(new Exception(msg));
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-
                     Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);
                     workExecutor.schedule(new Runnable() {
                         @Override
@@ -788,24 +790,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 }
                 break;
             default:
-                throw new RuntimeException(String.format("Unknown lifecycle: %s", lifecycle));
-
+                Log.e(Log.TAG_SYNC, String.format("Unknown lifecycle: %s", lifecycle));
         }
     }
 
     @Override
     public void changeTrackerFinished(ChangeTracker tracker) {
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Log.d(Log.TAG_SYNC, "changeTrackerFinished");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
-            }
-        });
+        Log.d(Log.TAG_SYNC, "changeTrackerFinished");
     }
 
     @Override
