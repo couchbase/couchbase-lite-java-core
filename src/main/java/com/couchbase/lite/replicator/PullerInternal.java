@@ -56,6 +56,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     public static int CHANGE_TRACKER_RESTART_DELAY_MS = 10 * 1000;
 
+    public static final int MAX_PENDING_DOCS = 200;
+
     private ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
     protected Boolean canBulkGet;  // Does the server support _bulk_get requests?
@@ -178,6 +180,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             long seq = pendingSequences.addValue(lastInboxSequence);
             pendingSequences.removeSequence(seq);
             setLastSequence(pendingSequences.getCheckpointedValue());
+            pauseOrResume();
             return;
         }
 
@@ -205,7 +208,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             rev.setSequence(pendingSequences.addValue(rev.getRemoteSequenceID()));
         }
         pullRemoteRevisions();
-
+        pauseOrResume();
     }
 
     /**
@@ -366,6 +369,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 Log.v(Log.TAG_SYNC, "%s: Transformer rejected revision %s", this, rev);
                 pendingSequences.removeSequence(rev.getSequence());
                 lastSequence = pendingSequences.getCheckpointedValue();
+                pauseOrResume();
                 return;
             }
             rev = xformed;
@@ -536,6 +540,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                 addToCompletedChangesCount(downloads.size());
             }
+
+            pauseOrResume();
         }
     }
 
@@ -554,6 +560,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (!Utils.isTransientError(throwable)) {
             Log.v(Log.TAG_SYNC, "%s: giving up on %s: %s", this, rev, throwable);
             pendingSequences.removeSequence(rev.getSequence());
+            pauseOrResume();
         }
         completedChangesCount.getAndIncrement();
     }
@@ -728,6 +735,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
             addToInbox(rev);
         }
+
+        pauseOrResume();
     }
 
     @Override
@@ -972,5 +981,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 }
             }
         }
+    }
+
+    protected void pauseOrResume(){
+        int pending = batcher.count() + pendingSequences.count();
+        changeTracker.setPaused(pending >= MAX_PENDING_DOCS);
     }
 }

@@ -43,6 +43,10 @@ public class SequenceMap {
 		return sequences.isEmpty();
 	}
 
+    public synchronized int count(){
+        return sequences.size();
+    }
+
     /**
      * Returns the maximum consecutively-removed sequence number.
      * This is one less than the minimum remaining sequence number.

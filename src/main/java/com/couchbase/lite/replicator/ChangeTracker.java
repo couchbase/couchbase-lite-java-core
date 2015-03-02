@@ -41,7 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
 /**
  * Reads the continuous-mode _changes feed of a database, and sends the
  * individual change entries to its client's changeTrackerReceivedChange()
@@ -52,28 +51,30 @@ import java.util.Map;
 public class ChangeTracker implements Runnable {
 
     private URL databaseURL;
-    private ChangeTrackerClient client;
-    private ChangeTrackerMode mode;
     private Object lastSequenceID;
-    private boolean includeConflicts;
+    private boolean continuous = false;  // is enclosing replication continuous?
+    private Throwable error;
+    private ChangeTrackerClient client;
+    protected Map<String, Object> requestHeaders;
+    private Authenticator authenticator;
+    private boolean usePOST;
 
+    private ChangeTrackerMode mode;
+    private String filterName;
+    private Map<String, Object> filterParams;
+    private int limit;
+    private int heartBeatSeconds;
+    private List<String> docIDs;
+
+    private boolean paused = false;
+    private Object  pausedObj = new Object();
+
+    private boolean includeConflicts;
     private Thread thread;
     private boolean running = false;
     private HttpUriRequest request;
-
-    private String filterName;
-    private Map<String, Object> filterParams;
-    private List<String> docIDs;
-
-    private Throwable error;
-    protected Map<String, Object> requestHeaders;
     protected ChangeTrackerBackoff backoff;
-    private boolean usePOST;
-    private int heartBeatSeconds;
-    private int limit;
-    private boolean continuous = false;  // is enclosing replication continuous?
 
-    private Authenticator authenticator;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -228,6 +229,7 @@ public class ChangeTracker implements Runnable {
 
     protected void runLoop() {
 
+        paused = false;
         running = true;
         HttpClient httpClient;
 
@@ -329,6 +331,9 @@ public class ChangeTracker implements Runnable {
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 if (entity != null) {
+
+
+
                     InputStream inputStream = null;
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
@@ -337,6 +342,8 @@ public class ChangeTracker implements Runnable {
                             boolean responseOK = false; // default value
                             // check content length, ObjectMapper().readValue() throws Exception if size is 0.
                             if(entity.getContentLength() > 0) {
+                                // wait if paused flag is on.
+                                waitIfPaused();
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                 Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
@@ -368,6 +375,8 @@ public class ChangeTracker implements Runnable {
                             }
 
                             while (jp.nextToken() == JsonToken.START_OBJECT) {
+                                // wait if paused flag is on.
+                                waitIfPaused();
                                 Map<String, Object> change = (Map) Manager.getObjectMapper().readValue(jp, Map.class);
                                 if (!receivedChange(change)) {
                                     Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
@@ -574,4 +583,24 @@ public class ChangeTracker implements Runnable {
 
     }
 
+
+    public void setPaused(boolean paused) {
+        Log.e(Log.TAG, "setPaused: " + paused);
+        synchronized (pausedObj) {
+            this.paused = paused;
+            pausedObj.notifyAll();
+        }
+    }
+
+    protected void waitIfPaused(){
+        while (paused) {
+            Log.e(Log.TAG, "Waiting: " + paused);
+            synchronized (pausedObj) {
+                try {
+                    pausedObj.wait();
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+    }
 }
