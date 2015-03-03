@@ -342,8 +342,6 @@ public class ChangeTracker implements Runnable {
                             boolean responseOK = false; // default value
                             // check content length, ObjectMapper().readValue() throws Exception if size is 0.
                             if(entity.getContentLength() > 0) {
-                                // wait if paused flag is on.
-                                waitIfPaused();
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                 Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
@@ -375,8 +373,6 @@ public class ChangeTracker implements Runnable {
                             }
 
                             while (jp.nextToken() == JsonToken.START_OBJECT) {
-                                // wait if paused flag is on.
-                                waitIfPaused();
                                 Map<String, Object> change = (Map) Manager.getObjectMapper().readValue(jp, Map.class);
                                 if (!receivedChange(change)) {
                                     Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
@@ -426,6 +422,9 @@ public class ChangeTracker implements Runnable {
     }
 
     public boolean receivedChange(final Map<String,Object> change) {
+        // wait if paused flag is on.
+        waitIfPaused();
+
         Object seq = change.get("seq");
         if(seq == null) {
             return false;
@@ -585,7 +584,7 @@ public class ChangeTracker implements Runnable {
 
 
     public void setPaused(boolean paused) {
-        Log.e(Log.TAG, "setPaused: " + paused);
+        Log.v(Log.TAG, "setPaused: " + paused);
         synchronized (pausedObj) {
             this.paused = paused;
             pausedObj.notifyAll();
@@ -594,7 +593,7 @@ public class ChangeTracker implements Runnable {
 
     protected void waitIfPaused(){
         while (paused) {
-            Log.e(Log.TAG, "Waiting: " + paused);
+            Log.v(Log.TAG, "Waiting: " + paused);
             synchronized (pausedObj) {
                 try {
                     pausedObj.wait();
