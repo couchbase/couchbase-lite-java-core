@@ -79,7 +79,7 @@ public class BlobStore {
 
         for(File file : files){
             String name = file.getName().substring(0);
-            name = name.substring(0, name.indexOf(FILE_EXTENSION) - 1);
+            name = name.substring(0, name.indexOf(FILE_EXTENSION));
             File dest = new File(directory, name.toUpperCase() + FILE_EXTENSION);
             file.renameTo(dest);
         }
