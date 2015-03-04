@@ -11,7 +11,7 @@ public class Version {
     static {
         int versCode = getVersionCode();
         if (versCode == -1) {
-            VERSION = String.format("%s-%s", getVersionName(), getVersionCode());
+            VERSION = String.format("%s-%s", getVersionName(), getVersion());
         } else{
             VERSION = String.format("%s", getVersionName());
         }
