@@ -27,6 +27,9 @@ import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
+import com.couchbase.lite.replicator.Replication.ChangeEvent;
+import com.couchbase.lite.replicator.Replication.ChangeListener;
+import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
@@ -67,7 +70,6 @@ public class Router implements Database.ChangeListener {
     private boolean changesIncludesDocs = false;
     private RouterCallbackBlock callbackBlock;
     private boolean responseSent = false;
-    private boolean waiting = false;
     private ReplicationFilter changesFilter;
     private boolean longpoll = false;
 
@@ -683,51 +685,194 @@ public class Router implements Database.ChangeListener {
         return new Status(Status.OK);
     }
 
+    /**
+     * TODO: CBL Java Core codes are out of sync with CBL iOS. Need to catch up CBL iOS
+     */
     public Status do_GET_active_tasks(Database _db, String _docID, String _attachmentName) {
         // http://wiki.apache.org/couchdb/HttpGetActiveTasks
-        List<Map<String,Object>> activities = new ArrayList<Map<String,Object>>();
+
+        String feed = getQuery("feed");
+        longpoll = "longpoll".equals(feed);
+        boolean continuous = !longpoll && "continuous".equals(feed);
+
+        String session_id = getQuery("session_id");
+
+        ChangeListener listener = new ChangeListener() {
+
+            ChangeListener self = this;
+
+            @Override
+            public void changed(ChangeEvent event) {
+
+                Map<String, Object> activity = getActivity(event.getSource());
+
+                // NOTE: Followings are not supported by iOS. We might remove them in the future.
+                if (event.getTransition() != null) {
+                    // this adds data to the response based on the trigger.
+                    activity.put("transition_source", event.getTransition().getSource());
+                    activity.put("transition_destination", event.getTransition().getDestination());
+                    activity.put("trigger", event.getTransition().getTrigger());
+                    Log.d(Log.TAG_ROUTER, "do_GET_active_tasks Transition [" + event.getTransition().getTrigger() + "] Source:" + event.getTransition().getSource() + ", Destination:" + event.getTransition().getDestination());
+                }
+
+                if (longpoll) {
+                    Log.w(Log.TAG_ROUTER, "Router: Sending longpoll replication response");
+                    sendResponse();
+                    if (callbackBlock != null) {
+                        byte[] data = null;
+                        try {
+                            data = Manager.getObjectMapper().writeValueAsBytes(activity);
+                        } catch (Exception e) {
+                            Log.w(Log.TAG_ROUTER, "Error serializing JSON", e);
+                        }
+                        OutputStream os = connection.getResponseOutputStream();
+                        try {
+                            os.write(data);
+                            os.close();
+                        } catch (IOException e) {
+                            Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+                        }
+                    }
+                    //remove this change listener because a new one will be added when this responds
+                    event.getSource().removeChangeListener(self);
+                } else {
+                    Log.w(Log.TAG_ROUTER, "Router: Sending continous replication change chunk");
+                    sendContinuousReplicationChanges(activity);
+                }
+            }
+        };
+
+        List<Map<String, Object>> activities = new ArrayList<Map<String, Object>>();
         for (Database db : manager.allOpenDatabases()) {
             List<Replication> activeReplicators = db.getActiveReplications();
-            if(activeReplicators != null) {
+            if (activeReplicators != null) {
                 for (Replication replicator : activeReplicators) {
-                    String source = replicator.getRemoteUrl().toExternalForm();
-                    String target = db.getName();
-                    if(!replicator.isPull()) {
-                        String tmp = source;
-                        source = target;
-                        target = tmp;
-                    }
-                    int processed = replicator.getCompletedChangesCount();
-                    int total = replicator.getChangesCount();
-                    String status = String.format("Processed %d / %d changes", processed, total);
-                    int progress = (total > 0) ? Math.round(100 * processed / (float)total) : 0;
-                    Map<String,Object> activity = new HashMap<String,Object>();
-                    activity.put("type", "Replication");
-                    activity.put("task", replicator.getSessionID());
-                    activity.put("source", source);
-                    activity.put("target", target);
-                    activity.put("status", status);
-                    activity.put("progress", progress);
 
-                    if (replicator.getLastError() != null) {
-                        String msg = String.format("Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
-                                replicator.getLastError(), replicator, source, target);
-                        Log.e(Log.TAG_ROUTER, msg);
-                        Throwable error = replicator.getLastError();
-                        int statusCode = 400;
-                        if (error instanceof HttpResponseException) {
-                            statusCode = ((HttpResponseException)error).getStatusCode();
+                    Map<String, Object> activity = getActivity(replicator);
+
+                    if (session_id != null) {
+                        if (replicator.getSessionID().equals(session_id)) {
+                            activities.add(activity);
                         }
-                        Object[] errorObjects = new Object[]{ statusCode, replicator.getLastError().toString() };
-                        activity.put("error", errorObjects);
+                    } else {
+                        activities.add(activity);
                     }
 
-                    activities.add(activity);
+                    if (continuous || longpoll) {
+                        if (session_id != null) {
+                            if (replicator.getSessionID().equals(session_id)) {
+                                replicator.addChangeListener(listener);
+                            }
+                        } else {
+                            replicator.addChangeListener(listener);
+                        }
+                    }
                 }
             }
         }
-        connection.setResponseBody(new Body(activities));
-        return new Status(Status.OK);
+
+        if (continuous || longpoll) {
+            connection.setChunked(true);
+            connection.setResponseCode(Status.OK);
+            sendResponse();
+            if (continuous && !activities.isEmpty()) {
+                for (Map<String, Object> activity : activities) {
+                    sendContinuousReplicationChanges(activity);
+                }
+            }
+
+            // Don't close connection; more data to come
+            return new Status(0);
+        } else {
+            connection.setResponseBody(new Body(activities));
+            return new Status(Status.OK);
+        }
+    }
+
+    /**
+     * TODO: To be compatible with CBL iOS, this method should move to Replicator.activeTaskInfo().
+     * TODO: Reference: - (NSDictionary*) activeTaskInfo in CBL_Replicator.m
+     */
+    private Map<String, Object> getActivity(Replication replicator) {
+        // For schema, see http://wiki.apache.org/couchdb/HttpGetActiveTasks
+        Map<String, Object> activity = new HashMap<String, Object>();
+
+        String source = replicator.getRemoteUrl().toExternalForm();
+        String target = replicator.getLocalDatabase().getName();
+
+        if (!replicator.isPull()) {
+            String tmp = source;
+            source = target;
+            target = tmp;
+        }
+        int processed = replicator.getCompletedChangesCount();
+        int total = replicator.getChangesCount();
+        String status = String.format("Processed %d / %d changes", processed, total);
+        if (!replicator.getStatus().equals(ReplicationStatus.REPLICATION_ACTIVE)) {
+            //These values match the values for IOS.
+            if (replicator.getStatus().equals(ReplicationStatus.REPLICATION_IDLE)) {
+                status = "Idle";     // nonstandard
+            } else if (replicator.getStatus().equals(ReplicationStatus.REPLICATION_STOPPED)) {
+                status = "Stopped";
+            } else if (replicator.getStatus().equals(ReplicationStatus.REPLICATION_OFFLINE)) {
+                status = "Offline";  // nonstandard
+            }
+        }
+        int progress = (total > 0) ? Math.round(100 * processed / (float) total) : 0;
+
+        activity.put("type", "Replication");
+        activity.put("task", replicator.getSessionID());
+        activity.put("source", source);
+        activity.put("target", target);
+        activity.put("status", status);
+        activity.put("progress", progress);
+        activity.put("continuous", replicator.isContinuous());
+
+        //NOTE: Need to support "x_active_requests"
+
+        if (replicator.getLastError() != null) {
+            String msg = String.format("Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
+                    replicator.getLastError(), replicator, source, target);
+            Log.e(Log.TAG_ROUTER, msg);
+            Throwable error = replicator.getLastError();
+            int statusCode = 400;
+            if (error instanceof HttpResponseException) {
+                statusCode = ((HttpResponseException) error).getStatusCode();
+            }
+            Object[] errorObjects = new Object[]{statusCode, replicator.getLastError().toString()};
+            activity.put("error", errorObjects);
+        } else {
+            // NOTE: Following two parameters: CBL iOS does not support. We might remove them in the future.
+            activity.put("change_count", total);
+            activity.put("completed_change_count", processed);
+        }
+
+        return activity;
+    }
+
+    /**
+     * Send a JSON object followed by a newline without closing the connection.
+     * Used by the continuous mode of _changes and _active_tasks.
+     * <p/>
+     * TODO: CBL iOS supports EventSourceFeed in addition to longpoll and continuous.
+     * TODO: Need to catch up CBL iOS: - (void) sendContinuousLine: (NSDictionary*)changeDict in CBL_Router+Handlers.m
+     */
+    public void sendContinuousReplicationChanges(Map<String, Object> activity) {
+        try {
+            String jsonString = Manager.getObjectMapper().writeValueAsString(activity);
+            if (callbackBlock != null) {
+                byte[] json = (jsonString + "\n").getBytes();
+                OutputStream os = connection.getResponseOutputStream();
+                try {
+                    os.write(json);
+                    os.flush();
+                } catch (Exception e) {
+                    Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+                }
+            }
+        } catch (Exception e) {
+            Log.w("Unable to serialize change to JSON", e);
+        }
     }
 
     /** DATABASE REQUESTS: **/
