@@ -65,8 +65,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     public static final String CHANNELS_QUERY_PARAM = "channels";
 
-    public static final String REPLICATOR_DATABASE_NAME = "_replicator";
-
     public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
 
     private static int lastSessionID = 0;
@@ -1387,7 +1385,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     assert(xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
                     if (xformed.getProperties().get("_attachments") != null) {
                         // Insert 'revpos' properties into any attachments added by the callback:
-                        RevisionInternal mx = new RevisionInternal(xformed.getProperties(), db);
+                        RevisionInternal mx = new RevisionInternal(xformed.getProperties());
                         xformed = mx;
                         mx.mutateAttachments(new CollectionUtils.Functor<Map<String,Object>,Map<String,Object>>() {
                             public Map<String, Object> invoke(Map<String, Object> info) {

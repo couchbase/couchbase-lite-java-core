@@ -489,7 +489,7 @@ public final class Database {
         if (properties == null) {
             deleted = true;
         }
-        RevisionInternal rev = new RevisionInternal(id, null, deleted, this);
+        RevisionInternal rev = new RevisionInternal(id, null, deleted);
 
         if (properties != null) {
             rev.setProperties(properties);
@@ -1495,7 +1495,7 @@ public final class Database {
     @InterfaceAudience.Private
     public Map<String, Object> documentPropertiesFromJSON(byte[] json, String docId, String revId, boolean deleted, long sequence, EnumSet<TDContentOptions> contentOptions) {
 
-        RevisionInternal rev = new RevisionInternal(docId, revId, deleted, this);
+        RevisionInternal rev = new RevisionInternal(docId, revId, deleted);
         rev.setSequence(sequence);
         Map<String, Object> extra = extraPropertiesForRevision(rev, contentOptions);
         if (json == null) {
@@ -1547,7 +1547,7 @@ public final class Database {
                     rev = cursor.getString(0);
                 }
                 boolean deleted = (cursor.getInt(1) > 0);
-                result = new RevisionInternal(id, rev, deleted, this);
+                result = new RevisionInternal(id, rev, deleted);
                 result.setSequence(cursor.getLong(2));
                 if(!contentOptions.equals(EnumSet.of(TDContentOptions.TDNoBody))) {
                     byte[] json = null;
@@ -1678,7 +1678,7 @@ public final class Database {
             cursor.moveToNext();
             result = new RevisionList();
             while(!cursor.isAfterLast()) {
-                RevisionInternal rev = new RevisionInternal(docId, cursor.getString(1), (cursor.getInt(2) > 0), this);
+                RevisionInternal rev = new RevisionInternal(docId, cursor.getString(1), (cursor.getInt(2) > 0));
                 rev.setSequence(cursor.getLong(0));
                 result.add(rev);
                 cursor.moveToNext();
@@ -1871,7 +1871,7 @@ public final class Database {
                     revId = cursor.getString(2);
                     boolean deleted = (cursor.getInt(3) > 0);
                     boolean missing = (cursor.getInt(4) > 0);
-                    RevisionInternal aRev = new RevisionInternal(docId, revId, deleted, this);
+                    RevisionInternal aRev = new RevisionInternal(docId, revId, deleted);
                     aRev.setMissing(missing);
                     aRev.setSequence(cursor.getLong(0));
                     result.add(aRev);
@@ -2043,7 +2043,7 @@ public final class Database {
                     lastDocId = docNumericId;
                 }
 
-                RevisionInternal rev = new RevisionInternal(cursor.getString(2), cursor.getString(3), (cursor.getInt(4) > 0), this);
+                RevisionInternal rev = new RevisionInternal(cursor.getString(2), cursor.getString(3), (cursor.getInt(4) > 0));
                 rev.setSequence(cursor.getLong(0));
                 if(includeDocs) {
                     expandStoredJSONIntoRevisionWithAttachments(cursor.getBlob(5), rev, options.getContentOptions());
@@ -3063,7 +3063,7 @@ public final class Database {
 
         beginTransaction();
         try {
-            RevisionInternal oldRev = new RevisionInternal(docID, oldRevID, false, this);
+            RevisionInternal oldRev = new RevisionInternal(docID, oldRevID, false);
             if(oldRevID != null) {
 
                 // Load existing revision if this is a replacement:
@@ -3599,7 +3599,7 @@ public final class Database {
                 if(validations != null && validations.size() > 0) {
                     // Fetch the previous revision and validate the new one against it:
                     RevisionInternal fakeNewRev = oldRev.copyWithDocID(oldRev.getDocId(), null);
-                    RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false, this);
+                    RevisionInternal prevRev = new RevisionInternal(docId, prevRevId, false);
                     validateRevision(fakeNewRev, prevRev,prevRevId);
                 }
 
@@ -3796,7 +3796,7 @@ public final class Database {
                     return newRev;
                 } else {
                     boolean deleted = false;
-                    RevisionInternal winningRev = new RevisionInternal(newRev.getDocId(), winningRevID, deleted, this);
+                    RevisionInternal winningRev = new RevisionInternal(newRev.getDocId(), winningRevID, deleted);
                     return winningRev;
                 }
             }
@@ -4022,7 +4022,7 @@ public final class Database {
                     }
                     else {
                         // It's an intermediate parent, so insert a stub:
-                        newRev = new RevisionInternal(docId, revId, false, this);
+                        newRev = new RevisionInternal(docId, revId, false);
                     }
 
                     // Insert it:
@@ -4442,7 +4442,7 @@ public final class Database {
             if (cursor.moveToNext()) {
                 String revId = cursor.getString(0);
                 boolean deleted = (cursor.getInt(1) > 0);
-                result = new RevisionInternal(rev.getDocId(), revId, deleted, this);
+                result = new RevisionInternal(rev.getDocId(), revId, deleted/*, this*/);
                 result.setSequence(seq);
             }
         } finally {
@@ -4629,7 +4629,7 @@ public final class Database {
                     properties = Manager.getObjectMapper().readValue(json, Map.class);
                     properties.put("_id", docID);
                     properties.put("_rev", gotRevID);
-                    result = new RevisionInternal(docID, gotRevID, false, this);
+                    result = new RevisionInternal(docID, gotRevID, false);
                     result.setProperties(properties);
                 } catch (Exception e) {
                     Log.w(Database.TAG, "Error parsing local doc JSON", e);

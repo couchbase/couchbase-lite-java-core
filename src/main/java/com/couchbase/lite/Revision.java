@@ -33,11 +33,6 @@ public abstract class Revision {
     protected String parentRevID;
 
     /**
-     * The revision this one is a child of.
-     */
-    protected SavedRevision parentRevision;
-
-    /**
      * Constructor
      * @exclude
      */
@@ -215,7 +210,7 @@ public abstract class Revision {
      * Compare this revision to the given revision to check for equality.
      * The comparison makes sure that both revisions have the same revision ID.
      *
-     * @param the revision to check for equality against
+     * @param o the revision to check for equality against
      * @return true if equal, false otherwise
      */
     @Override

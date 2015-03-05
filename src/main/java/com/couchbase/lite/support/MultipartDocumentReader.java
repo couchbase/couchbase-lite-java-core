@@ -7,17 +7,15 @@ import com.couchbase.lite.Misc;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 
-import org.apache.http.HttpResponse;
 import org.apache.http.util.ByteArrayBuffer;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 public class MultipartDocumentReader implements MultipartReaderDelegate {
-
-    /** The response which contains the input stream we need to read from */
-    private HttpResponse response;
 
     private MultipartReader multipartReader;
     private BlobStoreWriter curAttachment;
@@ -28,33 +26,43 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     private Map<String, BlobStoreWriter> attachmentsByName;
     private Map<String, BlobStoreWriter> attachmentsByMd5Digest;
 
-    public MultipartDocumentReader(HttpResponse response, Database database) {
-        this.response = response;
+    public MultipartDocumentReader(Database database) {
         this.database = database;
     }
-
 
     public Map<String, Object> getDocumentProperties() {
         return document;
     }
 
-    public void parseJsonBuffer() {
-        byte[] json = jsonBuffer.toByteArray();
-
-        if(jsonCompressed){
-            json = Utils.decompressByGzip(json);
-            if(json == null){
-                throw new IllegalStateException("Received corrupt gzip-encoded JSON part");
+    public void parseJsonBuffer()
+    {
+        ByteArrayInputStream inputStream = null;
+        try {
+            inputStream = new ByteArrayInputStream(jsonBuffer.buffer(), 0, jsonBuffer.length());
+            // compressed json
+            if (jsonCompressed) {
+                GZIPInputStream gzipStream = null;
+                try {
+                    gzipStream = new GZIPInputStream(inputStream);
+                    document = Manager.getObjectMapper().readValue(gzipStream, Map.class);
+                }
+                finally {
+                    if (gzipStream != null) { try { gzipStream.close(); } catch (IOException e) { } }
+                }
+            }
+            //  plain json
+            else {
+                document = Manager.getObjectMapper().readValue(inputStream, Map.class);
             }
         }
-
-        try {
-            document = Manager.getObjectMapper().readValue(json, Map.class);
-        } catch (IOException e) {
+        catch (IOException e) {
             throw new IllegalStateException("Failed to parse json buffer", e);
         }
-
-        jsonBuffer = null;
+        finally {
+            if (inputStream != null) { try { inputStream.close(); } catch (IOException e) { } }
+            jsonBuffer.clear();
+            jsonBuffer = null;
+        }
     }
 
     public void setHeaders(Map<String, String> headers){
@@ -76,8 +84,8 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         else {
             throw new IllegalArgumentException("Unknown/invalid MIME type");
         }
-
     }
+
     protected void startJSONBufferWithHeaders(Map<String, String> headers){
         jsonBuffer = new ByteArrayBuffer(1024);
         jsonCompressed = Utils.isGzip(headers.get("Content-Encoding"));
@@ -89,6 +97,14 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         }
         else {
             jsonBuffer.append(data, 0, data.length);
+        }
+    }
+    public void appendData(byte[] data, int off, int len) {
+        if (multipartReader != null) {
+            multipartReader.appendData(data, off, len);
+        }
+        else {
+            jsonBuffer.append(data, off, len);
         }
     }
 
@@ -179,7 +195,6 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 Log.w(Log.TAG_REMOTE_REQUEST, "Attachment '%s' sent inline (len=%d).  Large attachments " +
                         "should be sent in MIME parts for reduced memory overhead.", attachmentName, length);
             }
-
         }
 
         if (numAttachmentsInDoc < attachmentsByMd5Digest.size()) {
@@ -216,19 +231,20 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 }
             }
         }
-
-
     }
-
-
 
     @Override
     public void appendToPart(byte[] data) {
+        appendToPart(data, 0, data.length);
+    }
+
+    @Override
+    public void appendToPart(final byte[] data, int off, int len) {
         if (jsonBuffer != null) {
-            jsonBuffer.append(data, 0, data.length);
+            jsonBuffer.append(data, off, len);
         }
         else {
-            curAttachment.appendData(data);
+            curAttachment.appendData(data, off, len);
         }
     }
 
@@ -243,7 +259,5 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             attachmentsByMd5Digest.put(md5String, curAttachment);
             curAttachment = null;
         }
-
-
     }
 }

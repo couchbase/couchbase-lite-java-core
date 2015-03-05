@@ -26,31 +26,26 @@ public class Batcher<T> {
 
     private int capacity;
     private int delayMs;
-    private int scheduledDelay;
     private BlockingQueue<T> inbox;
     private BatchProcessor<T> processor;
-    private boolean scheduled = false;
     private long lastProcessedTime = 0;
     private BlockingQueue<ScheduledFuture> pendingFutures;
     private Lock lock = new ReentrantLock();
 
     private Runnable processNowRunnable = new Runnable() {
-
         @Override
         public void run() {
-
+            lock.lock();
             try {
-                lock.lock();
                 processNow();
             } catch (Exception e) {
                 // we don't want this to crash the batcher
-                com.couchbase.lite.util.Log.e(Log.TAG_BATCHER, this + ": BatchProcessor throw exception", e);
+                Log.e(Log.TAG_BATCHER, this + ": BatchProcessor throw exception", e);
             } finally {
                 lock.unlock();
             }
         }
     };
-
 
     /**
      * Initializes a batcher.
@@ -67,20 +62,16 @@ public class Batcher<T> {
         this.processor = processor;
         this.inbox = new LinkedBlockingQueue<T>();
         this.pendingFutures = new LinkedBlockingQueue<ScheduledFuture>();
-
     }
 
     private boolean isCurrentlyProcessing() {
-
         // we'll only get the lock if we ARENT currently processing
         boolean processingNotInProgress = lock.tryLock();
         if (processingNotInProgress) {
             // we don't actually need this lock, so unlock it immediately
             lock.unlock();
         }
-        boolean isProcessing = !processingNotInProgress;
-        return isProcessing;
-
+        return !processingNotInProgress;
     }
 
     /**
@@ -113,7 +104,6 @@ public class Batcher<T> {
             Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(%d)", this, suggestedDelay);
             scheduleWithDelay(suggestedDelay);
         }
-
     }
 
     public void waitForPendingFutures() {
@@ -179,10 +169,8 @@ public class Batcher<T> {
     }
 
     private void processNow() {
-
         Log.v(Log.TAG_BATCHER, this + ": processNow() called");
 
-        scheduled = false;
         List<T> toProcess = new ArrayList<T>();
 
         if (inbox == null || inbox.size() == 0) {
@@ -211,12 +199,10 @@ public class Batcher<T> {
                 i += 1;
             }
 
-
             Log.v(Log.TAG_BATCHER, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
-
         }
 
-        if(toProcess != null && toProcess.size() > 0) {
+        if (toProcess != null && toProcess.size() > 0) {
             Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items ", this, processor, toProcess.size());
             processor.process(toProcess);
         } else {
@@ -255,14 +241,11 @@ public class Batcher<T> {
         }
         forgetExpiredFutures(futuresToForget);
 
-
         Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay called with delayMs: %d ms", this, suggestedDelay);
-        scheduledDelay = suggestedDelay;
         Log.v(Log.TAG_BATCHER, "workExecutor.schedule() with delayMs: %d ms", suggestedDelay);
         ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, suggestedDelay, TimeUnit.MILLISECONDS);
         Log.v(Log.TAG_BATCHER, "%s: created future: %s", this, pendingFuture);
         pendingFutures.add(pendingFuture);
-
     }
 
     private void forgetExpiredFutures(List<ScheduledFuture> futuresToForget) {
@@ -274,7 +257,6 @@ public class Batcher<T> {
     }
 
     private void unscheduleAllPending() {
-
         // keep a list of expired pending futures so we can remove them from pendingFutures
         List<ScheduledFuture> futuresToForget = new ArrayList<ScheduledFuture>();
 
@@ -286,7 +268,6 @@ public class Batcher<T> {
         }
 
         forgetExpiredFutures(futuresToForget);
-
     }
 
     /*
@@ -314,7 +295,6 @@ public class Batcher<T> {
             }
 
             Log.v(Log.TAG_BATCHER, "%s: delayToUse() delta: %d, delayToUse: %d, delayMs: %d", this, delta, delayToUse, delayMs);
-
         }
         return delayToUse;
     }

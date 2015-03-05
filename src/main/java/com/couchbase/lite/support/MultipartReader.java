@@ -19,25 +19,26 @@ public class MultipartReader {
         kAtEnd,
         kFailed
     }
-    private static Charset utf8 = Charset.forName("UTF-8");
-    private static byte[] kCRLFCRLF = new String("\r\n\r\n").getBytes(utf8);
+    private static final Charset utf8 = Charset.forName("UTF-8");
+    private static final byte[] kCRLFCRLF = new String("\r\n\r\n").getBytes(utf8);
+    private static final byte[] kEOM = new String("--").getBytes(utf8);
 
-    private MultipartReaderState state;
-    private ByteArrayBuffer buffer;
-    private String contentType;
-    private byte[] boundary;
-    private MultipartReaderDelegate delegate;
-    public Map<String, String> headers;
+    private MultipartReaderState state = null;
+    private ByteArrayBuffer buffer = null;
+    private String contentType = null;
+    private byte[] boundary = null;
+    private byte[] boundaryWithoutLeadingCRLF = null;
+    private MultipartReaderDelegate delegate = null;
+    public Map<String, String> headers = null;
 
     public MultipartReader(String contentType, MultipartReaderDelegate delegate) {
-
         this.contentType = contentType;
         this.delegate = delegate;
+
         this.buffer = new ByteArrayBuffer(1024);
         this.state = MultipartReaderState.kAtStart;
 
         parseContentType();
-
     }
 
     public byte[] getBoundary() {
@@ -45,17 +46,15 @@ public class MultipartReader {
     }
 
     public byte[] getBoundaryWithoutLeadingCRLF() {
-        byte[] rawBoundary = getBoundary();
-        byte[] result = Arrays.copyOfRange(rawBoundary, 2, rawBoundary.length);
-        return result;
+        if(boundaryWithoutLeadingCRLF == null) {
+            byte[] rawBoundary = getBoundary();
+            boundaryWithoutLeadingCRLF = Arrays.copyOfRange(rawBoundary, 2, rawBoundary.length);
+        }
+        return boundaryWithoutLeadingCRLF;
     }
 
     public boolean finished() {
         return state == MultipartReaderState.kAtEnd;
-    }
-
-    private byte[] eomBytes() {
-        return new String("--").getBytes(Charset.forName("UTF-8"));
     }
 
     private boolean memcmp(byte[] array1, byte[] array2, int len) {
@@ -69,10 +68,9 @@ public class MultipartReader {
     }
 
     public Range searchFor(byte[] pattern, int start) {
-
         KMPMatch searcher = new KMPMatch();
-        int matchIndex = searcher.indexOf(buffer.toByteArray(), pattern, start);
-
+        int buffLen = Math.min(buffer.length(), buffer.buffer().length);
+        int matchIndex = searcher.indexOf(buffer.buffer(),buffLen, pattern, start);
         if (matchIndex != -1) {
             return new Range(matchIndex, pattern.length);
         }
@@ -97,20 +95,24 @@ public class MultipartReader {
                 String key = headerTokenizer.nextToken().trim();
                 String value = headerTokenizer.nextToken().trim();
                 headers.put(key, value);
-
             }
         }
-
     }
 
     private void deleteUpThrough(int location) {
-
         // int start = location + 1;  // start at the first byte after the location
 
-        byte[] newBuffer = Arrays.copyOfRange(buffer.toByteArray(), location, buffer.length());
-        buffer.clear();
-        buffer.append(newBuffer, 0, newBuffer.length);
+        if(location <= 0) return;
 
+        byte[] b = buffer.buffer();
+        int len = buffer.length();
+
+        int j = 0;
+        int i = location;
+        while(i < len){
+            b[j++] = b[i++];
+        }
+        buffer.setLength(j);
     }
 
     private void trimBuffer() {
@@ -118,35 +120,34 @@ public class MultipartReader {
         int boundaryLen = getBoundary().length;
         if (bufLen > boundaryLen) {
             // Leave enough bytes in _buffer that we can find an incomplete boundary string
-            byte[] dataToAppend = Arrays.copyOfRange(buffer.toByteArray(), 0, bufLen - boundaryLen);
-            delegate.appendToPart(dataToAppend);
+            delegate.appendToPart(buffer.buffer(), 0, bufLen - boundaryLen);
             deleteUpThrough(bufLen - boundaryLen);
         }
-
     }
 
     public void appendData(byte[] data) {
+        appendData(data, 0, data.length);
+    }
+    public void appendData(byte[] data, int off, int len) {
 
         if (buffer == null) {
             return;
         }
-        if (data.length == 0) {
+        if (len == 0) {
             return;
         }
-        buffer.append(data, 0, data.length);
+        buffer.append(data, off, len);
 
         MultipartReaderState nextState;
         do {
             nextState = MultipartReaderState.kUninitialized;
             int bufLen = buffer.length();
-            // Log.d(Database.TAG, "appendData.  bufLen: " + bufLen);
             switch (state) {
                 case kAtStart: {
                     // The entire message might start with a boundary without a leading CRLF.
                     byte[] boundaryWithoutLeadingCRLF = getBoundaryWithoutLeadingCRLF();
                     if (bufLen >= boundaryWithoutLeadingCRLF.length) {
-                        // if (Arrays.equals(buffer.toByteArray(), boundaryWithoutLeadingCRLF)) {
-                        if (memcmp(buffer.toByteArray(), boundaryWithoutLeadingCRLF, boundaryWithoutLeadingCRLF.length)) {
+                        if (memcmp(buffer.buffer(), boundaryWithoutLeadingCRLF, boundaryWithoutLeadingCRLF.length)) {
                             deleteUpThrough(boundaryWithoutLeadingCRLF.length);
                             nextState = MultipartReaderState.kInHeaders;
                         } else {
@@ -166,8 +167,7 @@ public class MultipartReader {
                     Range r = searchFor(boundary, start);
                     if (r.getLength() > 0) {
                         if (state == MultipartReaderState.kInBody) {
-                            byte[] dataToAppend = Arrays.copyOfRange(buffer.toByteArray(), 0, r.getLocation());
-                            delegate.appendToPart(dataToAppend);
+                            delegate.appendToPart(buffer.buffer(), 0, r.getLocation());
                             delegate.finishedPart();
                         }
                         deleteUpThrough(r.getLocation() + r.getLength());
@@ -179,8 +179,7 @@ public class MultipartReader {
                 }
                 case kInHeaders: {
                     // First check for the end-of-message string ("--" after separator):
-                    if (bufLen >= 2 &&
-                            memcmp(buffer.toByteArray(), eomBytes(), 2)) {
+                    if (bufLen >= kEOM.length && memcmp(buffer.buffer(), kEOM, kEOM.length)) {
                         state = MultipartReaderState.kAtEnd;
                         close();
                         return;
@@ -188,18 +187,13 @@ public class MultipartReader {
                     // Otherwise look for two CRLFs that delimit the end of the headers:
                     Range r = searchFor(kCRLFCRLF, 0);
                     if (r.getLength() > 0) {
-                        byte[] headersBytes = Arrays.copyOf(buffer.toByteArray(), r.getLocation());
-                        // byte[] headersBytes = Arrays.copyOfRange(buffer.toByteArray(), 0, r.getLocation())  <-- better?
-
-                        String headersString = new String(headersBytes, utf8);
+                        String headersString = new String(buffer.buffer(), 0, r.getLocation(), utf8);
                         parseHeaders(headersString);
                         deleteUpThrough(r.getLocation() + r.getLength());
                         delegate.startedPart(headers);
                         nextState = MultipartReaderState.kInBody;
-
                     }
                     break;
-
                 }
                 default: {
                     throw new IllegalStateException("Unexpected data after end of MIME body");
@@ -211,13 +205,13 @@ public class MultipartReader {
             }
 
         } while (nextState != MultipartReaderState.kUninitialized && buffer.length() > 0);
-
-
     }
 
     private void close() {
+        if(buffer!=null) buffer.clear();
         buffer = null;
         boundary = null;
+        boundaryWithoutLeadingCRLF = null;
     }
 
     private void parseContentType() {
@@ -251,7 +245,6 @@ public class MultipartReader {
             }
         }
     }
-
 }
 
 /**
@@ -262,7 +255,7 @@ class KMPMatch {
     /**
      * Finds the first occurrence of the pattern in the text.
      */
-    public int indexOf(byte[] data, byte[] pattern, int dataOffset) {
+    public int indexOf(byte[] data, int dataLength, byte[] pattern, int dataOffset) {
 
         int[] failure = computeFailure(pattern);
 
@@ -270,7 +263,7 @@ class KMPMatch {
         if (data.length == 0)
             return -1;
 
-        final int dataLength = data.length;
+        //final int dataLength = data.length;
         final int patternLength = pattern.length;
 
         for (int i = dataOffset; i < dataLength; i++) {
@@ -303,7 +296,6 @@ class KMPMatch {
             }
             failure[i] = j;
         }
-
         return failure;
     }
 }

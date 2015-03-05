@@ -41,7 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
 /**
  * Reads the continuous-mode _changes feed of a database, and sends the
  * individual change entries to its client's changeTrackerReceivedChange()
@@ -52,28 +51,30 @@ import java.util.Map;
 public class ChangeTracker implements Runnable {
 
     private URL databaseURL;
-    private ChangeTrackerClient client;
-    private ChangeTrackerMode mode;
     private Object lastSequenceID;
-    private boolean includeConflicts;
+    private boolean continuous = false;  // is enclosing replication continuous?
+    private Throwable error;
+    private ChangeTrackerClient client;
+    protected Map<String, Object> requestHeaders;
+    private Authenticator authenticator;
+    private boolean usePOST;
 
+    private ChangeTrackerMode mode;
+    private String filterName;
+    private Map<String, Object> filterParams;
+    private int limit;
+    private int heartBeatSeconds;
+    private List<String> docIDs;
+
+    private boolean paused = false;
+    private Object  pausedObj = new Object();
+
+    private boolean includeConflicts;
     private Thread thread;
     private boolean running = false;
     private HttpUriRequest request;
-
-    private String filterName;
-    private Map<String, Object> filterParams;
-    private List<String> docIDs;
-
-    private Throwable error;
-    protected Map<String, Object> requestHeaders;
     protected ChangeTrackerBackoff backoff;
-    private boolean usePOST;
-    private int heartBeatSeconds;
-    private int limit;
-    private boolean continuous = false;  // is enclosing replication continuous?
 
-    private Authenticator authenticator;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -217,10 +218,9 @@ public class ChangeTracker implements Runnable {
     @Override
     public void run() {
         Log.e(Log.TAG_CHANGE_TRACKER, "Thread id => " + Thread.currentThread().getId());
-        try{
+        try {
             runLoop();
-        }
-        finally{
+        } finally {
             // stopped() method should be called at end of run() method.
             stopped();
         }
@@ -228,6 +228,7 @@ public class ChangeTracker implements Runnable {
 
     protected void runLoop() {
 
+        paused = false;
         running = true;
         HttpClient httpClient;
 
@@ -290,8 +291,8 @@ public class ChangeTracker implements Runnable {
             if (userInfo != null) {
                 if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
                     String[] userInfoElements = userInfo.split(":");
-                    String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]): userInfoElements[0];
-                    String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]): userInfoElements[1];
+                    String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
+                    String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
                     final Credentials credentials = new UsernamePasswordCredentials(username, password);
 
                     if (httpClient instanceof DefaultHttpClient) {
@@ -329,13 +330,14 @@ public class ChangeTracker implements Runnable {
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 if (entity != null) {
+                    InputStream inputStream = null;
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
-                        InputStream inputStream = entity.getContent();
+                        inputStream = entity.getContent();
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             boolean responseOK = false; // default value
                             // check content length, ObjectMapper().readValue() throws Exception if size is 0.
-                            if(entity.getContentLength() > 0) {
+                            if (entity.getContentLength() > 0) {
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                 Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
@@ -360,9 +362,8 @@ public class ChangeTracker implements Runnable {
                         } else {  // one-shot replications
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
-                            JsonFactory jsonFactory = Manager.getObjectMapper().getJsonFactory();
-                            JsonParser jp = jsonFactory.createJsonParser(inputStream);
-
+                            JsonFactory factory = new JsonFactory();
+                            JsonParser jp = factory.createParser(inputStream);
                             while (jp.nextToken() != JsonToken.START_ARRAY) {
                                 // ignore these tokens
                             }
@@ -372,6 +373,11 @@ public class ChangeTracker implements Runnable {
                                 if (!receivedChange(change)) {
                                     Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
                                 }
+                            }
+
+                            if (jp != null) {
+                                jp.close();
+                                jp = null;
                             }
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
@@ -390,9 +396,19 @@ public class ChangeTracker implements Runnable {
                         backoff.resetBackoff();
                     } finally {
                         try {
-                            entity.consumeContent();
-                        } catch (IOException ex) {
+                            if (inputStream != null) {
+                                inputStream.close();
+                            }
+                        } catch (IOException e) {
                         }
+                        inputStream = null;
+                        if (entity != null) {
+                            try {
+                                entity.consumeContent();
+                            } catch (IOException e) {
+                            }
+                        }
+                        entity = null;
                     }
                 }
             } catch (Exception e) {
@@ -412,6 +428,9 @@ public class ChangeTracker implements Runnable {
     }
 
     public boolean receivedChange(final Map<String,Object> change) {
+        // wait if paused flag is on.
+        waitIfPaused();
+
         Object seq = change.get("seq");
         if(seq == null) {
             return false;
@@ -569,4 +588,24 @@ public class ChangeTracker implements Runnable {
 
     }
 
+
+    public void setPaused(boolean paused) {
+        Log.v(Log.TAG, "setPaused: " + paused);
+        synchronized (pausedObj) {
+            this.paused = paused;
+            pausedObj.notifyAll();
+        }
+    }
+
+    protected void waitIfPaused(){
+        while (paused) {
+            Log.v(Log.TAG, "Waiting: " + paused);
+            synchronized (pausedObj) {
+                try {
+                    pausedObj.wait();
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+    }
 }

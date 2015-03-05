@@ -169,7 +169,6 @@ public class RemoteRequest implements Runnable {
         retryCount = 0;
 
         try {
-
             fullBody = null;
             error = null;
             response = null;
@@ -200,32 +199,36 @@ public class RemoteRequest implements Runnable {
 
             StatusLine status = response.getStatusLine();
 
-
             if (status.getStatusCode() >= 300) {
                 if (!dontLog404) {
                     Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
                 }
-                error = new HttpResponseException(status.getStatusCode(),
-                        status.getReasonPhrase());
+                error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                 respondWithResult(fullBody, error, response);
                 return;
             } else {
-                HttpEntity entity = response.getEntity();
-                if (entity != null) {
-                    InputStream inputStream = null;
-                    try {
+                HttpEntity entity = null;
+                InputStream inputStream = null;
+                GZIPInputStream gzipStream = null;
+                try {
+                    entity = response.getEntity();
+                    if (entity != null) {
                         inputStream = entity.getContent();
                         // decompress if contentEncoding is gzip
-                        if(Utils.isGzip(entity)){
-                            inputStream = new GZIPInputStream(inputStream);
-                        }
-                        fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
-                    } finally {
-                        try {
-                            if(inputStream != null){ inputStream.close(); }
-                        } catch (IOException e) {
+                        if (Utils.isGzip(entity)) {
+                            gzipStream = new GZIPInputStream(inputStream);
+                            fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
+                        } else {
+                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                         }
                     }
+                }finally {
+                    try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
+                    gzipStream = null;
+                    try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
+                    inputStream = null;
+                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
+                    entity = null;
                 }
             }
         } catch (IOException e) {
@@ -360,6 +363,8 @@ public class RemoteRequest implements Runnable {
         ByteArrayEntity entity = new ByteArrayEntity(encodedBytes);
         entity.setContentType("application/json");
         entity.setContentEncoding("gzip");
+        encodedBytes = null;
+        bodyBytes = null;
         return entity;
     }
 

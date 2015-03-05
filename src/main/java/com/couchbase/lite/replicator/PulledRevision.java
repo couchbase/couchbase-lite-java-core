@@ -1,6 +1,5 @@
 package com.couchbase.lite.replicator;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
@@ -13,16 +12,16 @@ import java.util.Map;
 @InterfaceAudience.Private
 class PulledRevision extends RevisionInternal {
 
-    public PulledRevision(Body body, Database database) {
-        super(body, database);
+    public PulledRevision(Body body) {
+        super(body);
     }
 
-    public PulledRevision(String docId, String revId, boolean deleted, Database database) {
-        super(docId, revId, deleted, database);
+    public PulledRevision(String docId, String revId, boolean deleted) {
+        super(docId, revId, deleted);
     }
 
-    public PulledRevision(Map<String, Object> properties, Database database) {
-        super(properties, database);
+    public PulledRevision(Map<String, Object> properties) {
+        super(properties);
     }
 
     protected String remoteSequenceID;
