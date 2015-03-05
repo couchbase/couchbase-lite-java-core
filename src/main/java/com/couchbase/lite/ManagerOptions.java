@@ -8,7 +8,12 @@ public class ManagerOptions {
     /**
      *  No modifications to databases are allowed.
      */
-    private boolean readOnly;
+    private boolean readOnly = false;
+
+    /**
+     *  automatically migrate blobstore filename
+     */
+    private boolean autoMigrateBlobStoreFilename = false;
 
     public ManagerOptions() {
     }
@@ -21,4 +26,11 @@ public class ManagerOptions {
         this.readOnly = readOnly;
     }
 
+    public boolean isAutoMigrateBlobStoreFilename() {
+        return autoMigrateBlobStoreFilename;
+    }
+
+    public void setAutoMigrateBlobStoreFilename(boolean autoMigrateBlobStoreFilename) {
+        this.autoMigrateBlobStoreFilename = autoMigrateBlobStoreFilename;
+    }
 }

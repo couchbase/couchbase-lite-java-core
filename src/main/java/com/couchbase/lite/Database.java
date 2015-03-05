@@ -1130,13 +1130,14 @@ public final class Database {
         return true;
     }
 
-    private boolean isBlobstoreMigrated(){
-        Map<String, Object> props =getExistingLocalDocument("_blobstore");
-        if(props != null && props.containsKey("blobstoreMigrated"))
-            return (Boolean)props.get("blobstoreMigrated");
+    private boolean isBlobstoreMigrated() {
+        Map<String, Object> props = getExistingLocalDocument("_blobstore");
+        if (props != null && props.containsKey("blobstoreMigrated"))
+            return (Boolean) props.get("blobstoreMigrated");
         return false;
     }
-    private void markBlobstoreMigrated(){
+
+    private void markBlobstoreMigrated() {
         Map<String, Object> props = new HashMap<String, Object>();
         props.put("blobstoreMigrated", true);
         try {

@@ -144,7 +144,11 @@ public class BlobStore {
             if(lowercaseFile.exists()){
                 filename = lowercaseFilename;
                 Log.w(Log.TAG_BLOB_STORE,
-                        "Found older attachment blobstore file. Recommend to set auto migration true by calling Manager.setAutoMigrateBlobStoreFilename(true)");
+                        "Found the older attachment blobstore file. Recommend to set auto migration:\n" +
+                        "\tManagerOptions options = new ManagerOptions();\n" +
+                        "\toptions.setAutoMigrateBlobStoreFilename(true);\n" +
+                        "\tManager manager = new Manager(..., options);\n"
+                );
             }
         }
 

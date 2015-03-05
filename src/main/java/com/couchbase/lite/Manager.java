@@ -78,7 +78,6 @@ public final class Manager {
     private ScheduledExecutorService workExecutor;
     private HttpClientFactory defaultHttpClientFactory;
     private Context context;
-    private boolean autoMigrateBlobStoreFilename = false;
 
     /**
      * @exclude
@@ -666,11 +665,7 @@ public final class Manager {
     }
 
     public boolean isAutoMigrateBlobStoreFilename() {
-        return autoMigrateBlobStoreFilename;
-    }
-
-    public void setAutoMigrateBlobStoreFilename(boolean autoMigrateBlobStoreFilename) {
-        this.autoMigrateBlobStoreFilename = autoMigrateBlobStoreFilename;
+        return this.options.isAutoMigrateBlobStoreFilename();
     }
 }
 
