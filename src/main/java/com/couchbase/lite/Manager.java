@@ -659,12 +659,19 @@ public final class Manager {
         return workExecutor;
     }
 
+    /**
+     * @exclude
+     */
     @InterfaceAudience.Private
     public Context getContext() {
         return context;
     }
 
-    public boolean isAutoMigrateBlobStoreFilename() {
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    protected boolean isAutoMigrateBlobStoreFilename() {
         return this.options.isAutoMigrateBlobStoreFilename();
     }
 }
