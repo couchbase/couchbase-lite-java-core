@@ -218,10 +218,9 @@ public class ChangeTracker implements Runnable {
     @Override
     public void run() {
         Log.e(Log.TAG_CHANGE_TRACKER, "Thread id => " + Thread.currentThread().getId());
-        try{
+        try {
             runLoop();
-        }
-        finally{
+        } finally {
             // stopped() method should be called at end of run() method.
             stopped();
         }
@@ -292,8 +291,8 @@ public class ChangeTracker implements Runnable {
             if (userInfo != null) {
                 if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
                     String[] userInfoElements = userInfo.split(":");
-                    String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]): userInfoElements[0];
-                    String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]): userInfoElements[1];
+                    String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
+                    String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
                     final Credentials credentials = new UsernamePasswordCredentials(username, password);
 
                     if (httpClient instanceof DefaultHttpClient) {
@@ -331,9 +330,6 @@ public class ChangeTracker implements Runnable {
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 if (entity != null) {
-
-
-
                     InputStream inputStream = null;
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
@@ -341,7 +337,7 @@ public class ChangeTracker implements Runnable {
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             boolean responseOK = false; // default value
                             // check content length, ObjectMapper().readValue() throws Exception if size is 0.
-                            if(entity.getContentLength() > 0) {
+                            if (entity.getContentLength() > 0) {
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                 Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
@@ -366,7 +362,7 @@ public class ChangeTracker implements Runnable {
                         } else {  // one-shot replications
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
-                            JsonFactory factory=new JsonFactory();
+                            JsonFactory factory = new JsonFactory();
                             JsonParser jp = factory.createParser(inputStream);
                             while (jp.nextToken() != JsonToken.START_ARRAY) {
                                 // ignore these tokens
@@ -379,7 +375,7 @@ public class ChangeTracker implements Runnable {
                                 }
                             }
 
-                            if(jp != null){
+                            if (jp != null) {
                                 jp.close();
                                 jp = null;
                             }
@@ -399,9 +395,19 @@ public class ChangeTracker implements Runnable {
 
                         backoff.resetBackoff();
                     } finally {
-                        try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
+                        try {
+                            if (inputStream != null) {
+                                inputStream.close();
+                            }
+                        } catch (IOException e) {
+                        }
                         inputStream = null;
-                        if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
+                        if (entity != null) {
+                            try {
+                                entity.consumeContent();
+                            } catch (IOException e) {
+                            }
+                        }
                         entity = null;
                     }
                 }

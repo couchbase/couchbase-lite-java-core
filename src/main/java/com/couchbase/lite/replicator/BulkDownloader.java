@@ -112,7 +112,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
             try {
                 // add in cookies to global store
                 if (httpClient instanceof DefaultHttpClient) {
-                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient) httpClient;
                     clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
@@ -156,25 +156,38 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                         if (Utils.isGzip(entity)) {
                                             gzipStream = new GZIPInputStream(inputStream);
                                             fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
-                                        }
-                                        else {
+                                        } else {
                                             fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                                         }
                                         respondWithResult(fullBody, error, response);
                                     } finally {
-                                        try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
+                                        try {
+                                            if (gzipStream != null) {
+                                                gzipStream.close();
+                                            }
+                                        } catch (IOException e) {
+                                        }
                                         gzipStream = null;
                                     }
                                 }
                             }
-                        }finally{
-                            try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
+                        } finally {
+                            try {
+                                if (inputStream != null) {
+                                    inputStream.close();
+                                }
+                            } catch (IOException e) {
+                            }
                             inputStream = null;
                         }
                     }
-                }
-                finally{
-                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
+                } finally {
+                    if (entity != null) {
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
                     entity = null;
                 }
             }

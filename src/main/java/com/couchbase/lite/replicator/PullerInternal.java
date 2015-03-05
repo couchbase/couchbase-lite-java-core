@@ -74,8 +74,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     /**
      * Actual work of starting the replication process.
      */
-    protected void beginReplicating()
-    {
+    protected void beginReplicating() {
         Log.d(Log.TAG_SYNC, "startReplicating()");
 
         initPendingSequences();

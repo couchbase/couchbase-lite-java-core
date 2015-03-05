@@ -27,7 +27,7 @@ import java.util.Map;
 /**
  * A request/response/document body, stored as either JSON or a Map<String,Object>
  */
-public class Body{
+public class Body {
     private byte[] json;
     private Object object;
 
@@ -43,7 +43,7 @@ public class Body{
         this.object = array;
     }
 
-    public static Body bodyWithProperties(Map<String,Object> properties) {
+    public static Body bodyWithProperties(Map<String, Object> properties) {
         Body result = new Body(properties);
         return result;
     }
@@ -105,7 +105,7 @@ public class Body{
 
     public byte[] getPrettyJson() {
         Object properties = getObject();
-        if(properties != null) {
+        if (properties != null) {
             ObjectWriter writer = Manager.getObjectMapper().writerWithDefaultPrettyPrinter();
             try {
                 json = writer.writeValueAsBytes(properties);
@@ -123,33 +123,32 @@ public class Body{
     @SuppressWarnings("unchecked")
     public Map<String, Object> getProperties() {
         Object object = getObject();
-        if(object instanceof Map) {
+        if (object instanceof Map) {
             // NOTE: Recreating new Map is not memory efficient. And iOS also does not do.
-            //return Collections.unmodifiableMap(map);
             return (Map<String, Object>) object;
         }
         return null;
     }
 
     public Object getPropertyForKey(String key) {
-        Map<String,Object> theProperties = getProperties();
+        Map<String, Object> theProperties = getProperties();
         if (theProperties == null) {
             return null;
         }
         return theProperties.get(key);
     }
 
-    public boolean compact(){
+    public boolean compact() {
         try {
             getJson();
-        }catch (RuntimeException re){
+        } catch (RuntimeException re) {
             return false;
         }
         this.object = null;
         return true;
     }
 
-    public void release(){
+    public void release() {
         this.object = null;
         this.json = null;
     }

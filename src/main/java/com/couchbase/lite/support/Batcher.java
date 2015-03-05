@@ -38,12 +38,10 @@ public class Batcher<T> {
             lock.lock();
             try {
                 processNow();
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 // we don't want this to crash the batcher
                 Log.e(Log.TAG_BATCHER, this + ": BatchProcessor throw exception", e);
-            }
-            finally {
+            } finally {
                 lock.unlock();
             }
         }
@@ -170,8 +168,7 @@ public class Batcher<T> {
         }
     }
 
-    private void processNow()
-    {
+    private void processNow() {
         Log.v(Log.TAG_BATCHER, this + ": processNow() called");
 
         List<T> toProcess = new ArrayList<T>();
@@ -205,7 +202,7 @@ public class Batcher<T> {
             Log.v(Log.TAG_BATCHER, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
         }
 
-        if(toProcess != null && toProcess.size() > 0) {
+        if (toProcess != null && toProcess.size() > 0) {
             Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items ", this, processor, toProcess.size());
             processor.process(toProcess);
         } else {

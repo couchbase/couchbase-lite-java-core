@@ -34,9 +34,8 @@ public class BlobStoreWriter {
     private MessageDigest sha1Digest =  null;
     private MessageDigest md5Digest =  null;
 
-    //private FileOutputStream     fos = null;
     private BufferedOutputStream outStream = null;
-    private File tempFile =  null;
+    private File tempFile = null;
 
     public BlobStoreWriter(BlobStore store) {
         this.store = store;
@@ -55,8 +54,7 @@ public class BlobStoreWriter {
         }
     }
 
-    private void openTempFile() throws FileNotFoundException
-    {
+    private void openTempFile() throws FileNotFoundException {
         String uuid = Misc.TDCreateUUID();
         String filename = String.format("%s.blobtmp", uuid);
         File tempDir = store.tempDir();
