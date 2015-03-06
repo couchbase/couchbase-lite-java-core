@@ -88,7 +88,7 @@ public class BlobKey {
                 if ((0 <= halfbyte) && (halfbyte <= 9))
                     buf.append((char) ('0' + halfbyte));
                 else
-                    buf.append((char) ('a' + (halfbyte - 10)));
+                    buf.append((char) ('A' + (halfbyte - 10)));
                 halfbyte = data[i] & 0x0F;
             } while(two_halfs++ < 1);
         }

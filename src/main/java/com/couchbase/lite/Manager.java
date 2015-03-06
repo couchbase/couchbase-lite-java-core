@@ -658,11 +658,20 @@ public final class Manager {
         return workExecutor;
     }
 
+    /**
+     * @exclude
+     */
     @InterfaceAudience.Private
     public Context getContext() {
         return context;
     }
 
-
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    protected boolean isAutoMigrateBlobStoreFilename() {
+        return this.options.isAutoMigrateBlobStoreFilename();
+    }
 }
 

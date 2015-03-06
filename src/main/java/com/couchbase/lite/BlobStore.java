@@ -17,10 +17,13 @@
 
 package com.couchbase.lite;
 
+import com.couchbase.lite.util.Log;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
@@ -31,8 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
-
-import com.couchbase.lite.util.Log;
 
 /**
  * A persistent content-addressable store for arbitrary-size data blobs.
@@ -48,6 +49,10 @@ public class BlobStore {
     private String path;
 
     public BlobStore(String path) {
+        this(path, false);
+    }
+
+    public BlobStore(String path, boolean autoMigrate) {
         this.path = path;
         File directory = new File(path);
 
@@ -56,6 +61,28 @@ public class BlobStore {
             throw new IllegalStateException(String.format("Unable to create directory for: %s", directory));
         }
 
+        // migrate blobstore filenames.
+        if(autoMigrate) {
+            migrateBlobstoreFilenames(directory);
+        }
+    }
+    protected void migrateBlobstoreFilenames(File directory){
+        if(directory == null || !directory.isDirectory())
+            return;
+
+        File[] files = directory.listFiles(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name) {
+                return name.endsWith(FILE_EXTENSION);
+            }
+        });
+
+        for(File file : files){
+            String name = file.getName().substring(0);
+            name = name.substring(0, name.indexOf(FILE_EXTENSION));
+            File dest = new File(directory, name.toUpperCase() + FILE_EXTENSION);
+            file.renameTo(dest);
+        }
     }
 
     public static BlobKey keyForBlob(byte[] data) {
@@ -102,7 +129,30 @@ public class BlobStore {
     }
 
     public String pathForKey(BlobKey key) {
-        return path + File.separator + BlobKey.convertToHex(key.getBytes()) + FILE_EXTENSION;
+        String hexKey = BlobKey.convertToHex(key.getBytes());
+
+        String filename = path + File.separator + hexKey + FILE_EXTENSION;
+
+        // CBL Android/Java used to use lowercase hex string. But it was inconsistent with CBL iOS.
+        // We fixed it in BlobKey.covertToHex().
+        // In case user will migrate from older version of CBL to newer version, it causes filename mismatch by upper or lower case.
+        // As pathForKey() method is called from many other functions, file mismatch check is added here.
+        File file = new File(filename);
+        if(!file.exists()){
+            String lowercaseFilename = path + File.separator + hexKey.toLowerCase() + FILE_EXTENSION;
+            File lowercaseFile = new File(lowercaseFilename);
+            if(lowercaseFile.exists()){
+                filename = lowercaseFilename;
+                Log.w(Log.TAG_BLOB_STORE,
+                        "Found the older attachment blobstore file. Recommend to set auto migration:\n" +
+                        "\tManagerOptions options = new ManagerOptions();\n" +
+                        "\toptions.setAutoMigrateBlobStoreFilename(true);\n" +
+                        "\tManager manager = new Manager(..., options);\n"
+                );
+            }
+        }
+
+        return filename;
     }
 
     public long getSizeOfBlob(BlobKey key) {
@@ -325,10 +375,6 @@ public class BlobStore {
         }
 
         return tempDirectory;
-
-
-
-
     }
 
 }

@@ -1111,10 +1111,15 @@ public final class Database {
             dbVersion = 16;
         }
 
-
-
         try {
-            attachments = new BlobStore(getAttachmentStorePath());
+            if(isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()){
+                attachments = new BlobStore(getAttachmentStorePath(), false);
+            }
+            else{
+                attachments = new BlobStore(getAttachmentStorePath(), true);
+                markBlobstoreMigrated();
+            }
+
         } catch (IllegalArgumentException e) {
             Log.e(Database.TAG, "Could not initialize attachment store", e);
             database.close();
@@ -1123,6 +1128,23 @@ public final class Database {
 
         open = true;
         return true;
+    }
+
+    private boolean isBlobstoreMigrated() {
+        Map<String, Object> props = getExistingLocalDocument("_blobstore");
+        if (props != null && props.containsKey("blobstoreMigrated"))
+            return (Boolean) props.get("blobstoreMigrated");
+        return false;
+    }
+
+    private void markBlobstoreMigrated() {
+        Map<String, Object> props = new HashMap<String, Object>();
+        props.put("blobstoreMigrated", true);
+        try {
+            putLocalDocument("_blobstore", props);
+        } catch (CouchbaseLiteException e) {
+            Log.e(Log.TAG_DATABASE, e.getMessage());
+        }
     }
 
     /**
