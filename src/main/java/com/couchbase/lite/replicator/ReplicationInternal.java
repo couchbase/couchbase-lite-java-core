@@ -185,6 +185,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected void fireTrigger(final ReplicationTrigger trigger) {
         Log.w(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
         // All state machine triggers need to happen on the replicator thread
+        if (workExecutor.isShutdown())
+            return;
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
@@ -610,8 +612,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             Future future = request.submit();
             return future;
-
-
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
@@ -1016,7 +1016,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
                 }
             }
-        } else { // ASYNC
+        } else {
+            // ASYNC
+            if (workExecutor.isShutdown())
+                return;
             workExecutor.submit(new Runnable() {
                 @Override
                 public void run() {

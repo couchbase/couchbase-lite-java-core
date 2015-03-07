@@ -116,15 +116,16 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
         RemoteRequest request = generateRemoteRequest();
 
-        if(gzip){
+        if (gzip) {
             request.setCompressedRequest(true);
         }
 
-        Future future = requestExecutor.submit(request);
-        pendingRequests.add(future);
+        if (!requestExecutor.isShutdown()) {
+            Future future = requestExecutor.submit(request);
+            pendingRequests.add(future);
+        }
 
         return this;
-
     }
 
     private RemoteRequest generateRemoteRequest() {
