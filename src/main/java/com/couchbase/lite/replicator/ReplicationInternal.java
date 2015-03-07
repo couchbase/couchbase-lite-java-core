@@ -270,6 +270,16 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         triggerStop();
     }
 
+    /**
+     * Close all resources associated with this replicator.
+     */
+    protected void close() {
+        // shutdown ScheduledExecutorService. Without shutdown, cause thread leak
+        if (remoteRequestExecutor != null && !remoteRequestExecutor.isShutdown()) {
+            Utils.shutdownAndAwaitTermination(remoteRequestExecutor);
+        }
+    }
+
     protected void initAuthorizer() {
         // TODO: add this back in  .. See Replication constructor
 
@@ -1182,6 +1192,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 notifyChangeListenersStateTransition(transition);
             }
         });
+
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
@@ -1189,13 +1200,17 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
                 ReplicationInternal.this.clearDbRef();
 
+                // close any active resources associated with this replicator
+                close();
+
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
                 //       We should revisit StateMachine configuration and also its Thread-safe-ability
-                if(transition.getSource() == transition.getDestination()) {
+                if (transition.getSource() == transition.getDestination()) {
                     // ignore STOPPED to STOPPED
                     return;
                 }
+
                 notifyChangeListenersStateTransition(transition);
             }
         });

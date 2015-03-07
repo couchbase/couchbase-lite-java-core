@@ -56,10 +56,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -1152,27 +1149,54 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public boolean close() {
-        if(!open) {
+        if (!open) {
             return false;
         }
 
-        if(views != null) {
+        if (views != null) {
             for (View view : views.values()) {
                 view.databaseClosing();
             }
         }
         views = null;
 
-        if(activeReplicators != null) {
-            for(Replication replicator : activeReplicators) {
+        if (activeReplicators != null) {
+            List<CountDownLatch> latches = new ArrayList<CountDownLatch>();
+            for (Replication replicator : activeReplicators) {
+                // handler to check if the replicator stopped
+                final CountDownLatch latch = new CountDownLatch(1);
+                replicator.addChangeListener(new Replication.ChangeListener() {
+                    @Override
+                    public void changed(Replication.ChangeEvent event) {
+                        if (event.getSource().getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED) {
+                            latch.countDown();
+                        }
+                    }
+                });
+                latches.add(latch);
+
+                // ask replicator to stop
                 replicator.databaseClosing();
             }
+
+            // wait till all replicator stopped
+            for (CountDownLatch latch : latches) {
+                try {
+                    boolean success = latch.await(20, TimeUnit.SECONDS);
+                    if (!success) {
+                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in 30 second.");
+                    }
+                } catch (Exception e) {
+                    Log.w(Log.TAG_DATABASE, e.getMessage());
+                }
+            }
+
             activeReplicators = null;
         }
 
         allReplicators = null;
 
-        if(database != null && database.isOpen()) {
+        if (database != null && database.isOpen()) {
             database.close();
         }
         open = false;
