@@ -1184,7 +1184,7 @@ public final class Database {
                 try {
                     boolean success = latch.await(20, TimeUnit.SECONDS);
                     if (!success) {
-                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in 30 second.");
+                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in 20 second.");
                     }
                 } catch (Exception e) {
                     Log.w(Log.TAG_DATABASE, e.getMessage());
