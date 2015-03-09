@@ -381,8 +381,15 @@ public final class View {
      */
     @InterfaceAudience.Private
     public void databaseClosing() {
-        database = null;
-        viewId = 0;
+        // some tasks could be still in queue of thread, CBLManagerWorkExecutor.
+        // set null to database variable from CBLManagerWorkExecutor.
+        database.getManager().runAsync(new Runnable() {
+            @Override
+            public void run() {
+                database = null;
+                viewId = 0;
+            }
+        });
     }
 
     /*** Indexing ***/
