@@ -311,12 +311,26 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
     }
 
+    /**
+     * - (BOOL) goOnline in CBL_Replicator.m
+     */
+    @Override
     protected void goOnline() {
-
         super.goOnline();
 
         Log.d(Log.TAG_SYNC, "%s: goOnline() called, calling checkSession()", this);
+        // Note: checkSession() -> fetchRemoteCheckpointDoc() -> beginReplicating()
+        //          => start observing database
         checkSession();
+    }
+
+    /**
+     * - (BOOL) goOffline in CBL_Pusher.m
+     */
+    @Override
+    protected void goOffline() {
+        super.goOffline();
+        stopObserving();
     }
 
     @Override
