@@ -236,8 +236,8 @@ public final class Database {
         this.docCache = new Cache<String, Document>();
         this.startTime = System.currentTimeMillis();
         this.changesToNotify = new ArrayList<DocumentChange>();
-        this.activeReplicators =  Collections.newSetFromMap(new ConcurrentHashMap());
-        this.allReplicators = Collections.newSetFromMap(new ConcurrentHashMap());
+        this.activeReplicators =  Collections.synchronizedSet(new HashSet());
+        this.allReplicators = Collections.synchronizedSet(new HashSet());
     }
 
     /**
@@ -1162,21 +1162,23 @@ public final class Database {
 
         if (activeReplicators != null) {
             List<CountDownLatch> latches = new ArrayList<CountDownLatch>();
-            for (Replication replicator : activeReplicators) {
-                // handler to check if the replicator stopped
-                final CountDownLatch latch = new CountDownLatch(1);
-                replicator.addChangeListener(new Replication.ChangeListener() {
-                    @Override
-                    public void changed(Replication.ChangeEvent event) {
-                        if (event.getSource().getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED) {
-                            latch.countDown();
+            synchronized (activeReplicators) {
+                for (Replication replicator : activeReplicators) {
+                    // handler to check if the replicator stopped
+                    final CountDownLatch latch = new CountDownLatch(1);
+                    replicator.addChangeListener(new Replication.ChangeListener() {
+                        @Override
+                        public void changed(Replication.ChangeEvent event) {
+                            if (event.getSource().getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED) {
+                                latch.countDown();
+                            }
                         }
-                    }
-                });
-                latches.add(latch);
+                    });
+                    latches.add(latch);
 
-                // ask replicator to stop
-                replicator.databaseClosing();
+                    // ask replicator to stop
+                    replicator.databaseClosing();
+                }
             }
 
             // wait till all replicator stopped
@@ -4160,9 +4162,11 @@ public final class Database {
     @InterfaceAudience.Private
     public Replication getActiveReplicator(URL remote, boolean push) {
         if(activeReplicators != null) {
-            for (Replication replicator : activeReplicators) {
-                if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
-                    return replicator;
+            synchronized (activeReplicators) {
+                for (Replication replicator : activeReplicators) {
+                    if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
+                        return replicator;
+                    }
                 }
             }
         }
@@ -4184,10 +4188,12 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public Replication getReplicator(String sessionId) {
-    	if(allReplicators != null) {
-            for (Replication replicator : allReplicators) {
-                if(replicator.getSessionID().equals(sessionId)) {
-                    return replicator;
+        if (allReplicators != null) {
+            synchronized (allReplicators) {
+                for (Replication replicator : allReplicators) {
+                    if (replicator.getSessionID().equals(sessionId)) {
+                        return replicator;
+                    }
                 }
             }
         }
