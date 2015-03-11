@@ -56,10 +56,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -239,8 +236,8 @@ public final class Database {
         this.docCache = new Cache<String, Document>();
         this.startTime = System.currentTimeMillis();
         this.changesToNotify = new ArrayList<DocumentChange>();
-        this.activeReplicators =  Collections.newSetFromMap(new ConcurrentHashMap());
-        this.allReplicators = Collections.newSetFromMap(new ConcurrentHashMap());
+        this.activeReplicators =  Collections.synchronizedSet(new HashSet());
+        this.allReplicators = Collections.synchronizedSet(new HashSet());
     }
 
     /**
@@ -1152,27 +1149,56 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public boolean close() {
-        if(!open) {
+        if (!open) {
             return false;
         }
 
-        if(views != null) {
+        if (views != null) {
             for (View view : views.values()) {
                 view.databaseClosing();
             }
         }
         views = null;
 
-        if(activeReplicators != null) {
-            for(Replication replicator : activeReplicators) {
-                replicator.databaseClosing();
+        if (activeReplicators != null) {
+            List<CountDownLatch> latches = new ArrayList<CountDownLatch>();
+            synchronized (activeReplicators) {
+                for (Replication replicator : activeReplicators) {
+                    // handler to check if the replicator stopped
+                    final CountDownLatch latch = new CountDownLatch(1);
+                    replicator.addChangeListener(new Replication.ChangeListener() {
+                        @Override
+                        public void changed(Replication.ChangeEvent event) {
+                            if (event.getSource().getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED) {
+                                latch.countDown();
+                            }
+                        }
+                    });
+                    latches.add(latch);
+
+                    // ask replicator to stop
+                    replicator.databaseClosing();
+                }
             }
+
+            // wait till all replicator stopped
+            for (CountDownLatch latch : latches) {
+                try {
+                    boolean success = latch.await(20, TimeUnit.SECONDS);
+                    if (!success) {
+                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in 20 second.");
+                    }
+                } catch (Exception e) {
+                    Log.w(Log.TAG_DATABASE, e.getMessage());
+                }
+            }
+
             activeReplicators = null;
         }
 
         allReplicators = null;
 
-        if(database != null && database.isOpen()) {
+        if (database != null && database.isOpen()) {
             database.close();
         }
         open = false;
@@ -4136,9 +4162,11 @@ public final class Database {
     @InterfaceAudience.Private
     public Replication getActiveReplicator(URL remote, boolean push) {
         if(activeReplicators != null) {
-            for (Replication replicator : activeReplicators) {
-                if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
-                    return replicator;
+            synchronized (activeReplicators) {
+                for (Replication replicator : activeReplicators) {
+                    if(replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push && replicator.isRunning()) {
+                        return replicator;
+                    }
                 }
             }
         }
@@ -4160,10 +4188,12 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public Replication getReplicator(String sessionId) {
-    	if(allReplicators != null) {
-            for (Replication replicator : allReplicators) {
-                if(replicator.getSessionID().equals(sessionId)) {
-                    return replicator;
+        if (allReplicators != null) {
+            synchronized (allReplicators) {
+                for (Replication replicator : allReplicators) {
+                    if (replicator.getSessionID().equals(sessionId)) {
+                        return replicator;
+                    }
                 }
             }
         }

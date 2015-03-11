@@ -185,6 +185,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected void fireTrigger(final ReplicationTrigger trigger) {
         Log.w(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
         // All state machine triggers need to happen on the replicator thread
+        if (workExecutor.isShutdown())
+            return;
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
@@ -268,6 +270,16 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     public void databaseClosing() {
         triggerStop();
+    }
+
+    /**
+     * Close all resources associated with this replicator.
+     */
+    protected void close() {
+        // shutdown ScheduledExecutorService. Without shutdown, cause thread leak
+        if (remoteRequestExecutor != null && !remoteRequestExecutor.isShutdown()) {
+            Utils.shutdownAndAwaitTermination(remoteRequestExecutor);
+        }
     }
 
     protected void initAuthorizer() {
@@ -600,8 +612,6 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             Future future = request.submit();
             return future;
-
-
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
@@ -1006,7 +1016,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
                 }
             }
-        } else { // ASYNC
+        } else {
+            // ASYNC
+            if (workExecutor.isShutdown())
+                return;
             workExecutor.submit(new Runnable() {
                 @Override
                 public void run() {
@@ -1182,6 +1195,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 notifyChangeListenersStateTransition(transition);
             }
         });
+
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
@@ -1189,13 +1203,17 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
                 ReplicationInternal.this.clearDbRef();
 
+                // close any active resources associated with this replicator
+                close();
+
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
                 //       We should revisit StateMachine configuration and also its Thread-safe-ability
-                if(transition.getSource() == transition.getDestination()) {
+                if (transition.getSource() == transition.getDestination()) {
                     // ignore STOPPED to STOPPED
                     return;
                 }
+
                 notifyChangeListenersStateTransition(transition);
             }
         });

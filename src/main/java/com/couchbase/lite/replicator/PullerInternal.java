@@ -342,8 +342,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // set compressed request - gzip
         dl.setCompressedRequest(canSendCompressedRequests());
 
-        Future future = remoteRequestExecutor.submit(dl);
-        pendingFutures.add(future);
+        if (!remoteRequestExecutor.isShutdown()) {
+            Future future = remoteRequestExecutor.submit(dl);
+            pendingFutures.add(future);
+        }
     }
 
     // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
@@ -686,9 +688,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     @Override
     public void changeTrackerReceivedChange(final Map<String, Object> change) {
-
         // this callback will be on the changetracker thread, but we need
         // to do the work on the replicator thread.
+        if (workExecutor.isShutdown())
+            return;
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
@@ -739,12 +742,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     @Override
-    public void changeTrackerStopped(ChangeTracker tracker)
-    {
+    public void changeTrackerStopped(ChangeTracker tracker) {
         // this callback will be on the changetracker thread, but we need
         // to do the work on the replicator thread.
-        workExecutor.submit(new Runnable()
-        {
+        if (workExecutor.isShutdown())
+            return;
+        workExecutor.submit(new Runnable() {
             @Override
             public void run() {
                 try {
