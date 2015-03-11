@@ -56,7 +56,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -75,12 +79,14 @@ public final class Database {
 
     private boolean open = false;
 
-    static class TransactionLevel extends ThreadLocal<Integer>{
+    // transactionLevel is per thread
+    static class TransactionLevel extends ThreadLocal<Integer> {
         @Override
         protected Integer initialValue() {
             return 0;
         }
     }
+
     private TransactionLevel transactionLevel = new TransactionLevel();
 
 
@@ -1210,7 +1216,6 @@ public final class Database {
             database.close();
         }
         open = false;
-        //transactionLevel = 0;
         return true;
     }
 
@@ -1281,25 +1286,19 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public boolean beginTransaction() {
-
         int tLevel = transactionLevel.get();
-
-        Log.e(Log.TAG_DATABASE, "[Database.beginTransaction()] Database="+this + ", SQLiteStorageEngine="+database + ", transactionLevel="+transactionLevel + ", currentThread="+Thread.currentThread());
+        Log.d(Log.TAG_DATABASE, "[Database.beginTransaction()] Database=" + this + ", SQLiteStorageEngine=" + database + ", transactionLevel=" + transactionLevel + ", currentThread=" + Thread.currentThread());
         try {
             // Outer (level 0)  transaction. Use SQLiteDatabase.beginTransaction()
-            if(tLevel == 0) {
+            if (tLevel == 0) {
                 database.beginTransaction();
             }
             // Inner (level 1 or higher) transaction. Use SQLite's SAVEPOINT
-            else{
+            else {
                 database.execSQL("SAVEPOINT cbl_" + Integer.toString(tLevel));
             }
-
             Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), tLevel);
-
-            ++tLevel;
-            transactionLevel.set(tLevel);
-
+            transactionLevel.set(++tLevel);
         } catch (SQLException e) {
             Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
             return false;
@@ -1317,13 +1316,12 @@ public final class Database {
     public boolean endTransaction(boolean commit) {
         int tLevel = transactionLevel.get();
 
-        assert(tLevel > 0);
+        assert (tLevel > 0);
 
-        --tLevel;
-        transactionLevel.set(tLevel);
+        transactionLevel.set(--tLevel);
 
         // Outer (level 0) transaction. Use SQLiteDatabase.setTransactionSuccessful() and SQLiteDatabase.endTransaction()
-        if(tLevel == 0) {
+        if (tLevel == 0) {
             if (commit) {
                 Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), tLevel);
                 database.setTransactionSuccessful();
@@ -1339,7 +1337,7 @@ public final class Database {
             }
         }
         // Inner (level 1 or higher) transaction: Use SQLite's ROLLBACK and RELEASE
-        else{
+        else {
             if (commit) {
                 Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), tLevel);
             } else {
@@ -1351,10 +1349,9 @@ public final class Database {
                     return false;
                 }
             }
-            try{
+            try {
                 database.execSQL("RELEASE cbl_" + Integer.toString(tLevel));
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                 return false;
             }
@@ -1645,7 +1642,7 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public RevisionInternal loadRevisionBody(RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) throws CouchbaseLiteException {
-        if(rev.getBody() != null && contentOptions == EnumSet.noneOf(Database.TDContentOptions.class) && rev.getSequence() != 0) {
+        if(rev.getBody() != null && contentOptions == EnumSet.noneOf(TDContentOptions.class) && rev.getSequence() != 0) {
             return rev;
         }
 
