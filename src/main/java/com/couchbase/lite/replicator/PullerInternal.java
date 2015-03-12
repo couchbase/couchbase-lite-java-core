@@ -153,7 +153,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         int numRevisionsRemoved = 0;
         try {
             // findMissingRevisions is the local equivalent of _revs_diff. it looks at the
-            // array of revisions in "inbox" and removes the ones that already exist. So whatever’s left in ‘inbox’
+            // array of revisions in "inbox" and removes the ones that already exist. So whatever's left in 'inbox'
             // afterwards are the revisions that need to be downloaded.
             numRevisionsRemoved = db.findMissingRevisions(inbox);
         } catch (SQLException e) {
