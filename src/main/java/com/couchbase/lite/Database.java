@@ -1158,9 +1158,6 @@ public final class Database {
         }
     }
 
-    /**
-     * @exclude
-     */
     @InterfaceAudience.Public
     public boolean close() {
         if (!open) {
