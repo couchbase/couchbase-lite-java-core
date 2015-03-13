@@ -417,7 +417,7 @@ public class ChangeTracker implements Runnable {
                     // frequently happens when we're shutting down and have to
                     // close the socket underneath our read.
                 } else {
-                    Log.e(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
+                    Log.w(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
                     this.error = e;
                 }
 

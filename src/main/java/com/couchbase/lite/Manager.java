@@ -71,6 +71,7 @@ public final class Manager {
 
     public static final String USER_AGENT = "CouchbaseLite/" + Version.getVersionName();
 
+    private static final ObjectMapper mapper = new ObjectMapper();
     private ManagerOptions options;
     private File directoryFile;
     private Map<String, Database> databases;
@@ -79,12 +80,13 @@ public final class Manager {
     private HttpClientFactory defaultHttpClientFactory;
     private Context context;
 
+
     /**
      * @exclude
      */
     @InterfaceAudience.Private
     public static ObjectMapper getObjectMapper() {
-        return new ObjectMapper();
+        return mapper;
     }
 
     /**
