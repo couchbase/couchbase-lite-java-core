@@ -269,6 +269,10 @@ public class Document {
 
         int lastErrorCode = Status.UNKNOWN;
         do {
+            // if there is a conflict error, get the latest revision from db instead of cache
+            if (lastErrorCode == Status.CONFLICT) {
+                currentRevision = null;
+            }
             UnsavedRevision newRev = createRevision();
             if (updater.update(newRev) == false) {
                 break;
@@ -284,7 +288,6 @@ public class Document {
 
         } while (lastErrorCode == Status.CONFLICT);
         return null;
-
     }
 
 
@@ -464,13 +467,14 @@ public class Document {
         }
         String revId = row.getDocumentRevisionId();
         if (currentRevision == null || revIdGreaterThanCurrent(revId)) {
+            currentRevision = null;
             Map<String, Object> properties = row.getDocumentProperties();
             if (properties != null) {
                 RevisionInternal rev = new RevisionInternal(properties);
                 currentRevision = new SavedRevision(this, rev);
             }
         }
-     }
+    }
 
     /**
      * @exclude
