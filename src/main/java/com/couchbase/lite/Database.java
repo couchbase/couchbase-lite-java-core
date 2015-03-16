@@ -1122,6 +1122,18 @@ public final class Database {
             dbVersion = 16;
         }
 
+        if (dbVersion < 17) {
+            // Version 17: https://github.com/couchbase/couchbase-lite-ios/issues/615
+            String upgradeSql = "CREATE INDEX maps_view_sequence ON maps(view_id, sequence); " +
+                    "PRAGMA user_version = 17";
+
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 17;
+        }
+
         try {
             if(isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()){
                 attachments = new BlobStore(getAttachmentStorePath(), false);
