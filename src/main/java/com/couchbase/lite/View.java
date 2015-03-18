@@ -475,7 +475,7 @@ public final class View {
                     database.getDatabase().execSQL(
                             "DELETE FROM maps WHERE view_id=? AND sequence IN ("
                                     + "SELECT parent FROM revs WHERE sequence>? "
-                                    + "AND parent>0 AND parent<=?)", args);
+                                    + "AND +parent>0 AND +parent<=?)", args);
                 }
             }
 
