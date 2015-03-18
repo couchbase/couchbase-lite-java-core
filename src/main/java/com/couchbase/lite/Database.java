@@ -56,6 +56,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringTokenizer;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
@@ -184,7 +185,6 @@ public final class Database {
             "        deleted BOOLEAN DEFAULT 0, " +
             "        json BLOB, " +
             "        UNIQUE (doc_id, revid)); " +
-            "    CREATE INDEX revs_by_id ON revs(revid, doc_id); " +
             "    CREATE INDEX revs_current ON revs(doc_id, current); " +
             "    CREATE INDEX revs_parent ON revs(parent); " +
             "    CREATE TABLE localdocs ( " +
@@ -967,11 +967,11 @@ public final class Database {
         }
 
         if (dbVersion < 3) {
-            String upgradeSql = "CREATE TABLE localdocs ( " +
+            String upgradeSql = "CREATE TABLE IF NOT EXISTS localdocs ( " +
                     "docid TEXT UNIQUE NOT NULL, " +
                     "revid TEXT NOT NULL, " +
                     "json BLOB); " +
-                    "CREATE INDEX localdocs_by_docid ON localdocs(docid); " +
+                    "CREATE INDEX IF NOT EXISTS localdocs_by_docid ON localdocs(docid); " +
                     "PRAGMA user_version = 3";
             if(!initialize(upgradeSql)) {
                 database.close();
@@ -1011,6 +1011,11 @@ public final class Database {
             // Version 6: enable Write-Ahead Log (WAL) <http://sqlite.org/wal.html>
             // Not supported on Android, require SQLite 3.7.0
             //String upgradeSql  = "PRAGMA journal_mode=WAL; " +
+
+            // NOTE: For Android, WAL should be set when open the database
+            //       Check AndroidSQLiteStorageEngine.java public boolean open(String path) method.
+            //       http://developer.android.com/reference/android/database/sqlite/SQLiteDatabase.html#enableWriteAheadLogging()
+
             String upgradeSql  = "PRAGMA user_version = 6";
             if (!initialize(upgradeSql)) {
                 database.close();
@@ -1296,7 +1301,7 @@ public final class Database {
     @InterfaceAudience.Private
     public boolean beginTransaction() {
         int tLevel = transactionLevel.get();
-        Log.d(Log.TAG_DATABASE, "[Database.beginTransaction()] Database=" + this + ", SQLiteStorageEngine=" + database + ", transactionLevel=" + transactionLevel + ", currentThread=" + Thread.currentThread());
+        //Log.v(Log.TAG_DATABASE, "[Database.beginTransaction()] Database=" + this + ", SQLiteStorageEngine=" + database + ", transactionLevel=" + transactionLevel + ", currentThread=" + Thread.currentThread());
         try {
             // Outer (level 0)  transaction. Use SQLiteDatabase.beginTransaction()
             if (tLevel == 0) {
@@ -1306,10 +1311,10 @@ public final class Database {
             else {
                 database.execSQL("SAVEPOINT cbl_" + Integer.toString(tLevel));
             }
-            Log.i(Log.TAG, "%s Begin transaction (level %d)", Thread.currentThread().getName(), tLevel);
+            Log.v(Log.TAG_DATABASE, "%s Begin transaction (level %d)", Thread.currentThread().getName(), tLevel);
             transactionLevel.set(++tLevel);
         } catch (SQLException e) {
-            Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
+            Log.e(Log.TAG_DATABASE, Thread.currentThread().getName() + " Error calling beginTransaction()", e);
             return false;
         }
         return true;
@@ -1332,15 +1337,15 @@ public final class Database {
         // Outer (level 0) transaction. Use SQLiteDatabase.setTransactionSuccessful() and SQLiteDatabase.endTransaction()
         if (tLevel == 0) {
             if (commit) {
-                Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), tLevel);
+                Log.v(Log.TAG_DATABASE, "%s Committing transaction (level %d)", Thread.currentThread().getName(), tLevel);
                 database.setTransactionSuccessful();
                 database.endTransaction();
             } else {
-                Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), tLevel);
+                Log.v(Log.TAG_DATABASE, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), tLevel);
                 try {
                     database.endTransaction();
                 } catch (SQLException e) {
-                    Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                    Log.e(Log.TAG_DATABASE, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                     return false;
                 }
             }
@@ -1348,20 +1353,20 @@ public final class Database {
         // Inner (level 1 or higher) transaction: Use SQLite's ROLLBACK and RELEASE
         else {
             if (commit) {
-                Log.i(Log.TAG, "%s Committing transaction (level %d)", Thread.currentThread().getName(), tLevel);
+                Log.v(Log.TAG_DATABASE, "%s Committing transaction (level %d)", Thread.currentThread().getName(), tLevel);
             } else {
-                Log.i(Log.TAG, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), tLevel);
+                Log.v(Log.TAG_DATABASE, "%s CANCEL transaction (level %d)", Thread.currentThread().getName(), tLevel);
                 try {
                     database.execSQL(";ROLLBACK TO cbl_" + Integer.toString(tLevel));
                 } catch (SQLException e) {
-                    Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                    Log.e(Log.TAG_DATABASE, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                     return false;
                 }
             }
             try {
                 database.execSQL("RELEASE cbl_" + Integer.toString(tLevel));
             } catch (SQLException e) {
-                Log.e(Database.TAG, Thread.currentThread().getName() + " Error calling endTransaction()", e);
+                Log.e(Log.TAG_DATABASE, Thread.currentThread().getName() + " Error calling endTransaction()", e);
                 return false;
             }
         }
@@ -4915,5 +4920,61 @@ public final class Database {
         return persistentCookieStore;
     }
 
+    /**
+     * Check if Write-Ahead Logging (WAL) available
+     * http://sqlite.org/wal.html (WAL)
+     * https://www.sqlite.org/c3ref/c_source_id.html (SQLite Version)
+     * WAL requires 3.7.0 or higher
+     */
+    protected boolean isWALAvailable() {
+        String version = getSQLiteVersion();
+        if (version.isEmpty())
+            return false;
 
+        int major = 0;
+        int minor = 0;
+        int i = 0;
+        StringTokenizer tok = new StringTokenizer(version, ".");
+        while (tok.hasMoreTokens()) {
+            String token = tok.nextToken();
+            switch (i) {
+                case 0:
+                    major = Integer.parseInt(token);
+                    break;
+                case 1:
+                    minor = Integer.parseInt(token);
+                    break;
+            }
+            i++;
+        }
+
+        if (major >= 4)
+            return true;
+        else if (major == 3 && minor >= 7)
+            return true;
+
+        return false;
+    }
+
+    /**
+     * Get SQLite version
+     */
+    protected String getSQLiteVersion() {
+        String sql = "select sqlite_version() AS sqlite_version";
+        Cursor cursor = null;
+        String version = "";
+        try {
+            cursor = database.rawQuery(sql, null);
+            if (cursor.moveToNext()) {
+                version += cursor.getString(0);
+            }
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error getting SQLite version", e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return version;
+    }
 }
