@@ -500,12 +500,10 @@ public final class View {
                         } else{
                             valueJson = Manager.getObjectMapper().writeValueAsString(value);
                         }
-                        ContentValues insertValues = new ContentValues();
-                        insertValues.put("view_id", getViewId());
-                        insertValues.put("sequence", sequence);
-                        insertValues.put("key", keyJson);
-                        insertValues.put("value", valueJson);
-                        database.getDatabase().insert("maps", null, insertValues);
+
+                        // NOTE: execSQL() is little faster than insert()
+                        String[] args = { Integer.toString(getViewId()),  Long.toString(sequence), keyJson, valueJson };
+                        database.getDatabase().execSQL("INSERT INTO maps (view_id, sequence, key, value) VALUES(?,?,?,?) ", args);
                     } catch (Exception e) {
                         Log.e(Log.TAG_VIEW, "Error emitting", e);
                         // find a better way to propagate this back
