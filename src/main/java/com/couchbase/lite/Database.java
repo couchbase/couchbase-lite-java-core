@@ -1072,10 +1072,7 @@ public final class Database {
 
         // (Version 11 used to create the index revs_cur_deleted, which is obsoleted in version 16)
 
-        // TODO: had to skip 12, because the bugfix has not been ported to android yet.
-        // TODO: See https://github.com/couchbase/couchbase-lite-ios/commit/a33d6ef3acc61fbc99deedd5658dc5ee897bd399
-        // TODO: once it's ported, it can be added onto the end
-
+        // (Version 12: CBL Android/Java skipped 12 before. Instead, we ported bug fix at dbVersion 18)
 
         if (dbVersion < 13) {
             // Version 13: Add rows to track number of rows in the views
@@ -1137,6 +1134,19 @@ public final class Database {
                 return false;
             }
             dbVersion = 17;
+        }
+
+        // Note: We skipped change for dbVersion 12 before. 18 is for JSONCollator bug fix.
+        //       Android version should be one version higher.
+        if (dbVersion < 18) {
+            // Version 12: Because of a bug fix that changes JSON collation, invalidate view indexes
+            String upgradeSql = "DELETE FROM maps; UPDATE views SET lastsequence=0; " +
+                    "PRAGMA user_version = 18";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 18;
         }
 
         try {
