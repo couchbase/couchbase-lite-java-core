@@ -335,9 +335,11 @@ public class ChangeTracker implements Runnable {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
                         inputStream = entity.getContent();
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
+
+                            // NOTE: 1. check content length, ObjectMapper().readValue() throws Exception if size is 0.
+                            // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
                             boolean responseOK = false; // default value
-                            // check content length, ObjectMapper().readValue() throws Exception if size is 0.
-                            if (entity.getContentLength() > 0) {
+                            if (entity.getContentLength() != 0) {
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                 Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
