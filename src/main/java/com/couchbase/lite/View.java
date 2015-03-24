@@ -523,6 +523,14 @@ public final class View {
 
             boolean keepGoing = cursor.moveToNext();
             while (keepGoing) {
+
+                // NOTE: skip row if 1st column is null
+                // https://github.com/couchbase/couchbase-lite-java-core/issues/497
+                if (cursor.isNull(0)) {
+                    keepGoing = cursor.moveToNext();
+                    continue;
+                }
+
                 long docID = cursor.getLong(0);
 
                 // Reconstitute the document as a dictionary:
@@ -538,8 +546,11 @@ public final class View {
                 boolean noAttachments = cursor.getInt(5) > 0;
                 boolean deleted = cursor.getInt(6) > 0;
 
-                while ((keepGoing = cursor.moveToNext()) &&  cursor.getLong(0) == docID) {
+                while ((keepGoing = cursor.moveToNext()) && (cursor.isNull(0) || cursor.getLong(0) == docID)) {
                     // Skip rows with the same doc_id -- these are losing conflicts.
+
+                    // NOTE: Or Skip rows if 1st column is null
+                    // https://github.com/couchbase/couchbase-lite-java-core/issues/497
                 }
 
                 if (minLastSequence > 0) {

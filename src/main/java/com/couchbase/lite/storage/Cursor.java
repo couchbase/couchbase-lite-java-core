@@ -24,4 +24,5 @@ public interface Cursor {
     long getLong(int columnIndex);
     byte[] getBlob(int columnIndex);
     void close();
+    boolean isNull(int columnIndex);
 }
