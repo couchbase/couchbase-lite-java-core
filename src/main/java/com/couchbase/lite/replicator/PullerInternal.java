@@ -196,7 +196,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                 //optimistically pull 1st-gen revs in bulk
                 if (bulkRevsToPull == null)
-                    bulkRevsToPull = new ArrayList<RevisionInternal>(100);
+                    // bulkRevsToPull could be accessed from multiple threads
+                    bulkRevsToPull = Collections.synchronizedList(new ArrayList<RevisionInternal>(100));
 
                 bulkRevsToPull.add(rev);
             }
@@ -234,7 +235,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             }
             if (nBulk > 0) {
                 // Prefer to pull bulk revisions:
-                bulkWorkToStartNow.addAll(bulkRevsToPull.subList(0, nBulk));
+                // Note: ArrayList.addAll(Collection) iterates parameter collection
+                //       https://github.com/couchbase/couchbase-lite-java-core/issues/361
+                synchronized (bulkRevsToPull) {
+                    bulkWorkToStartNow.addAll(bulkRevsToPull.subList(0, nBulk));
+                }
                 bulkRevsToPull.subList(0, nBulk).clear();
             } else {
                 // Prefer to pull an existing revision over a deleted one:
