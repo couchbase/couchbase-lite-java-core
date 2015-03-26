@@ -3317,6 +3317,11 @@ public final class Database {
     }
 
     /**
+     * in CBLDatabase+Insertion.m
+     * - (NSString*) generateIDForRevision: (CBL_Revision*)rev
+     *                            withJSON: (NSData*)json
+     *                         attachments: (NSDictionary*)attachments
+     *                              prevID: (NSString*) prevID
      * @exclude
      */
     @InterfaceAudience.Private
@@ -3337,16 +3342,19 @@ public final class Database {
         // Generate a digest for this revision based on the previous revision ID, document JSON,
         // and attachment digests. This doesn't need to be secure; we just need to ensure that this
         // code consistently generates the same ID given equivalent revisions.
-
         try {
             md5Digest = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
 
+        // single byte - length of previous revision id
+        // +
+        // previous revision id
         int length = 0;
+        byte[] prevIDUTF8 = null;
         if (previousRevisionId != null) {
-            byte[] prevIDUTF8 = previousRevisionId.getBytes(Charset.forName("UTF-8"));
+            prevIDUTF8 = previousRevisionId.getBytes(Charset.forName("UTF-8"));
             length = prevIDUTF8.length;
         }
         if (length > 0xFF) {
@@ -3354,13 +3362,17 @@ public final class Database {
         }
         byte lengthByte = (byte) (length & 0xFF);
         byte[] lengthBytes = new byte[] { lengthByte };
+        md5Digest.update(lengthBytes); // prefix with length byte
+        if (length > 0 && prevIDUTF8 != null) {
+            md5Digest.update(lengthBytes);
+        }
 
-        md5Digest.update(lengthBytes);
-
+        // single byte - deletion flag
         int isDeleted = ((rev.isDeleted() != false) ? 1 : 0);
         byte[] deletedByte = new byte[] { (byte) isDeleted };
         md5Digest.update(deletedByte);
 
+        // all attachment keys
         List<String> attachmentKeys = new ArrayList<String>(attachments.keySet());
         Collections.sort(attachmentKeys);
         for (String key : attachmentKeys) {
@@ -3368,6 +3380,7 @@ public final class Database {
             md5Digest.update(attachment.getBlobKey().getBytes());
         }
 
+        // json
         if (json != null) {
             md5Digest.update(json);
         }
@@ -3377,7 +3390,6 @@ public final class Database {
 
         int generationIncremented = generation + 1;
         return String.format("%d-%s", generationIncremented, digestAsHex).toLowerCase();
-
     }
 
     /**
