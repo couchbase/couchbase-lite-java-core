@@ -231,10 +231,12 @@ public class Batcher<T> {
         Iterator<ScheduledFuture> iterator = pendingFutures.iterator();
         while (iterator.hasNext()) {
             ScheduledFuture pendingFuture = iterator.next();
-            // if we already have an active pending future, ignore this call
+            // NOTE: It used to ignore if there is a pending task in the queue.
+            //       But it rarely causes the problem if a device is slow under multi-threads environment.
+            //       ProcessNow() does not process anything if inbox is empty.
+            //       Executing new task with empty inbox does not causes issue.
             if (pendingFuture != null && !pendingFuture.isCancelled() && !pendingFuture.isDone()) {
-                Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay already has a pending task: %s. ignoring.", this, pendingFuture);
-                return;
+                Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay already has a pending task: %s.", this, pendingFuture);
             } else {
                 futuresToForget.add(pendingFuture);
             }
