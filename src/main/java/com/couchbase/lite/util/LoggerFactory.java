@@ -29,7 +29,8 @@ public class LoggerFactory {
             Logger logger = (Logger) clazz.newInstance();
             return logger;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create logger. classname: " + classname, e);
+            System.err.println("Failed to load the logger: " + classname + ". Use SystemLogger.");
+            return new SystemLogger();
         }
     }
 }
