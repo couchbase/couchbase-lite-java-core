@@ -18,42 +18,18 @@ package com.couchbase.lite.util;
 
 import com.couchbase.lite.Database;
 
-import java.io.InputStream;
-
 public class LoggerFactory {
 
+    static String classname = "com.couchbase.lite.util.LoggerImpl";
+
     public static Logger createLogger() {
-
-        String classname = "";
-        String resource = "services/com.couchbase.lite.util.Logger";
-
         try {
-            InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(resource);
-            if (inputStream == null) {
-                // Return default System logger.
-                Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
-                return new SystemLogger();
-            } else {
-              try {
-                byte[] bytes = TextUtils.read(inputStream);
-                classname = new String(bytes);
-                if (classname == null || classname.isEmpty()) {
-                    // Return default System logger.
-                    Log.d(Database.TAG, "Unable to load %s. Falling back to SystemLogger", resource);
-                    return new SystemLogger();
-                }
-                Log.v(Database.TAG, "Loading logger: %s", classname);
-                Class clazz = Class.forName(classname);
-                Logger logger = (Logger) clazz.newInstance();
-                return logger;
-              } finally {
-                inputStream.close();
-              }
-            }
+            Log.v(Database.TAG, "Loading logger: %s", classname);
+            Class clazz = Class.forName(classname);
+            Logger logger = (Logger) clazz.newInstance();
+            return logger;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to logger.  Resource: " + resource + " classname: " + classname, e);
+            throw new RuntimeException("Failed to create logger. classname: " + classname, e);
         }
-
-
     }
 }
