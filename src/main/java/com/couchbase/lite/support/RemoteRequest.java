@@ -25,7 +25,6 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.protocol.ClientContext;
-import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.auth.BasicScheme;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -89,8 +88,6 @@ public class RemoteRequest implements Runnable {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
 
             HttpClient httpClient = clientFactory.getHttpClient();
-
-            ClientConnectionManager manager = httpClient.getConnectionManager();
 
             preemptivelySetAuthCredentials(httpClient);
 

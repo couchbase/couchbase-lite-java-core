@@ -269,15 +269,17 @@ public class Utils {
      * first by calling shutdown to reject incoming tasks, and then calling shutdownNow,
      * if necessary, to cancel any lingering tasks:
      * http://docs.oracle.com/javase/6/docs/api/java/util/concurrent/ExecutorService.html
+     *
+     * @param timeToWait - Seconds
      */
-    public static void shutdownAndAwaitTermination(ExecutorService pool) {
+    public static void shutdownAndAwaitTermination(ExecutorService pool, long timeToWait) {
         pool.shutdown(); // Disable new tasks from being submitted
         try {
             // Wait a while for existing tasks to terminate
-            if (!pool.awaitTermination(20, TimeUnit.SECONDS)) {
+            if (!pool.awaitTermination(timeToWait, TimeUnit.SECONDS)) {
                 pool.shutdownNow(); // Cancel currently executing tasks
                 // Wait a while for tasks to respond to being cancelled
-                if (!pool.awaitTermination(20, TimeUnit.SECONDS)) {
+                if (!pool.awaitTermination(timeToWait, TimeUnit.SECONDS)) {
                     Log.e(Log.TAG_DATABASE, "Pool did not terminate");
                 }
             }
@@ -287,5 +289,9 @@ public class Utils {
             // Preserve interrupt status
             Thread.currentThread().interrupt();
         }
+    }
+
+    public static void shutdownAndAwaitTermination(ExecutorService pool) {
+        shutdownAndAwaitTermination(pool, 20);
     }
 }

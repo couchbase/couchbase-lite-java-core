@@ -208,7 +208,12 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
                 // Only retry if error is  TransientError (5xx).
                 if (isTransientError(httpResponse, e)) {
-                    if (retryCount >= MAX_RETRIES) {
+                    if (requestExecutor != null && requestExecutor.isShutdown()) {
+                        // requestExecutor was shutdown, no more retry.
+                        Log.e(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, RequestExecutor was shutdown. url: %s", this, url);
+                        completed(httpResponse, result, e);
+                    }
+                    else if (retryCount >= MAX_RETRIES) {
                         Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, but transient error.  retries exhausted. url: %s", this, url);
                         // ok, we're out of retries, propagate completion block call
                         completed(httpResponse, result, e);
@@ -299,16 +304,18 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
         while (retryCount <= MAX_RETRIES) {
 
+            // requestExecutor was shutdown, no more retry.
+            if (requestExecutor == null || requestExecutor.isShutdown()) {
+                return null;
+            }
+
             // Take a future from the queue
             Future future = pendingRequests.take();
-
             future.get();
-
             if (completedSuccessfully.get() == true) {
                 // we're done
                 return null;
             }
-
         }
 
         // exhausted attempts, callback to original caller with result.  requestThrowable
