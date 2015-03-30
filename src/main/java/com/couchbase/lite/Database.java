@@ -3364,7 +3364,7 @@ public final class Database {
         byte[] lengthBytes = new byte[] { lengthByte };
         md5Digest.update(lengthBytes); // prefix with length byte
         if (length > 0 && prevIDUTF8 != null) {
-            md5Digest.update(lengthBytes);
+            md5Digest.update(prevIDUTF8);
         }
 
         // single byte - deletion flag
