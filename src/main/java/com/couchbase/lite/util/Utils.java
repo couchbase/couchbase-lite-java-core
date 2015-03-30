@@ -273,11 +273,15 @@ public class Utils {
      * @param timeToWait - Seconds
      */
     public static void shutdownAndAwaitTermination(ExecutorService pool, long timeToWait) {
-        pool.shutdown(); // Disable new tasks from being submitted
+        synchronized (pool) {
+            pool.shutdown(); // Disable new tasks from being submitted
+        }
         try {
             // Wait a while for existing tasks to terminate
             if (!pool.awaitTermination(timeToWait, TimeUnit.SECONDS)) {
-                pool.shutdownNow(); // Cancel currently executing tasks
+                synchronized (pool) {
+                    pool.shutdownNow(); // Cancel currently executing tasks
+                }
                 // Wait a while for tasks to respond to being cancelled
                 if (!pool.awaitTermination(timeToWait, TimeUnit.SECONDS)) {
                     Log.e(Log.TAG_DATABASE, "Pool did not terminate");
@@ -285,7 +289,9 @@ public class Utils {
             }
         } catch (InterruptedException ie) {
             // (Re-)Cancel if current thread also interrupted
-            pool.shutdownNow();
+            synchronized (pool) {
+                pool.shutdownNow();
+            }
             // Preserve interrupt status
             Thread.currentThread().interrupt();
         }

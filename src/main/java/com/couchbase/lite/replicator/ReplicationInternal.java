@@ -185,20 +185,22 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected void fireTrigger(final ReplicationTrigger trigger) {
         Log.w(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
         // All state machine triggers need to happen on the replicator thread
-        if (workExecutor.isShutdown())
-            return;
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
-                    stateMachine.fire(trigger);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
+        synchronized (workExecutor) {
+            if (!workExecutor.isShutdown()) {
+                workExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
+                            stateMachine.fire(trigger);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            throw new RuntimeException(e);
+                        }
+                    }
+                });
             }
-        });
+        }
     }
 
     /**
@@ -1019,21 +1021,23 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             }
         } else {
             // ASYNC
-            if (workExecutor.isShutdown())
-                return;
-            workExecutor.submit(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        for (ChangeListener changeListener : changeListeners) {
-                            changeListener.changed(changeEvent);
+            synchronized (workExecutor) {
+                if (!workExecutor.isShutdown()) {
+                    workExecutor.submit(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                for (ChangeListener changeListener : changeListeners) {
+                                    changeListener.changed(changeEvent);
+                                }
+                            } catch (Exception e) {
+                                Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
+                                throw new RuntimeException(e);
+                            }
                         }
-                    } catch (Exception e) {
-                        Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
-                        throw new RuntimeException(e);
-                    }
+                    });
                 }
-            });
+            }
         }
     }
 

@@ -120,9 +120,11 @@ public class RemoteRequestRetry<T> implements Future<T> {
             request.setCompressedRequest(true);
         }
 
-        if (!requestExecutor.isShutdown()) {
-            Future future = requestExecutor.submit(request);
-            pendingRequests.add(future);
+        synchronized (requestExecutor) {
+            if (!requestExecutor.isShutdown()) {
+                Future future = requestExecutor.submit(request);
+                pendingRequests.add(future);
+            }
         }
 
         return this;
