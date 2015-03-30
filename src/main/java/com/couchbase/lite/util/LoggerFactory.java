@@ -20,7 +20,7 @@ import com.couchbase.lite.Database;
 
 public class LoggerFactory {
 
-    static String classname = "com.couchbase.lite.util.LoggerImpl";
+    static String classname = "com.couchbase.lite.util.SimpleLogger";
 
     public static Logger createLogger() {
         try {
