@@ -347,9 +347,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // set compressed request - gzip
         dl.setCompressedRequest(canSendCompressedRequests());
 
-        if (!remoteRequestExecutor.isShutdown()) {
-            Future future = remoteRequestExecutor.submit(dl);
-            pendingFutures.add(future);
+        synchronized (remoteRequestExecutor) {
+            if (!remoteRequestExecutor.isShutdown()) {
+                Future future = remoteRequestExecutor.submit(dl);
+                pendingFutures.add(future);
+            }
         }
     }
 
@@ -695,21 +697,23 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public void changeTrackerReceivedChange(final Map<String, Object> change) {
         // this callback will be on the changetracker thread, but we need
         // to do the work on the replicator thread.
-        if (workExecutor.isShutdown())
-            return;
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
-                    processChangeTrackerChange(change);
-                } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "Error processChangeTrackerChange(): %s", e);
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
+        synchronized (workExecutor) {
+            if (!workExecutor.isShutdown()) {
+                workExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+                            processChangeTrackerChange(change);
+                        } catch (Exception e) {
+                            Log.e(Log.TAG_SYNC, "Error processChangeTrackerChange(): %s", e);
+                            e.printStackTrace();
+                            throw new RuntimeException(e);
+                        }
+                    }
+                });
             }
-        });
+        }
     }
 
     protected void processChangeTrackerChange(final Map<String, Object> change)
@@ -750,19 +754,21 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public void changeTrackerStopped(ChangeTracker tracker) {
         // this callback will be on the changetracker thread, but we need
         // to do the work on the replicator thread.
-        if (workExecutor.isShutdown())
-            return;
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    processChangeTrackerStopped(changeTracker);
-                } catch (RuntimeException e) {
-                    e.printStackTrace();
-                    throw e;
-                }
+        synchronized (workExecutor) {
+            if (!workExecutor.isShutdown()) {
+                workExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            processChangeTrackerStopped(changeTracker);
+                        } catch (RuntimeException e) {
+                            e.printStackTrace();
+                            throw e;
+                        }
+                    }
+                });
             }
-        });
+        }
     }
 
     private void processChangeTrackerStopped(ChangeTracker tracker) {

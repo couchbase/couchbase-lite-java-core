@@ -400,9 +400,13 @@ public final class Manager {
      */
     @InterfaceAudience.Private
     Future runAsync(Runnable runnable) {
-        if (workExecutor.isShutdown())
-            return null;
-        return workExecutor.submit(runnable);
+        synchronized (workExecutor) {
+            if (!workExecutor.isShutdown()) {
+                return workExecutor.submit(runnable);
+            } else {
+                return null;
+            }
+        }
     }
 
     /**
