@@ -5051,7 +5051,7 @@ public final class Database {
      * https://github.com/couchbase/couchbase-lite-ios/issues/615
      */
     protected void optimizeSQLIndexes() {
-        Log.e(Log.TAG_DATABASE, "optimizeSQLIndexes()");
+        Log.v(Log.TAG_DATABASE, "calls optimizeSQLIndexes()");
         final long currentSequence = getLastSequenceNumber();
         if (currentSequence > 0) {
             final long lastOptimized = getLastOptimized();
