@@ -1222,9 +1222,9 @@ public final class Database {
             // wait till all replicator stopped
             for (CountDownLatch latch : latches) {
                 try {
-                    boolean success = latch.await(20, TimeUnit.SECONDS);
+                    boolean success = latch.await(Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN, TimeUnit.SECONDS);
                     if (!success) {
-                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in 20 second.");
+                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in " + Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN + " second.");
                     }
                 } catch (Exception e) {
                     Log.w(Log.TAG_DATABASE, e.getMessage());

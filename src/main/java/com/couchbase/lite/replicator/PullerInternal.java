@@ -788,6 +788,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     // we told the change tracker to go offline ..
                     Log.d(Log.TAG_SYNC, "Change tracker stopped because we are going offline");
                 }
+                else if(stateMachine.isInState(ReplicationState.STOPPING) ||
+                        stateMachine.isInState(ReplicationState.STOPPED)){
+                    Log.d(Log.TAG_SYNC, "Change tracker stopped because replicator is stopping or stopped.");
+                }
                 else {
                     // otherwise, try to restart the change tracker, since it should
                     // always be running in continuous replications
