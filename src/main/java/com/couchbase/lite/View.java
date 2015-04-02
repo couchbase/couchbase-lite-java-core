@@ -467,6 +467,7 @@ public final class View {
                     String[] whereArgs = {Integer.toString(getViewId())};
                     database.getDatabase().delete("maps", "view_id=?", whereArgs);
                 } else {
+                    database.optimizeSQLIndexes();
                     // Delete all obsolete map results (ones from since-replaced
                     // revisions):
                     String[] args = {Integer.toString(getViewId()),

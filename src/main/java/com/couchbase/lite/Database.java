@@ -944,6 +944,8 @@ public final class Database {
             return false;
         }
 
+        boolean isNew = (dbVersion == 0);
+
         if(dbVersion < 1) {
             // First-time initialization:
             // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
@@ -1147,6 +1149,10 @@ public final class Database {
                 return false;
             }
             dbVersion = 18;
+        }
+
+        if (isNew) {
+            optimizeSQLIndexes(); // runs ANALYZE query
         }
 
         try {
@@ -1426,6 +1432,47 @@ public final class Database {
             if(cursor != null) {
                 cursor.close();
             }
+        }
+        return result;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public String infoForKey(String key) {
+        String result = null;
+        Cursor cursor = null;
+        try {
+            String[] args = {key};
+            cursor = database.rawQuery("SELECT value FROM info WHERE key=?", args);
+            if (cursor.moveToNext()) {
+                result = cursor.getString(0);
+            }
+        } catch (SQLException e) {
+            Log.e(TAG, "Error querying " + key, e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public long setInfo(String key, String info) {
+        long result = 0;
+        try {
+            ContentValues args = new ContentValues();
+            args.put("key", key);
+            args.put("value", info);
+            result = database.insert("info", null, args);
+
+        } catch (Exception e) {
+            Log.e(Database.TAG, "Error inserting document id", e);
         }
         return result;
     }
@@ -4998,5 +5045,36 @@ public final class Database {
             }
         }
         return version;
+    }
+
+    /**
+     * https://github.com/couchbase/couchbase-lite-ios/issues/615
+     */
+    protected void optimizeSQLIndexes() {
+        Log.v(Log.TAG_DATABASE, "calls optimizeSQLIndexes()");
+        final long currentSequence = getLastSequenceNumber();
+        if (currentSequence > 0) {
+            final long lastOptimized = getLastOptimized();
+            if (lastOptimized <= currentSequence / 10) {
+                runInTransaction(new TransactionalTask() {
+                    @Override
+                    public boolean run() {
+                        Log.i(Log.TAG_DATABASE, "%s: Optimizing SQL indexes (curSeq=%lld, last run at %lld)", this, currentSequence, lastOptimized);
+                        database.execSQL("ANALYZE");
+                        database.execSQL("ANALYZE sqlite_master");
+                        setInfo("last_optimized", String.valueOf(currentSequence));
+                        return true;
+                    }
+                });
+            }
+        }
+    }
+
+    private long getLastOptimized() {
+        String info = infoForKey("last_optimized");
+        if (info != null) {
+            return Long.parseLong(info);
+        }
+        return 0;
     }
 }
