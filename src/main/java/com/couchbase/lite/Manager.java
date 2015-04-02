@@ -668,5 +668,13 @@ public final class Manager {
     protected boolean isAutoMigrateBlobStoreFilename() {
         return this.options.isAutoMigrateBlobStoreFilename();
     }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public int getExecutorThreadPooSize() {
+        return this.options.getExecutorThreadPooSize();
+    }
 }
 
