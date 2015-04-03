@@ -61,7 +61,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 
-public class Router implements Database.ChangeListener {
+public class Router implements Database.ChangeListener, Database.DatabaseListener{
 
     private Manager manager;
     private Database db;
@@ -72,6 +72,7 @@ public class Router implements Database.ChangeListener {
     private boolean responseSent = false;
     private ReplicationFilter changesFilter;
     private boolean longpoll = false;
+    private boolean waitting = false;
 
     public static String getVersionString() {
         return Version.getVersion();
@@ -505,42 +506,24 @@ public class Router implements Database.ChangeListener {
             }
         }
 
-        // Configure response headers:
-        if(status.isSuccessful() && connection.getResponseBody() == null && connection.getHeaderField("Content-Type") == null) {
-            connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
-        }
-
-        if (status.isSuccessful() == false && connection.getResponseBody() == null) {
-            Map<String, Object> result = new HashMap<String, Object>();
-            result.put("status", status.getCode());
-            connection.setResponseBody(new Body(result));
-        }
-
-        if(connection.getResponseBody() != null && connection.getResponseBody().isValidJSON()) {
-            Header resHeader = connection.getResHeader();
-            if (resHeader != null) {
-                resHeader.add("Content-Type", "application/json");
-            }
-            else {
-                Log.w(Log.TAG_ROUTER, "Cannot add Content-Type header because getResHeader() returned null");
-            }
-        }
-
-        // Check for a mismatch between the Accept request header and the response type:
-        String accept = connection.getRequestProperty("Accept");
-        if(accept != null && !"*/*".equals(accept)) {
-            String responseType = connection.getBaseContentType();
-            if(responseType != null && accept.indexOf(responseType) < 0) {
-                Log.e(Log.TAG_ROUTER, "Error 406: Can't satisfy request Accept: %s", accept);
-                status = new Status(Status.NOT_ACCEPTABLE);
-            }
-        }
-
-        connection.getResHeader().add("Server", String.format("Couchbase Lite %s", getVersionString()));
-
         // If response is ready (nonzero status), tell my client about it:
         if(status.getCode() != 0) {
+            // NOTE: processRequestRanges() is not implemented for CBL Java Core
+
+            // Configure response headers:
+            status = sendResponseHeaders(status);
+
             connection.setResponseCode(status.getCode());
+
+            if(status.isSuccessful() && connection.getResponseBody() == null && connection.getHeaderField("Content-Type") == null) {
+                connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
+            }
+
+            if (status.getCode() != 0 && status.isSuccessful() == false && connection.getResponseBody() == null) {
+                Map<String, Object> result = new HashMap<String, Object>();
+                result.put("status", status.getCode());
+                connection.setResponseBody(new Body(result));
+            }
 
             if(connection.getResponseBody() != null) {
                 ByteArrayInputStream bais = new ByteArrayInputStream(connection.getResponseBody().getJson());
@@ -555,17 +538,79 @@ public class Router implements Database.ChangeListener {
             }
             sendResponse();
         }
+        else{
+            // NOTE code == 0
+            waitting = true;
+        }
+
+        if (waitting) {
+            if (db != null) {
+                db.addDatabaseListener(this);
+            }
+        }
+    }
+
+    /**
+     * implementation of Database.DatabaseListener
+     */
+    @Override
+    public void databaseClosing() {
+        dbClosing();
+    }
+
+    private void dbClosing(){
+        Log.d(Log.TAG_ROUTER, "Database closing! Returning error 500");
+        Status status = new Status(Status.INTERNAL_SERVER_ERROR);
+        status = sendResponseHeaders(status);
+        connection.setResponseCode(status.getCode());
+        sendResponse();
     }
 
     public void stop() {
         callbackBlock = null;
         if(db != null) {
             db.removeChangeListener(this);
+            db.removeDatabaseListener(this);
         }
     }
 
     public Status do_UNKNOWN(Database db, String docID, String attachmentName) {
         return new Status(Status.NOT_FOUND);
+    }
+
+    /**
+     * in CBL_Router.m
+     * - (void) sendResponseHeaders
+     */
+    private Status sendResponseHeaders(Status status){
+        // NOTE: Line 572-574 of CBL_Router.m is not in CBL Java Core
+        //       This check is in sendResponse();
+
+        connection.getResHeader().add("Server", String.format("Couchbase Lite %s", getVersionString()));
+
+        // Check for a mismatch between the Accept request header and the response type:
+        String accept = connection.getRequestProperty("Accept");
+        if(accept != null && !"*/*".equals(accept)) {
+            String responseType = connection.getBaseContentType();
+            if(responseType != null && accept.indexOf(responseType) < 0) {
+                Log.e(Log.TAG_ROUTER, "Error 406: Can't satisfy request Accept: %s", accept);
+                status = new Status(Status.NOT_ACCEPTABLE);
+            }
+        }
+
+        if(connection.getResponseBody() != null && connection.getResponseBody().isValidJSON()) {
+            Header resHeader = connection.getResHeader();
+            if (resHeader != null) {
+                resHeader.add("Content-Type", "application/json");
+            }
+            else {
+                Log.w(Log.TAG_ROUTER, "Cannot add Content-Type header because getResHeader() returned null");
+            }
+        }
+
+        // NOTE: Line 596-607 of CBL_Router.m is not in CBL Java Core
+
+        return status;
     }
 
     /*************************************************************************************************/
@@ -651,6 +696,23 @@ public class Router implements Database.ChangeListener {
                     }
                 });
 
+                if(!replicator.isContinuous()) {
+                    replicator.addChangeListener(new Replication.ChangeListener() {
+                        @Override
+                        public void changed(Replication.ChangeEvent event) {
+                            if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
+                                Status status = new Status(Status.OK);
+                                status = sendResponseHeaders(status);
+                                connection.setResponseCode(status.getCode());
+                                Map<String,Object> result = new HashMap<String,Object>();
+                                result.put("session_id", event.getSource().getSessionID());
+                                connection.setResponseBody(new Body(result));
+                                sendResponse();
+                            }
+                        }
+                    });
+                }
+
                 replicator.start();
 
                 // wait for replication to start, otherwise replicator.getSessionId() will return null
@@ -662,15 +724,20 @@ public class Router implements Database.ChangeListener {
 
             }
 
-            Map<String,Object> result = new HashMap<String,Object>();
-            result.put("session_id", replicator.getSessionID());
-            connection.setResponseBody(new Body(result));
+            if(replicator.isContinuous()) {
+                Map<String, Object> result = new HashMap<String, Object>();
+                result.put("session_id", replicator.getSessionID());
+                connection.setResponseBody(new Body(result));
+                return new Status(Status.OK);
+            }
+            else{
+                return new Status(0);
+            }
         } else {
             // Cancel replication:
             replicator.stop();
+            return new Status(Status.OK);
         }
-        return new Status(Status.OK);
-
     }
 
     public Status do_GET_uuids(Database _db, String _docID, String _attachmentName) {
