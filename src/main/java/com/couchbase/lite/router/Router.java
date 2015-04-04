@@ -525,17 +525,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.setResponseBody(new Body(result));
             }
 
-            if(connection.getResponseBody() != null) {
-                ByteArrayInputStream bais = new ByteArrayInputStream(connection.getResponseBody().getJson());
-                connection.setResponseInputStream(bais);
-            } else {
-
-                try {
-                    connection.getResponseOutputStream().close();
-                } catch (IOException e) {
-                    Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
-                }
-            }
+            setResponse();
             sendResponse();
         }
         else{
@@ -563,6 +553,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         Status status = new Status(Status.INTERNAL_SERVER_ERROR);
         status = sendResponseHeaders(status);
         connection.setResponseCode(status.getCode());
+        setResponse();
         sendResponse();
     }
 
@@ -576,6 +567,19 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public Status do_UNKNOWN(Database db, String docID, String attachmentName) {
         return new Status(Status.NOT_FOUND);
+    }
+
+    private void setResponse() {
+        if (connection.getResponseBody() != null) {
+            ByteArrayInputStream bais = new ByteArrayInputStream(connection.getResponseBody().getJson());
+            connection.setResponseInputStream(bais);
+        } else {
+            try {
+                connection.getResponseOutputStream().close();
+            } catch (IOException e) {
+                Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+            }
+        }
     }
 
     /**
@@ -707,6 +711,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                                 Map<String,Object> result = new HashMap<String,Object>();
                                 result.put("session_id", event.getSource().getSessionID());
                                 connection.setResponseBody(new Body(result));
+
+                                setResponse();
                                 sendResponse();
                             }
                         }
