@@ -18,7 +18,7 @@ dependencies {
     compile 'com.fasterxml.jackson.core:jackson-core:2.5.0'
     compile 'com.fasterxml.jackson.core:jackson-annotations:2.5.0'
     compile 'com.fasterxml.jackson.core:jackson-databind:2.5.0'
-    compile 'com.github.oxo42:stateless4j:2.5.0'
+    compile 'com.github.oxo42:stateless4j:2.4.0'
 
 
     // Using this version of apache http client based on: http://bit.ly/1kiET7V
