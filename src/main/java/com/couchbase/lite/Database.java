@@ -107,6 +107,7 @@ public final class Database {
     private BlobStore attachments;
     private Manager manager;
     final private CopyOnWriteArrayList<ChangeListener> changeListeners;
+    final private CopyOnWriteArrayList<DatabaseListener> databaseListeners;
     private Cache<String, Document> docCache;
     private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
@@ -247,6 +248,7 @@ public final class Database {
         this.name = FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+        this.databaseListeners = new CopyOnWriteArrayList<DatabaseListener>();
         this.docCache = new Cache<String, Document>();
         this.startTime = System.currentTimeMillis();
         this.changesToNotify = new ArrayList<DocumentChange>();
@@ -742,6 +744,22 @@ public final class Database {
     }
 
     /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void addDatabaseListener(DatabaseListener listener) {
+        databaseListeners.addIfAbsent(listener);
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public void removeDatabaseListener(DatabaseListener listener) {
+        databaseListeners.remove(listener);
+    }
+
+    /**
      * Returns a string representation of this database.
      */
     @InterfaceAudience.Public
@@ -785,6 +803,13 @@ public final class Database {
     @InterfaceAudience.Public
     public static interface ChangeListener {
         public void changed(ChangeEvent event);
+    }
+
+
+    @InterfaceAudience.Private
+    public static interface DatabaseListener {
+        // CBL_DatabaseWillCloseNotification
+        public void databaseClosing();
     }
 
     /**
@@ -1195,6 +1220,10 @@ public final class Database {
     public boolean close() {
         if (!open) {
             return false;
+        }
+
+        for(DatabaseListener listener : databaseListeners){
+            listener.databaseClosing();
         }
 
         if (views != null) {
