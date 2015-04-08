@@ -5,8 +5,8 @@ import com.couchbase.lite.util.Log;
 public class Version {
     public static final String VERSION;
 
-    private static final String VERSION_NAME="${VERSION_NAME}";  // replaced during build process
-    private static final String VERSION_CODE="${VERSION_CODE}";  // replaced during build process
+    private static final String VERSION_NAME="%VERSION_NAME%";  // replaced during build process
+    private static final String VERSION_CODE="%VERSION_CODE%";  // replaced during build process
 
     static {
         int versCode = getVersionCode();
@@ -18,14 +18,14 @@ public class Version {
     }
 
     public static String getVersionName() {
-        if (VERSION_NAME == "${VERSION_NAME}") {
+        if (VERSION_NAME.contains("VERSION_NAME")) {
             return "devbuild";
         }
         return VERSION_NAME;
     }
 
     public static int getVersionCode() {
-        if (VERSION_CODE == "${VERSION_CODE}") {
+        if (VERSION_CODE.contains("VERSION_CODE")) {
             return 0;
         }
 
