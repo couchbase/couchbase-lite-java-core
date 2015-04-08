@@ -26,10 +26,10 @@ import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
-import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.replicator.Replication.ChangeEvent;
 import com.couchbase.lite.replicator.Replication.ChangeListener;
 import com.couchbase.lite.replicator.Replication.ReplicationStatus;
+import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
@@ -817,24 +817,25 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             List<Replication> activeReplicators = db.getActiveReplications();
             if (activeReplicators != null) {
                 for (Replication replicator : activeReplicators) {
+                    if (replicator.isRunning()) {
+                        Map<String, Object> activity = getActivity(replicator);
 
-                    Map<String, Object> activity = getActivity(replicator);
-
-                    if (session_id != null) {
-                        if (replicator.getSessionID().equals(session_id)) {
-                            activities.add(activity);
-                        }
-                    } else {
-                        activities.add(activity);
-                    }
-
-                    if (continuous || longpoll) {
                         if (session_id != null) {
                             if (replicator.getSessionID().equals(session_id)) {
-                                replicator.addChangeListener(listener);
+                                activities.add(activity);
                             }
                         } else {
-                            replicator.addChangeListener(listener);
+                            activities.add(activity);
+                        }
+
+                        if (continuous || longpoll) {
+                            if (session_id != null) {
+                                if (replicator.getSessionID().equals(session_id)) {
+                                    replicator.addChangeListener(listener);
+                                }
+                            } else {
+                                replicator.addChangeListener(listener);
+                            }
                         }
                     }
                 }
