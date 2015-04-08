@@ -19,8 +19,11 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.util.Log;
 
+import java.io.File;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,11 +42,6 @@ public final class Attachment {
      * Whether or not this attachment is gzipped
      */
     private boolean gzipped;
-
-    /**
-     * The owning document.
-     */
-    private Document document;
 
     /**
      * The filename.
@@ -81,7 +79,6 @@ public final class Attachment {
         this.name = name;
         this.metadata = metadata;
         this.gzipped = false;
-
     }
 
     /**
@@ -133,6 +130,29 @@ public final class Attachment {
             body = attachment.getContent();
             return body;
         }
+    }
+
+    /**
+     * This is just for compatibility with iOS implementation.
+     *
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public URL getContentURL(){
+        try {
+            if (revision.getSequence() > 0) {
+                //Database db = revision.getDatabase();
+                //Attachment attachment = db.getAttachmentForSequence(revision.getSequence(), this.name);
+                String path = revision.getDatabase().getAttachmentPathForSequence(revision.getSequence(), this.name);
+                if (path != null) {
+                    return new File(path).toURI().toURL();
+                }
+            }
+        }
+        catch(Exception e){
+            Log.d(Log.TAG_DATABASE, e.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -214,7 +234,6 @@ public final class Attachment {
         writer.read(body);
         writer.finish();
         return writer;
-
     }
 
     /**
@@ -232,6 +251,4 @@ public final class Attachment {
     public void setGZipped(boolean gzipped) {
         this.gzipped = gzipped;
     }
-
-
 }
