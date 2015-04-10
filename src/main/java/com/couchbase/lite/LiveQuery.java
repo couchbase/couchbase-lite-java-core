@@ -6,7 +6,6 @@ import com.couchbase.lite.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -355,10 +354,19 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
         update();
     }
 
+    /**
+     * @exclude
+     */
     @InterfaceAudience.Private
     private synchronized void setRows(QueryEnumerator queryEnumerator) {
         rows = queryEnumerator;
     }
 
-
+    /**
+     *
+     */
+    @InterfaceAudience.Public
+    public void queryOptionsChanged() {
+        this.update();
+    }
 }
