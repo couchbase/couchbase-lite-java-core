@@ -254,7 +254,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         // If we're still waiting to create the remote db, do nothing now. (This method will be
         // re-invoked after that request finishes; see maybeCreateRemoteDB() above.)
-        if(creatingTarget) {
+        if (creatingTarget) {
             Log.d(Log.TAG_SYNC, "%s: creatingTarget == true, doing nothing", this);
             return;
         }
@@ -267,23 +267,24 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             maxPendingSequence = new Long(0);
         }
 
-        if(filterName != null) {
+        if (filterName != null) {
             filter = db.getFilter(filterName);
         }
-        if(filterName != null && filter == null) {
-            Log.w(Log.TAG_SYNC, "%s: No ReplicationFilter registered for filter '%s'; ignoring", this, filterName);;
+        if (filterName != null && filter == null) {
+            Log.w(Log.TAG_SYNC, "%s: No ReplicationFilter registered for filter '%s'; ignoring", this, filterName);
+            ;
         }
 
         // Process existing changes since the last push:
         long lastSequenceLong = 0;
-        if(lastSequence != null) {
+        if (lastSequence != null) {
             lastSequenceLong = Long.parseLong(lastSequence);
         }
         ChangesOptions options = new ChangesOptions();
         options.setIncludeConflicts(true);
         Log.d(Log.TAG_SYNC, "%s: Getting changes since %s", this, lastSequence);
-        RevisionList changes = db.changesSince(lastSequenceLong, options, filter);
-        if(changes.size() > 0) {
+        RevisionList changes = db.changesSince(lastSequenceLong, options, filter, filterParams);
+        if (changes.size() > 0) {
             Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %s", this, changes.size(), lastSequence);
             batcher.queueObjects(changes);
             batcher.flush();
@@ -292,7 +293,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
 
         // Now listen for future changes (in continuous mode):
-        if(isContinuous()) {
+        if (isContinuous()) {
             observing = true;
             db.addChangeListener(this);
         } else {
@@ -340,17 +341,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         for (DocumentChange change : changes) {
             // Skip revisions that originally came from the database I'm syncing to:
             URL source = change.getSourceUrl();
-            if(source != null && source.equals(remote)) {
+            if (source != null && source.equals(remote)) {
                 return;
             }
             RevisionInternal rev = change.getAddedRevision();
-            Map<String, Object> paramsFixMe = null;  // TODO: these should not be null
-            if (getLocalDatabase().runFilter(filter, paramsFixMe, rev)) {
+            if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
                 addToInbox(rev);
             }
-
         }
-
     }
 
     @Override

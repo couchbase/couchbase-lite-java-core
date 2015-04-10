@@ -2167,22 +2167,22 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public RevisionList changesSince(long lastSeq, ChangesOptions options, ReplicationFilter filter) {
+    public RevisionList changesSince(long lastSeq, ChangesOptions options, ReplicationFilter filter, Map<String, Object> filterParams) {
         // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
-        if(options == null) {
+        if (options == null) {
             options = new ChangesOptions();
         }
 
         boolean includeDocs = options.isIncludeDocs() || (filter != null);
-        String additionalSelectColumns =  "";
-        if(includeDocs) {
+        String additionalSelectColumns = "";
+        if (includeDocs) {
             additionalSelectColumns = ", json";
         }
 
         String sql = "SELECT sequence, revs.doc_id, docid, revid, deleted" + additionalSelectColumns + " FROM revs, docs "
-                        + "WHERE sequence > ? AND current=1 "
-                        + "AND revs.doc_id = docs.doc_id "
-                        + "ORDER BY revs.doc_id, revid DESC";
+                + "WHERE sequence > ? AND current=1 "
+                + "AND revs.doc_id = docs.doc_id "
+                + "ORDER BY revs.doc_id, revid DESC";
         String[] args = {Long.toString(lastSeq)};
         Cursor cursor = null;
         RevisionList changes = null;
@@ -2192,11 +2192,11 @@ public final class Database {
             cursor.moveToNext();
             changes = new RevisionList();
             long lastDocId = 0;
-            while(!cursor.isAfterLast()) {
-                if(!options.isIncludeConflicts()) {
+            while (!cursor.isAfterLast()) {
+                if (!options.isIncludeConflicts()) {
                     // Only count the first rev for a given doc (the rest will be losing conflicts):
                     long docNumericId = cursor.getLong(1);
-                    if(docNumericId == lastDocId) {
+                    if (docNumericId == lastDocId) {
                         cursor.moveToNext();
                         continue;
                     }
@@ -2205,11 +2205,10 @@ public final class Database {
 
                 RevisionInternal rev = new RevisionInternal(cursor.getString(2), cursor.getString(3), (cursor.getInt(4) > 0));
                 rev.setSequence(cursor.getLong(0));
-                if(includeDocs) {
+                if (includeDocs) {
                     expandStoredJSONIntoRevisionWithAttachments(cursor.getBlob(5), rev, options.getContentOptions());
                 }
-                Map<String, Object> paramsFixMe = null;  // TODO: these should not be null
-                if (runFilter(filter, paramsFixMe, rev)) {
+                if (runFilter(filter, filterParams, rev)) {
                     changes.add(rev);
                 }
                 cursor.moveToNext();
@@ -2217,12 +2216,12 @@ public final class Database {
         } catch (SQLException e) {
             Log.e(Database.TAG, "Error looking for changes", e);
         } finally {
-            if(cursor != null) {
+            if (cursor != null) {
                 cursor.close();
             }
         }
 
-        if(options.isSortBySequence()) {
+        if (options.isSortBySequence()) {
             changes.sortBySequence();
         }
         changes.limit(options.getLimit());
@@ -2233,12 +2232,12 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public boolean runFilter(ReplicationFilter filter, Map<String, Object> paramsIgnored, RevisionInternal rev) {
+    public boolean runFilter(ReplicationFilter filter, Map<String, Object> filterParams, RevisionInternal rev) {
         if (filter == null) {
             return true;
         }
         SavedRevision publicRev = new SavedRevision(this, rev);
-        return filter.filter(publicRev, null);
+        return filter.filter(publicRev, filterParams);
     }
 
     /**
