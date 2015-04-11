@@ -5087,7 +5087,7 @@ public final class Database {
                 runInTransaction(new TransactionalTask() {
                     @Override
                     public boolean run() {
-                        Log.i(Log.TAG_DATABASE, "%s: Optimizing SQL indexes (curSeq=%lld, last run at %lld)", this, currentSequence, lastOptimized);
+                        Log.i(Log.TAG_DATABASE, "%s: Optimizing SQL indexes (curSeq=%d, last run at %d)", this, currentSequence, lastOptimized);
                         database.execSQL("ANALYZE");
                         database.execSQL("ANALYZE sqlite_master");
                         setInfo("last_optimized", String.valueOf(currentSequence));
