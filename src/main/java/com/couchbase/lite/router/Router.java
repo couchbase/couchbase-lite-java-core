@@ -71,6 +71,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private RouterCallbackBlock callbackBlock;
     private boolean responseSent = false;
     private ReplicationFilter changesFilter;
+    Map<String, Object> changesFilterParams = null;
     private boolean longpoll = false;
     private boolean waiting = false;
 
@@ -1435,8 +1436,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             RevisionInternal rev = change.getAddedRevision();
 
-            Map<String, Object> paramsFixMe = null;  // TODO: these should not be null
-            final boolean allowRevision = event.getSource().runFilter(changesFilter, paramsFixMe, rev);
+            final boolean allowRevision = event.getSource().runFilter(changesFilter, changesFilterParams, rev);
             if (!allowRevision) {
                 return;
             }
@@ -1466,9 +1466,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 Log.w(Log.TAG_ROUTER, "Router: Sending continous change chunk");
                 sendContinuousChange(rev);
             }
-
         }
-
     }
 
     public Status do_GET_Document_changes(Database _db, String docID, String _attachmentName) {
@@ -1492,9 +1490,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (changesFilter == null) {
                 return new Status(Status.NOT_FOUND);
             }
+            changesFilterParams = new HashMap<String, Object>(queries);
+            Log.v(Log.TAG_ROUTER, "Filter params=" + changesFilterParams);
         }
 
-        RevisionList changes = db.changesSince(since, options, changesFilter);
+        RevisionList changes = db.changesSince(since, options, changesFilter, changesFilterParams);
 
         if (changes == null) {
             return new Status(Status.INTERNAL_SERVER_ERROR);
