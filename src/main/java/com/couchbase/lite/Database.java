@@ -1498,7 +1498,7 @@ public final class Database {
             ContentValues args = new ContentValues();
             args.put("key", key);
             args.put("value", info);
-            result = database.insert("info", null, args);
+            result = database.insertWithOnConflict("info", null, args, SQLiteStorageEngine.CONFLICT_REPLACE);
 
         } catch (Exception e) {
             Log.e(Database.TAG, "Error inserting document id", e);
