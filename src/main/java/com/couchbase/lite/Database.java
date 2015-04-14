@@ -3639,7 +3639,7 @@ public final class Database {
         }
 
         // Squish the change objects if too many of them are piling up:
-        if (changesToNotify.size() > MANY_CHANGES_TO_NOTIFY) {
+        if (changesToNotify.size() >= MANY_CHANGES_TO_NOTIFY) {
             if(changesToNotify.size() == MANY_CHANGES_TO_NOTIFY){
                 for(DocumentChange c : changesToNotify){
                     c.reduceMemoryUsage();
