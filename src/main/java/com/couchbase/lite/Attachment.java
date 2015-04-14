@@ -21,6 +21,7 @@ import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
 
+import java.io.IOException;
 import java.io.File;
 import java.io.InputStream;
 import java.net.URL;
@@ -198,7 +199,7 @@ public final class Attachment {
      * the metadata 'digest' and 'follows' properties accordingly.
      */
     @InterfaceAudience.Private
-    /* package */ static Map<String, Object> installAttachmentBodies(Map<String, Object> attachments, Database database) {
+    /* package */ static Map<String, Object> installAttachmentBodies(Map<String, Object> attachments, Database database) throws CouchbaseLiteException {
 
         Map<String, Object> updatedAttachments = new HashMap<String, Object>();
         for (String name : attachments.keySet()) {
@@ -210,7 +211,12 @@ public final class Attachment {
                 InputStream body = attachment.getBodyIfNew();
                 if (body != null) {
                     // Copy attachment body into the database's blob store:
-                    BlobStoreWriter writer = blobStoreWriterForBody(body, database);
+                    BlobStoreWriter writer;
+                    try {
+                        writer = blobStoreWriterForBody(body, database);
+                    } catch (IOException e) {
+                        throw new CouchbaseLiteException(e.getMessage(), Status.STATUS_ATTACHMENT_ERROR);
+                    }
                     metadataMutable.put("length", (long)writer.getLength());
                     metadataMutable.put("digest", writer.mD5DigestString());
                     metadataMutable.put("follows", true);
@@ -229,10 +235,15 @@ public final class Attachment {
     }
 
     @InterfaceAudience.Private
-    /* package */ static BlobStoreWriter blobStoreWriterForBody(InputStream body, Database database) {
+    /* package */ static BlobStoreWriter blobStoreWriterForBody(InputStream body, Database database) throws IOException {
         BlobStoreWriter writer = database.getAttachmentWriter();
-        writer.read(body);
-        writer.finish();
+        try {
+            writer.read(body);
+            writer.finish();
+        } catch (IOException e) {
+            writer.cancel();
+            throw e;
+        }
         return writer;
     }
 

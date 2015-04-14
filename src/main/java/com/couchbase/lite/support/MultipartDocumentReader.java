@@ -244,7 +244,11 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             jsonBuffer.append(data, off, len);
         }
         else {
-            curAttachment.appendData(data, off, len);
+            try {
+                curAttachment.appendData(data, off, len);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to append data", e);
+            }
         }
     }
 
@@ -254,7 +258,11 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             parseJsonBuffer();
         }
         else {
-            curAttachment.finish();
+            try {
+                curAttachment.finish();
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to finish attachment", e);
+            }
             String md5String = curAttachment.mD5DigestString();
             attachmentsByMd5Digest.put(md5String, curAttachment);
             curAttachment = null;
