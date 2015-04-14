@@ -271,7 +271,7 @@ public class Document {
         do {
             // if there is a conflict error, get the latest revision from db instead of cache
             if (lastErrorCode == Status.CONFLICT) {
-                currentRevision = null;
+                forgetCurrentRevision();
             }
             UnsavedRevision newRev = createRevision();
             if (updater.update(newRev) == false) {
@@ -467,7 +467,7 @@ public class Document {
         }
         String revId = row.getDocumentRevisionId();
         if (currentRevision == null || revIdGreaterThanCurrent(revId)) {
-            currentRevision = null;
+            forgetCurrentRevision();
             Map<String, Object> properties = row.getDocumentProperties();
             if (properties != null) {
                 RevisionInternal rev = new RevisionInternal(properties);
@@ -488,26 +488,30 @@ public class Document {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ void revisionAdded(DocumentChange documentChange) {
+    /* package */ void revisionAdded(DocumentChange change, boolean notify) {
 
-        RevisionInternal rev = documentChange.getWinningRevision();
+        RevisionInternal rev = change.getWinningRevision();
         if (rev == null) {
             return;  // current revision didn't change
         }
 
         if (currentRevision != null && !rev.getRevId().equals(currentRevision.getId())) {
-            if (!rev.isDeleted()) {
-                currentRevision = new SavedRevision(this, rev);
-            } else {
+            if (rev.isDeleted()) {
                 currentRevision = null;
+            } else {
+                currentRevision = new SavedRevision(this, rev);
             }
         }
 
-        for (ChangeListener listener : changeListeners) {
-            listener.changed(new ChangeEvent(this, documentChange));
+        if (notify) {
+            for (ChangeListener listener : changeListeners) {
+                listener.changed(new ChangeEvent(this, change));
+            }
         }
-
     }
 
-
+    @InterfaceAudience.Private
+    protected void forgetCurrentRevision() {
+        currentRevision = null;
+    }
 }

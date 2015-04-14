@@ -84,4 +84,7 @@ public class DocumentChange {
         }
     }
 
+    protected void reduceMemoryUsage() {
+        addedRevision = addedRevision.copyWithoutBody();
+    }
 }
