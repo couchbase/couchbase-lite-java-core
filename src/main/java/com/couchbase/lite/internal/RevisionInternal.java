@@ -19,7 +19,7 @@ package com.couchbase.lite.internal;
 
 import com.couchbase.lite.util.CollectionUtils;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
 
@@ -56,21 +56,14 @@ public class RevisionInternal {
     }
 
     public Map<String, Object> getProperties() {
-        Map<String, Object> result = null;
         if (body != null) {
-            Map<String, Object> prop;
             try {
-                prop = body.getProperties();
+                return body.getProperties();
             } catch (IllegalStateException e) {
                 // handle when both object and json are null for this body
-                return null;
             }
-            if (result == null) {
-                result = new HashMap<String, Object>();
-            }
-            result.putAll(prop);
         }
-        return result;
+        return null;
     }
 
     public Object getPropertyForKey(String key) {
@@ -160,7 +153,7 @@ public class RevisionInternal {
         assert ((this.docId == null) || (this.docId.equals(docId)));
         RevisionInternal result = new RevisionInternal(docId, revId, deleted);
         Map<String, Object> unmodifiableProperties = getProperties();
-        Map<String, Object> properties = new HashMap<String, Object>();
+        Map<String, Object> properties = new LinkedHashMap<String, Object>();
         if (unmodifiableProperties != null) {
             properties.putAll(unmodifiableProperties);
         }
@@ -278,7 +271,7 @@ public class RevisionInternal {
             if(attachments != null) {
                 for (String name : attachments.keySet()) {
 
-                    Map<String, Object> attachment = new HashMap<String, Object>((Map<String, Object>) attachments.get(name));
+                    Map<String, Object> attachment = new LinkedHashMap<String, Object>((Map<String, Object>) attachments.get(name));
                     attachment.put("name", name);
                     Map<String, Object> editedAttachment = functor.invoke(attachment);
                     if (editedAttachment == null) {
@@ -287,8 +280,8 @@ public class RevisionInternal {
                     if (editedAttachment != attachment) {
                         if (editedProperties == null) {
                             // Make the document properties and _attachments dictionary mutable:
-                            editedProperties = new HashMap<String, Object>(properties);
-                            editedAttachments = new HashMap<String, Object>(attachments);
+                            editedProperties = new LinkedHashMap<String, Object>(properties);
+                            editedAttachments = new LinkedHashMap<String, Object>(attachments);
                             editedProperties.put("_attachments", editedAttachments);
                         }
                         editedAttachment.remove("name");
@@ -308,6 +301,6 @@ public class RevisionInternal {
         if (getProperties() != null && getProperties().containsKey("_attachments")) {
             return (Map<String, Object>) getProperties().get("_attachments");
         }
-        return new HashMap<String, Object>();
+        return new LinkedHashMap<String, Object>();
     }
 }

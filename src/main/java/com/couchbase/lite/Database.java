@@ -42,6 +42,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.Object;
+import java.lang.String;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -53,6 +55,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1576,7 +1579,7 @@ public final class Database {
             revsInfo = new ArrayList<Object>();
             List<RevisionInternal> revHistoryFull = getRevisionHistory(rev);
             for (RevisionInternal historicalRev : revHistoryFull) {
-                Map<String,Object> revHistoryItem = new HashMap<String,Object>();
+                Map<String,Object> revHistoryItem = new LinkedHashMap<String,Object>();
                 String status = "available";
                 if(historicalRev.isDeleted()) {
                     status = "deleted";
@@ -1605,7 +1608,7 @@ public final class Database {
             }
         }
 
-        Map<String,Object> result = new HashMap<String,Object>();
+        Map<String,Object> result = new LinkedHashMap<String, Object>();
         result.put("_id", docId);
         result.put("_rev", revId);
         if(rev.isDeleted()) {
@@ -3039,12 +3042,12 @@ public final class Database {
             if (revPos > 0 && revPos < minRevPos && (stub == null)) {
                 // Strip this attachment's body. First make its dictionary mutable:
                 if (editedProperties == null) {
-                    editedProperties = new HashMap<String,Object>(properties);
-                    editedAttachments = new HashMap<String,Object>(attachments);
+                    editedProperties = new LinkedHashMap<String, Object>(properties);
+                    editedAttachments = new LinkedHashMap<String,Object>(attachments);
                     editedProperties.put("_attachments", editedAttachments);
                 }
                 // ...then remove the 'data' and 'follows' key:
-                Map<String,Object> editedAttachment = new HashMap<String,Object>(attachment);
+                Map<String,Object> editedAttachment = new LinkedHashMap<String,Object>(attachment);
                 editedAttachment.remove("data");
                 editedAttachment.remove("follows");
                 editedAttachment.put("stub", true);
@@ -3065,7 +3068,7 @@ public final class Database {
         rev.mutateAttachments(new CollectionUtils.Functor<Map<String, Object>, Map<String, Object>>() {
             public Map<String, Object> invoke(Map<String, Object> attachment) {
                 if (attachment.containsKey("follows") || attachment.containsKey("data")) {
-                    Map<String, Object> editedAttachment = new HashMap<String, Object>(attachment);
+                    Map<String, Object> editedAttachment = new LinkedHashMap<String, Object>(attachment);
                     editedAttachment.remove("follows");
                     editedAttachment.remove("data");
                     editedAttachment.put("stub",true);
@@ -3109,7 +3112,7 @@ public final class Database {
                 }
 
                 // Need to modify attachment entry:
-                Map<String, Object> editedAttachment = new HashMap<String, Object>(attachment);
+                Map<String, Object> editedAttachment = new LinkedHashMap<String, Object>(attachment);
                 editedAttachment.remove("data");
                 if (stubItOut) {
                     // ...then remove the 'data' and 'follows' key:
@@ -3146,7 +3149,7 @@ public final class Database {
                     return null;
                 }
 
-                Map<String, Object> editedAttachment = new HashMap<String, Object>(attachment);
+                Map<String, Object> editedAttachment = new LinkedHashMap<String, Object>(attachment);
                 editedAttachment.remove("follows");
                 editedAttachment.put("data",Base64.encodeBytes(fileData));
                 return editedAttachment;
@@ -3258,7 +3261,7 @@ public final class Database {
                 rememberAttachmentWritersForDigests(blobsByDigest);
 
                 String encodingName = (encoding == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) ? "gzip" : null;
-                Map<String,Object> dict = new HashMap<String, Object>();
+                Map<String,Object> dict = new LinkedHashMap<String, Object>();
 
                 dict.put("digest", digest);
                 dict.put("length", body.getLength());
@@ -3539,8 +3542,9 @@ public final class Database {
                 "_replication_state_time");
 
         // Don't allow any "_"-prefixed keys. Known ones we'll ignore, unknown ones are an error.
-        Map<String,Object> properties = new HashMap<String,Object>(origProps.size());
-        for (String key : origProps.keySet()) {
+        Map<String,Object> properties = new LinkedHashMap<String,Object>(origProps.size());
+        for (Map.Entry<String, Object> entry : origProps.entrySet()) {
+            String key = entry.getKey();
             boolean shouldAdd = false;
             if(key.startsWith("_")) {
                 if(!KNOWN_SPECIAL_KEYS.contains(key)) {
@@ -3554,7 +3558,7 @@ public final class Database {
                 shouldAdd = true;
             }
             if (shouldAdd) {
-                properties.put(key, origProps.get(key));
+                properties.put(key, entry.getValue());
             }
         }
 
@@ -4020,7 +4024,7 @@ public final class Database {
             return new HashMap<String, AttachmentInternal>();
         }
 
-        Map<String, AttachmentInternal> attachments = new HashMap<String, AttachmentInternal>();
+        Map<String, AttachmentInternal> attachments = new LinkedHashMap<String, AttachmentInternal>();
         for (String name : revAttachments.keySet()) {
             Map<String, Object> attachInfo = (Map<String, Object>) revAttachments.get(name);
             String contentType = (String) attachInfo.get("content_type");
