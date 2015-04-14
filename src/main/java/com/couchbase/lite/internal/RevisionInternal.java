@@ -170,6 +170,16 @@ public class RevisionInternal {
         return result;
     }
 
+    public RevisionInternal copyWithoutBody() {
+        if (body == null) {
+            return this;
+        }
+        RevisionInternal rev = new RevisionInternal(docId, revId, deleted);
+        rev.setSequence(sequence);
+        rev.setMissing(missing);
+        return rev;
+    }
+
     public void setSequence(long sequence) {
         this.sequence = sequence;
     }

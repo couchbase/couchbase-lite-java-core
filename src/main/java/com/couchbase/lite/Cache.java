@@ -76,6 +76,7 @@ public class Cache<K,V> {
         weakReferenceCache.clear();
     }
 
-
-
+    public V resourceWithCacheKeyDontRecache(K key) {
+        return weakReferenceCache.get(key);
+    }
 }

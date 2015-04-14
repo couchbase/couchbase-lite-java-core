@@ -72,6 +72,9 @@ public final class Database {
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
 
+    // When this many changes pile up in _changesToNotify, start removing their bodies to save RAM
+    private static final int MANY_CHANGES_TO_NOTIFY = 5000;
+
     private static ReplicationFilterCompiler filterCompiler;
 
     private String path;
@@ -471,6 +474,10 @@ public final class Database {
     @InterfaceAudience.Public
     public Document createDocument() {
         return getDocument(Misc.TDCreateUUID());
+    }
+
+    private Document cachedDocumentWithID(String documentId){
+        return docCache.resourceWithCacheKeyDontRecache(documentId);
     }
 
     /**
@@ -1416,7 +1423,7 @@ public final class Database {
             }
         }
 
-        postChangeNotifications();
+        storageExitedTransaction(commit);
 
         return true;
     }
@@ -3569,7 +3576,8 @@ public final class Database {
 
 
     @InterfaceAudience.Private
-    private void postChangeNotifications() {
+    private boolean postChangeNotifications() {
+        boolean posted = false;
         int tLevel = transactionLevel.get();
         // This is a 'while' instead of an 'if' because when we finish posting notifications, there
         // might be new ones that have arrived as a result of notification handlers making document
@@ -3585,21 +3593,14 @@ public final class Database {
                 outgoingChanges.addAll(changesToNotify);
                 changesToNotify.clear();
 
-                // TODO: change this to match iOS and call cachedDocumentWithID
-                /*
-                BOOL external = NO;
-                for (CBLDatabaseChange* change in changes) {
-                    // Notify the corresponding instantiated CBLDocument object (if any):
-                    [[self _cachedDocumentWithID: change.documentID] revisionAdded: change];
-                    if (change.source != nil)
-                        external = YES;
-                }
-                */
+                // TODO: postPublicChangeNotification in CBLDatabase+Internal.m should replace following lines of code.
 
                 boolean isExternal = false;
-                for (DocumentChange change: outgoingChanges) {
-                    Document document = getDocument(change.getDocumentId());
-                    document.revisionAdded(change);
+                for (DocumentChange change : outgoingChanges) {
+                    Document doc = cachedDocumentWithID(change.getDocumentId());
+                    if (doc != null) {
+                        doc.revisionAdded(change, true);
+                    }
                     if (change.getSourceUrl() != null) {
                         isExternal = true;
                     }
@@ -3611,49 +3612,65 @@ public final class Database {
                     changeListener.changed(changeEvent);
                 }
 
+                posted = true;
             } catch (Exception e) {
                 Log.e(Database.TAG, this + " got exception posting change notifications", e);
             } finally {
                 postingChangeNotifications = false;
             }
-
         }
-
-
-    }
-
-    private void notifyChange(DocumentChange documentChange) {
-        if (changesToNotify == null) {
-            changesToNotify = new ArrayList<DocumentChange>();
-        }
-        changesToNotify.add(documentChange);
-
-        postChangeNotifications();
-    }
-
-    private void notifyChanges(List<DocumentChange> documentChanges) {
-        if (changesToNotify == null) {
-            changesToNotify = new ArrayList<DocumentChange>();
-        }
-        changesToNotify.addAll(documentChanges);
-        postChangeNotifications();
+        return posted;
     }
 
     /**
-     * @exclude
+     * in CBLDatabase+Internal.m
+     * - (void) databaseStorageChanged:(CBLDatabaseChange *)change
      */
-    @InterfaceAudience.Private
-    public void notifyChange(RevisionInternal rev, RevisionInternal winningRev, URL source, boolean inConflict) {
+    private void databaseStorageChanged(DocumentChange change) {
+        Log.v(Log.TAG_DATABASE, "Added: " + change.getAddedRevision());
+        if (changesToNotify == null) {
+            changesToNotify = new ArrayList<DocumentChange>();
+        }
+        changesToNotify.add(change);
+        if (!postChangeNotifications()) {
+            // The notification wasn't posted yet, probably because a transaction is open.
+            // But the CBLDocument, if any, needs to know right away so it can update its
+            // currentRevision.
 
-        DocumentChange change = new DocumentChange(
-                rev,
-                winningRev,
-                inConflict,
-                source);
+            Document doc = cachedDocumentWithID(change.getDocumentId());
+            if (doc != null) {
+                doc.revisionAdded(change, false);
+            }
+        }
 
-        notifyChange(change);
+        // Squish the change objects if too many of them are piling up:
+        if (changesToNotify.size() >= MANY_CHANGES_TO_NOTIFY) {
+            if(changesToNotify.size() == MANY_CHANGES_TO_NOTIFY){
+                for(DocumentChange c : changesToNotify){
+                    c.reduceMemoryUsage();
+                }
+            }else{
+                change.reduceMemoryUsage();
+            }
+        }
+    }
 
-
+    /**
+     * in CBLDatabase+Internal.m
+     * - (void) storageExitedTransaction: (BOOL)committed
+     */
+    private void storageExitedTransaction(boolean committed) {
+        if (!committed) {
+            // I already told cached CBLDocuments about these new revisions. Back that out:
+            for (DocumentChange change : changesToNotify) {
+                Document doc = cachedDocumentWithID(change.getDocumentId());
+                if (doc != null) {
+                    doc.forgetCurrentRevision();
+                }
+            }
+            changesToNotify.clear();
+        }
+        postChangeNotifications();
     }
 
     /**
@@ -3894,7 +3911,7 @@ public final class Database {
             if(newSequence <= 0) {
                 // duplicate rev; see above
                 resultStatus.setCode(Status.OK);
-                notifyChange(newRev, winningRev, null, inConflict);
+                databaseStorageChanged(new DocumentChange(newRev, winningRev, inConflict, null));
                 return newRev;
             }
 
@@ -3926,7 +3943,7 @@ public final class Database {
         }
 
         //// EPILOGUE: A change notification is sent...
-        notifyChange(newRev, winningRev, null, inConflict);
+        databaseStorageChanged(new DocumentChange(newRev, winningRev, inConflict, null));
         return newRev;
     }
 
@@ -4238,17 +4255,13 @@ public final class Database {
             success = true;
 
             // Notify and return:
-            notifyChange(rev, winningRev, source, inConflict);
-
+            databaseStorageChanged(new DocumentChange(rev, winningRev, inConflict, source));
 
         } catch(SQLException e) {
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } finally {
             endTransaction(success);
         }
-
-
-
     }
 
     /** VALIDATION **/
