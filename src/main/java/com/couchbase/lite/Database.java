@@ -3593,11 +3593,14 @@ public final class Database {
                 outgoingChanges.addAll(changesToNotify);
                 changesToNotify.clear();
 
+                // TODO: postPublicChangeNotification in CBLDatabase+Internal.m should replace following lines of code.
+
                 boolean isExternal = false;
-                for (DocumentChange change: outgoingChanges) {
-                    // TODO: change this to match iOS and call cachedDocumentWithID
-                    //cachedDocumentWithID(change.getDocumentId()).revisionAdded(change, true);
-                    getDocument(change.getDocumentId()).revisionAdded(change, true);
+                for (DocumentChange change : outgoingChanges) {
+                    Document doc = cachedDocumentWithID(change.getDocumentId());
+                    if (doc != null) {
+                        doc.revisionAdded(change, true);
+                    }
                     if (change.getSourceUrl() != null) {
                         isExternal = true;
                     }
@@ -3608,6 +3611,7 @@ public final class Database {
                 for (ChangeListener changeListener : changeListeners) {
                     changeListener.changed(changeEvent);
                 }
+
                 posted = true;
             } catch (Exception e) {
                 Log.e(Database.TAG, this + " got exception posting change notifications", e);
@@ -3633,9 +3637,10 @@ public final class Database {
             // But the CBLDocument, if any, needs to know right away so it can update its
             // currentRevision.
 
-            // TODO: change this to match iOS and call cachedDocumentWithID
-            //cachedDocumentWithID(change.getDocumentId()).revisionAdded(change, false);
-            getDocument(change.getDocumentId()).revisionAdded(change, false);
+            Document doc = cachedDocumentWithID(change.getDocumentId());
+            if (doc != null) {
+                doc.revisionAdded(change, false);
+            }
         }
 
         // Squish the change objects if too many of them are piling up:
@@ -3656,12 +3661,13 @@ public final class Database {
      */
     private void storageExitedTransaction(boolean committed) {
         if (!committed) {
-             // I already told cached CBLDocuments about these new revisions. Back that out:
-             for(DocumentChange change : changesToNotify) {
-                 // TODO: change this to match iOS and call cachedDocumentWithID
-                 //cachedDocumentWithID(change.getDocumentId()).forgetCurrentRevision();
-                 getDocument(change.getDocumentId()).forgetCurrentRevision();
-             }
+            // I already told cached CBLDocuments about these new revisions. Back that out:
+            for (DocumentChange change : changesToNotify) {
+                Document doc = cachedDocumentWithID(change.getDocumentId());
+                if (doc != null) {
+                    doc.forgetCurrentRevision();
+                }
+            }
             changesToNotify.clear();
         }
         postChangeNotifications();
