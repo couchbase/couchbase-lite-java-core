@@ -3,7 +3,6 @@ package com.couchbase.lite;
 import com.couchbase.lite.internal.InterfaceAudience;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -125,7 +124,7 @@ public abstract class Revision {
     public List<String> getAttachmentNames() {
         Map<String, Object> attachmentMetadata = getAttachmentMetadata();
         if (attachmentMetadata == null) {
-            return Collections.emptyList();
+            return new ArrayList<String>();
         }
         return new ArrayList<String>(attachmentMetadata.keySet());
     }
@@ -137,7 +136,7 @@ public abstract class Revision {
     public List<Attachment> getAttachments() {
         Map<String, Object> attachmentMetadata = getAttachmentMetadata();
         if (attachmentMetadata == null) {
-            return Collections.emptyList();
+            return new ArrayList<Attachment>();
         }
         List<Attachment> result = new ArrayList<Attachment>(attachmentMetadata.size());
         for (Map.Entry<String, Object> entry: attachmentMetadata.entrySet()) {
