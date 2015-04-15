@@ -251,23 +251,18 @@ public class RemoteRequest implements Runnable {
     }
 
     protected void preemptivelySetAuthCredentials(HttpClient httpClient) {
-        boolean isUrlBasedUserInfo = false;
 
         String userInfo = url.getUserInfo();
-        if (userInfo != null) {
-            isUrlBasedUserInfo = true;
-        } else {
-            if (authenticator != null) {
-                AuthenticatorImpl auth = (AuthenticatorImpl) authenticator;
-                userInfo = auth.authUserInfo();
-            }
+        if (userInfo == null && authenticator != null) {
+            AuthenticatorImpl auth = (AuthenticatorImpl) authenticator;
+            userInfo = auth.authUserInfo();
         }
 
         if (userInfo != null) {
             if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
                 String[] userInfoElements = userInfo.split(":");
-                String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]): userInfoElements[0];
-                String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]): userInfoElements[1];
+                String username = URIUtils.decode(userInfoElements[0]);
+                String password = URIUtils.decode(userInfoElements[1]);
                 final Credentials credentials = new UsernamePasswordCredentials(username, password);
 
                 if (httpClient instanceof DefaultHttpClient) {
