@@ -1,5 +1,7 @@
 package com.couchbase.lite.auth;
 
+import com.couchbase.lite.util.URIUtils;
+
 import java.net.URL;
 import java.util.Map;
 
@@ -25,7 +27,7 @@ public class BasicAuthenticator extends AuthenticatorImpl {
     @Override
     public String authUserInfo() {
         if (this.username != null && this.password != null) {
-            return this.username + ":" + this.password;
+            return URIUtils.encode(this.username) + ":" + URIUtils.encode(this.password);
         }
         return super.authUserInfo();
     }
