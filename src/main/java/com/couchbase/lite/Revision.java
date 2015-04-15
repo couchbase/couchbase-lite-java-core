@@ -119,16 +119,14 @@ public abstract class Revision {
 
     /**
      * The names of all attachments
-     * @return
      */
     @InterfaceAudience.Public
     public List<String> getAttachmentNames() {
         Map<String, Object> attachmentMetadata = getAttachmentMetadata();
-        ArrayList<String> result = new ArrayList<String>();
-        if (attachmentMetadata != null) {
-            result.addAll(attachmentMetadata.keySet());
+        if (attachmentMetadata == null) {
+            return new ArrayList<String>();
         }
-        return result;
+        return new ArrayList<String>(attachmentMetadata.keySet());
     }
 
     /**
@@ -136,10 +134,16 @@ public abstract class Revision {
      */
     @InterfaceAudience.Public
     public List<Attachment> getAttachments() {
-        List<Attachment> result = new ArrayList<Attachment>();
-        List<String> attachmentNames = getAttachmentNames();
-        for (String attachmentName : attachmentNames) {
-            result.add(getAttachment(attachmentName));
+        Map<String, Object> attachmentMetadata = getAttachmentMetadata();
+        if (attachmentMetadata == null) {
+            return new ArrayList<Attachment>();
+        }
+        List<Attachment> result = new ArrayList<Attachment>(attachmentMetadata.size());
+        for (Map.Entry<String, Object> entry: attachmentMetadata.entrySet()) {
+            Attachment attachment = toAttachment(entry.getKey(), entry.getValue());
+            if (attachment != null) {
+                result.add(attachment);
+            }
         }
         return result;
     }
@@ -161,13 +165,18 @@ public abstract class Revision {
         if (attachmentsMetadata == null) {
             return null;
         }
-        Map<String, Object> attachmentMetadata = (Map<String, Object>) attachmentsMetadata.get(name);
+        return toAttachment(name, attachmentsMetadata.get(name));
+    }
 
-        if (attachmentMetadata == null) {
+    private Attachment toAttachment(String name, Object attachment) {
+        if (attachment == null) {
             return null;
+        } else if (attachment instanceof Attachment) {
+            return (Attachment) attachment;
+        } else {
+            Map<String, Object> metadata = (Map<String, Object>) attachment;
+            return new Attachment(this, name, metadata);
         }
-
-        return new Attachment(this, name, attachmentMetadata);
     }
 
     /**
