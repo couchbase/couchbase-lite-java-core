@@ -3,6 +3,7 @@ package com.couchbase.lite.support;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 
+import org.apache.http.auth.params.AuthPNames;
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.HttpClient;
 import org.apache.http.conn.ClientConnectionManager;
@@ -15,6 +16,7 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.protocol.HTTP;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -80,6 +82,7 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
         if (basicHttpParams == null) {
             basicHttpParams = new BasicHttpParams();
+            basicHttpParams.setParameter(AuthPNames.CREDENTIAL_CHARSET, HTTP.UTF_8);
             HttpConnectionParams.setConnectionTimeout(basicHttpParams, DEFAULT_CONNECTION_TIMEOUT_SECONDS * 1000);
             HttpConnectionParams.setSoTimeout(basicHttpParams, DEFAULT_SO_TIMEOUT_SECONDS * 1000);
         }
