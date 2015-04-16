@@ -1447,10 +1447,11 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             // 'status' property is nonstandard; Couchbase Lite returns it, others don't.
             Object objStatus = item.get("status");
-            assert(objStatus instanceof  Integer);
-            int status = ((Integer) objStatus).intValue();
-            if (status >= 400) {
-                return new Status(status);
+            if (objStatus instanceof  Integer) {
+                int status = ((Integer) objStatus).intValue();
+                if (status >= 400) {
+                    return new Status(status);
+                }
             }
             // If no 'status' present, interpret magic hardcoded CouchDB error strings:
             if (errorStr.equalsIgnoreCase("unauthorized")) {
