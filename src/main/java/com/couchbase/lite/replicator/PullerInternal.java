@@ -838,28 +838,38 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 @Override
                 public void run() {
                     try {
-                        if (batcher != null) {
-                            // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
-                            try { Thread.sleep(batcher.delayToUse()); }catch(Exception e){}
-                            Log.e(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                            batcher.waitForPendingFutures();
-                        }
+                        // NOTE: Wait till all queue becomes empty
+                        while ((batcher != null && batcher.count() > 0) ||
+                                (pendingFutures != null && pendingFutures.size() > 0) ||
+                                (downloadsToInsert != null && downloadsToInsert.count() > 0)) {
 
-                        Log.e(Log.TAG_SYNC, "waitForPendingFutures()");
-                        waitForPendingFutures();
+                            if (batcher != null) {
+                                // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
+                                try {
+                                    Thread.sleep(batcher.delayToUse());
+                                } catch (Exception e) {
+                                }
+                                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                                batcher.waitForPendingFutures();
+                            }
 
-                        if (downloadsToInsert != null) {
-                            // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
-                            try { Thread.sleep(downloadsToInsert.delayToUse()); }catch(Exception e){}
-                            Log.e(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
-                            downloadsToInsert.waitForPendingFutures();
+                            Log.e(Log.TAG_SYNC, "waitForPendingFutures()");
+                            waitForPendingFutures();
+
+                            if (downloadsToInsert != null) {
+                                // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
+                                try {
+                                    Thread.sleep(downloadsToInsert.delayToUse());
+                                } catch (Exception e) {
+                                }
+                                Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                                downloadsToInsert.waitForPendingFutures();
+                            }
                         }
-                    }
-                    catch (Exception e) {
+                    } catch (Exception e) {
                         Log.e(Log.TAG_SYNC, "Exception waiting for jobs to drain: %s", e);
                         e.printStackTrace();
-                    }
-                    finally {
+                    } finally {
                         // TODO: this might cause inappropriate IDLE notification.
                         fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
                     }
@@ -882,20 +892,26 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             public void run() {
 
                 try {
-                    // stop things and possibly wait for them to stop ..
-                    if (batcher != null) {
-                        Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                        // TODO: should we call batcher.flushAll(); here?
-                        batcher.waitForPendingFutures();
-                    }
+                    // NOTE: Wait till all queue becomes empty
+                    while ((batcher != null && batcher.count() > 0) ||
+                            (pendingFutures != null && pendingFutures.size() > 0) ||
+                            (downloadsToInsert != null && downloadsToInsert.count() > 0)) {
 
-                    Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
-                    waitForPendingFutures();
+                        // stop things and possibly wait for them to stop ..
+                        if (batcher != null) {
+                            Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                            // TODO: should we call batcher.flushAll(); here?
+                            batcher.waitForPendingFutures();
+                        }
 
-                    if (downloadsToInsert != null) {
-                        Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
-                        // TODO: should we call downloadsToInsert.flushAll(); here?
-                        downloadsToInsert.waitForPendingFutures();
+                        Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
+                        waitForPendingFutures();
+
+                        if (downloadsToInsert != null) {
+                            Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                            // TODO: should we call downloadsToInsert.flushAll(); here?
+                            downloadsToInsert.waitForPendingFutures();
+                        }
                     }
 
                     if (changeTracker != null) {
@@ -903,13 +919,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         changeTracker.stop();
                         Log.d(Log.TAG_SYNC, "stopped change tracker");
                     }
-
-                }
-                catch (Exception e) {
+                } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
                     e.printStackTrace();
-                }
-                finally {
+                } finally {
                     triggerStopImmediate();
                 }
 
@@ -979,26 +992,29 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public void changed(EventType type, Object o, BlockingQueue queue) {
         // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
 
-        if(type == EventType.PUT || type == EventType.ADD) {
-            // in case of one shot, not necessary to switch state and call waitForPendingFutures.
-            if(isContinuous()) {
+        // in case of one shot, not necessary to switch state and call waitForPendingFutures.
+        if (isContinuous()) {
+            if (type == EventType.PUT || type == EventType.ADD) {
                 if (!queue.isEmpty()) {
-                    // trigger to RUNNING if state is IDLE
-                    fireTrigger(ReplicationTrigger.RESUME);
-
-                    // run waitForPendingFutures.
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            waitForPendingFutures();
-                            // trigger to RUNNING if state is not IDLE
-                            fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                        }
-                    }).start();
+                    if (!waitingForPendingFutures) {
+                        waitingForPendingFutures = true;
+                        // trigger to RUNNING if state is IDLE
+                        fireTrigger(ReplicationTrigger.RESUME);
+                    }
+                }
+            } else if (type == EventType.TAKE) {
+                if (queue.isEmpty()) {
+                    if (waitingForPendingFutures) {
+                        // trigger to RUNNING if state is not IDLE
+                        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                        waitingForPendingFutures = false;
+                    }
                 }
             }
         }
     }
+
+    private boolean waitingForPendingFutures = false;
 
     protected void pauseOrResume(){
         int pending = batcher.count() + pendingSequences.count();
