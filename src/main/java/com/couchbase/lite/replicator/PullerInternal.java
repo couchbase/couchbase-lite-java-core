@@ -990,24 +990,19 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {
-        // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
-
-        // in case of one shot, not necessary to switch state and call waitForPendingFutures.
-        if (isContinuous()) {
+        if(!waitingForPendingFutures) {
+            waitingForPendingFutures = true;
             if (type == EventType.PUT || type == EventType.ADD) {
-                if (!queue.isEmpty()) {
-                    if (!waitingForPendingFutures) {
-                        waitingForPendingFutures = true;
-                        // trigger to RUNNING if state is IDLE
+                if (isContinuous()) {
+                    if (!queue.isEmpty()) {
                         fireTrigger(ReplicationTrigger.RESUME);
-                    }
-                }
-            } else if (type == EventType.TAKE) {
-                if (queue.isEmpty()) {
-                    if (waitingForPendingFutures) {
-                        // trigger to RUNNING if state is not IDLE
-                        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                        waitingForPendingFutures = false;
+                        new Thread(new Runnable() {
+                            public void run() {
+                                waitForPendingFutures();
+                                fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                                waitingForPendingFutures = false;
+                            }
+                        }).start();
                     }
                 }
             }
