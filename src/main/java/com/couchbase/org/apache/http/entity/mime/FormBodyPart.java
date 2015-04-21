@@ -25,9 +25,9 @@
  *
  */
 
-package org.apache.http.entity.mime;
+package com.couchbase.org.apache.http.entity.mime;
 
-import org.apache.http.entity.mime.content.ContentBody;
+import com.couchbase.org.apache.http.entity.mime.content.ContentBody;
 
 /**
  * FormBodyPart class represents a content body that can be used as a part of multipart encoded

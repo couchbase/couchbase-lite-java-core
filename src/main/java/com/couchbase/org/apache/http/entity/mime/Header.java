@@ -25,7 +25,7 @@
  *
  */
 
-package org.apache.http.entity.mime;
+package com.couchbase.org.apache.http.entity.mime;
 
 import java.util.ArrayList;
 import java.util.Collections;

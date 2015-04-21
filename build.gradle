@@ -1,7 +1,8 @@
-
 apply plugin: 'java'
 apply plugin: 'maven'
 apply plugin: 'eclipse'
+
+version = System.getenv("MAVEN_UPLOAD_VERSION")
 
 sourceCompatibility = 1.6
 
@@ -33,7 +34,7 @@ task createMavenDirectory(type: Exec) {
 
     ext {
         uploadUser = System.getenv("MAVEN_UPLOAD_USERNAME") + ":" + System.getenv("MAVEN_UPLOAD_PASSWORD")
-        mkcolPath  = System.getenv("MAVEN_UPLOAD_REPO_URL") + "com/couchbase/lite/couchbase-lite-java-core/" + System.getenv("MAVEN_UPLOAD_VERSION") + "/"
+        mkcolPath  = System.getenv("MAVEN_UPLOAD_REPO_URL") + "com/couchbase/lite/couchbase-lite-java-core/" + version + "/"
     }
     commandLine "curl", "--user", uploadUser, "-X", "MKCOL", mkcolPath
 }
@@ -53,7 +54,7 @@ uploadArchives {
             repository(url: System.getenv("MAVEN_UPLOAD_REPO_URL")) {
                 authentication(userName: System.getenv("MAVEN_UPLOAD_USERNAME"), password: System.getenv("MAVEN_UPLOAD_PASSWORD"))
             }
-            pom.version = System.getenv("MAVEN_UPLOAD_VERSION")
+            pom.version = version
             pom.groupId = 'com.couchbase.lite'
             pom.artifactId = 'couchbase-lite-java-core'
             pom.project {

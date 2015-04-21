@@ -25,7 +25,7 @@
  *
  */
 
-package org.apache.http.entity.mime.content;
+package com.couchbase.org.apache.http.entity.mime.content;
 
 /**
  * Represents common content properties.

@@ -618,17 +618,15 @@ public final class View {
             sql += ")";
         }
 
-        String startKey = toJSONString(options.getStartKey());
-        String endKey = toJSONString(options.getEndKey());
-        String minKey = startKey;
-        String maxKey = endKey;
+        Object minKey = options.getStartKey();
+        Object maxKey = options.getEndKey();
         String minKeyDocId = options.getStartKeyDocId();
         String maxKeyDocId = options.getEndKeyDocId();
 
         boolean inclusiveMin = true;
         boolean inclusiveMax = options.isInclusiveEnd();
         if (options.isDescending()) {
-            String min = minKey;
+            Object min = minKey;
             minKey = maxKey;
             maxKey = min;
             inclusiveMin = inclusiveMax;
@@ -644,26 +642,29 @@ public final class View {
                 sql += " AND key > ?";
             }
             sql += collationStr;
-            argsList.add(minKey);
+            String minKeyJSON = toJSONString(minKey);
+            argsList.add(minKeyJSON);
             if (minKeyDocId != null && inclusiveMin) {
                 //OPT: This calls the JSON collator a 2nd time unnecessarily.
                 sql += String.format(" AND (key > ? %s OR docid >= ?)", collationStr);
-                argsList.add(minKey);
+                argsList.add(minKeyJSON);
                 argsList.add(minKeyDocId);
             }
         }
 
         if (maxKey != null) {
+            maxKey = keyForPrefixMatch(maxKey, options.getPrefixMatchLevel());
             if (inclusiveMax) {
                 sql += " AND key <= ?";
             } else {
                 sql += " AND key < ?";
             }
             sql += collationStr;
-            argsList.add(maxKey);
+            String maxKeyJSON = toJSONString(maxKey);
+            argsList.add(maxKeyJSON);
             if (maxKeyDocId != null && inclusiveMax) {
                 sql += String.format(" AND (key < ? %s OR docid <= ?)", collationStr);
-                argsList.add(maxKey);
+                argsList.add(maxKeyJSON);
                 argsList.add(maxKeyDocId);
             }
         }
@@ -687,10 +688,36 @@ public final class View {
         return cursor;
     }
 
+
     /**
-     * Are key1 and key2 grouped together at this groupLevel?
+     * Changes a maxKey into one that also extends to any key it matches as a prefix
      * @exclude
      */
+    @InterfaceAudience.Private
+    private static Object keyForPrefixMatch(Object key, int depth) {
+        if (depth < 1) {
+            return key;
+        } else if (key instanceof String) {
+            // Kludge: prefix match a string by appending max possible character value to it
+            return (String)key + "\uffff";
+        } else if (key instanceof List) {
+            List<Object> nuKey = new ArrayList<Object>(((List<Object>)key));
+            if (depth == 1) {
+                nuKey.add(new HashMap<String,Object>());
+            } else {
+                Object lastObject = keyForPrefixMatch(nuKey.get(nuKey.size()-1), depth - 1);
+                nuKey.set(nuKey.size()-1, lastObject);
+            }
+            return nuKey;
+        } else {
+            return key;
+        }
+    }
+
+        /**
+         * Are key1 and key2 grouped together at this groupLevel?
+         * @exclude
+         */
     @InterfaceAudience.Private
     public static boolean groupTogether(Object key1, Object key2, int groupLevel) {
         if(groupLevel == 0 || !(key1 instanceof List) || !(key2 instanceof List)) {
@@ -811,6 +838,14 @@ public final class View {
                 }
                 lastKey = keyObject;
             }
+            if(keysToReduce==null){
+                //with group, no reduce
+                keysToReduce=new ArrayList<Object>();
+            }
+            if(valuesToReduce==null){
+                //with group, no reduce
+                valuesToReduce=new ArrayList<Object>();
+            }
             keysToReduce.add(keyObject);
             valuesToReduce.add(valueDoc.jsonObject());
 
@@ -881,7 +916,9 @@ public final class View {
                                     null,
                                     EnumSet.noneOf(TDContentOptions.class)
                             );
-                            docContents = linkedDoc.getProperties();
+                            if (linkedDoc != null) {
+                                docContents = linkedDoc.getProperties();
+                            }
                         } else {
                             docContents = database.documentPropertiesFromJSON(
                                     cursor.getBlob(5),

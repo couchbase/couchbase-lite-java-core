@@ -64,6 +64,9 @@ public class RemoteRequest implements Runnable {
 
     protected Map<String, Object> requestHeaders;
 
+    // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
+    private boolean dontLog404;
+
     public RemoteRequest(ScheduledExecutorService workExecutor,
                          HttpClientFactory clientFactory, String method, URL url,
                          Object body, Database db, Map<String, Object> requestHeaders, RemoteRequestCompletionBlock onCompletion) {
@@ -213,7 +216,9 @@ public class RemoteRequest implements Runnable {
 
 
             if (status.getStatusCode() >= 300) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                if (!dontLog404) {
+                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                }
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
                 respondWithResult(fullBody, error, response);
@@ -315,4 +320,7 @@ public class RemoteRequest implements Runnable {
 
     }
 
+    public void setDontLog404(boolean dontLog404) {
+        this.dontLog404 = dontLog404;
+    }
 }

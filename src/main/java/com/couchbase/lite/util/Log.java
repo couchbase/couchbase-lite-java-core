@@ -32,6 +32,7 @@ public class Log {
      */
     public static final String TAG = "CBLite";  // default "catch-all" tag
     public static final String TAG_SYNC = "Sync";
+    public static final String TAG_BATCHER = "Batcher";
     public static final String TAG_SYNC_ASYNC_TASK = "SyncAsyncTask";
     public static final String TAG_REMOTE_REQUEST = "RemoteRequest";
     public static final String TAG_VIEW = "View";
@@ -105,7 +106,9 @@ public class Log {
      * @param msg The message you would like logged.
      */
     public static void v(String tag, String msg) {
-        if (logger != null) logger.v(tag, msg);
+        if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
+            logger.v(tag, msg);
+        }
     }
 
     /**
@@ -116,7 +119,9 @@ public class Log {
      * @param tr An exception to log
      */
     public static void v(String tag, String msg, Throwable tr) {
-        if (logger != null) logger.v(tag, msg, tr);
+        if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
+            logger.v(tag, msg, tr);
+        }
     }
 
     /**
@@ -162,7 +167,9 @@ public class Log {
      * @param msg The message you would like logged.
      */
     public static void d(String tag, String msg) {
-        if (logger != null) logger.d(tag, msg);
+        if (logger != null && isLoggingEnabled(tag, DEBUG)) {
+            logger.d(tag, msg);
+        }
     }
 
     /**
@@ -173,7 +180,9 @@ public class Log {
      * @param tr An exception to log
      */
     public static void d(String tag, String msg, Throwable tr) {
-        if (logger != null) logger.d(tag, msg, tr);
+        if (logger != null && isLoggingEnabled(tag, DEBUG)) {
+            logger.d(tag, msg, tr);
+        }
     }
 
     /**
@@ -219,7 +228,9 @@ public class Log {
      * @param msg The message you would like logged.
      */
     public static void i(String tag, String msg) {
-        if (logger != null) logger.i(tag, msg);
+        if (logger != null && isLoggingEnabled(tag, INFO)) {
+            logger.i(tag, msg);
+        }
     }
 
     /**
@@ -230,7 +241,9 @@ public class Log {
      * @param tr An exception to log
      */
     public static void i(String tag, String msg, Throwable tr) {
-        if (logger != null) logger.i(tag, msg, tr);
+        if (logger != null && isLoggingEnabled(tag, INFO)) {
+            logger.i(tag, msg, tr);
+        }
     }
 
     /**
@@ -275,7 +288,9 @@ public class Log {
      * @param msg The message you would like logged.
      */
     public static void w(String tag, String msg) {
-        if (logger != null) logger.w(tag, msg);
+        if (logger != null && isLoggingEnabled(tag, WARN)) {
+            logger.w(tag, msg);
+        }
     }
 
     /**
@@ -285,7 +300,9 @@ public class Log {
      * @param tr An exception to log
      */
     public static void w(String tag, Throwable tr) {
-        if (logger != null) logger.w(tag, tr);
+        if (logger != null && isLoggingEnabled(tag, WARN)) {
+            logger.w(tag, tr);
+        }
     }
 
     /**
@@ -296,7 +313,9 @@ public class Log {
      * @param tr An exception to log
      */
     public static void w(String tag, String msg, Throwable tr) {
-        if (logger != null) logger.w(tag, msg, tr);
+        if (logger != null && isLoggingEnabled(tag, WARN)) {
+            logger.w(tag, msg, tr);
+        }
     }
 
 
@@ -344,7 +363,9 @@ public class Log {
      * @param msg The message you would like logged.
      */
     public static void e(String tag, String msg) {
-        if (logger != null) logger.e(tag, msg);
+        if (logger != null && isLoggingEnabled(tag, ERROR)) {
+            logger.e(tag, msg);
+        }
     }
 
     /**
@@ -355,7 +376,9 @@ public class Log {
      * @param tr An exception to log
      */
     public static void e(String tag, String msg, Throwable tr) {
-        if (logger != null) logger.e(tag, msg, tr);
+        if (logger != null && isLoggingEnabled(tag, ERROR)) {
+            logger.e(tag, msg, tr);
+        }
     }
 
 

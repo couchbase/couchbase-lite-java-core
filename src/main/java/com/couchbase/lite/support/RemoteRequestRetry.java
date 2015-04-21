@@ -4,6 +4,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
+import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -11,12 +12,10 @@ import org.apache.http.client.methods.HttpUriRequest;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class RemoteRequestRetry<T> implements Future<T> {
 
-    public static int MAX_RETRIES = 3;  // TODO: rename to MAX_ATTEMPTS
+    public static int MAX_RETRIES = 3;  // total number of attempts = 4 (1 initial + MAX_RETRIES)
     public static int RETRY_DELAY_MS = 10 * 1000;
 
     protected ScheduledExecutorService workExecutor;
@@ -57,9 +56,24 @@ public class RemoteRequestRetry<T> implements Future<T> {
     private Throwable requestThrowable;
     private BlockingQueue<Future> pendingRequests;
 
+    // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
+    private boolean dontLog404;
+
     protected Map<String, Object> requestHeaders;
 
-    public RemoteRequestRetry(ScheduledExecutorService requestExecutor,
+    private RemoteRequestType requestType;
+
+    /**
+     * The kind of RemoteRequest that will be created on each retry attempt
+     */
+    public enum RemoteRequestType {
+        REMOTE_REQUEST,
+        REMOTE_MULTIPART_REQUEST,
+        REMOTE_MULTIPART_DOWNLOADER_REQUEST
+    }
+
+    public RemoteRequestRetry(RemoteRequestType requestType,
+                              ScheduledExecutorService requestExecutor,
                               ScheduledExecutorService workExecutor,
                               HttpClientFactory clientFactory,
                               String method,
@@ -69,6 +83,7 @@ public class RemoteRequestRetry<T> implements Future<T> {
                               Map<String, Object> requestHeaders,
                               RemoteRequestCompletionBlock onCompletionCaller) {
 
+        this.requestType = requestType;
         this.requestExecutor = requestExecutor;
         this.clientFactory = clientFactory;
         this.method = method;
@@ -79,6 +94,8 @@ public class RemoteRequestRetry<T> implements Future<T> {
         this.requestHeaders = requestHeaders;
         this.db = db;
         this.pendingRequests = new LinkedBlockingQueue<Future>();
+
+        validateParameters();
 
         Log.v(Log.TAG_SYNC, "%s: RemoteRequestRetry created, url: %s", this, url);
 
@@ -100,17 +117,46 @@ public class RemoteRequestRetry<T> implements Future<T> {
         requestHttpResponse = null;
         requestResult = null;
         requestThrowable = null;
+        RemoteRequest request = null;
 
-        RemoteRequest request = new RemoteRequest(
-                workExecutor,
-                clientFactory,
-                method,
-                url,
-                body,
-                db,
-                requestHeaders,
-                onCompletionInner
-        );
+        switch (requestType) {
+            case REMOTE_MULTIPART_REQUEST:
+                request = new RemoteMultipartRequest(
+                        workExecutor,
+                        clientFactory,
+                        method,
+                        url,
+                        (MultipartEntity) body,
+                        db,
+                        requestHeaders,
+                        onCompletionInner);
+                break;
+            case REMOTE_MULTIPART_DOWNLOADER_REQUEST:
+                request = new RemoteMultipartDownloaderRequest(
+                        workExecutor,
+                        clientFactory,
+                        method,
+                        url,
+                        body,
+                        db,
+                        requestHeaders,
+                        onCompletionInner);
+                break;
+            default:
+                request = new RemoteRequest(
+                        workExecutor,
+                        clientFactory,
+                        method,
+                        url,
+                        body,
+                        db,
+                        requestHeaders,
+                        onCompletionInner
+                );
+                break;
+        }
+
+        request.setDontLog404(dontLog404);
 
         if (this.authenticator != null) {
             request.setAuthenticator(this.authenticator);
@@ -120,8 +166,6 @@ public class RemoteRequestRetry<T> implements Future<T> {
         }
         return request;
     }
-
-
 
 
     RemoteRequestCompletionBlock onCompletionInner = new RemoteRequestCompletionBlock() {
@@ -240,10 +284,6 @@ public class RemoteRequestRetry<T> implements Future<T> {
                 return null;
             }
 
-            // retryCount += 1;
-
-            // submit();
-
         }
 
         // exhausted attempts, callback to original caller with result.  requestThrowable
@@ -258,4 +298,24 @@ public class RemoteRequestRetry<T> implements Future<T> {
         return get();
     }
 
+    /**
+     * Make sure the user has given us valid parameters
+     */
+    private void validateParameters() {
+        switch (requestType) {
+            case REMOTE_MULTIPART_REQUEST:
+                if ( !(body instanceof MultipartEntity) ) {
+                    throw new IllegalArgumentException("body must be a MultipartEntity for REMOTE_MULTIPART_REQUESTs");
+                }
+                break;
+            default:
+                break;
+
+        }
+
+    }
+
+    public void setDontLog404(boolean dontLog404) {
+        this.dontLog404 = dontLog404;
+    }
 }

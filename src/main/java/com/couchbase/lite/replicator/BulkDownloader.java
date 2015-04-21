@@ -187,12 +187,16 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         } catch (IOException e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
             error = e;
-            respondWithResult(fullBody, e, response);
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             error = e;
-            respondWithResult(fullBody, e, response);
+        } finally {
+            Log.v(Log.TAG_SYNC, "%s: BulkDownloader finally block.  url: %s", this, url);
         }
+
+        Log.v(Log.TAG_SYNC, "%s: BulkDownloader calling respondWithResult.  url: %s, error: %s", this, url, error);
+        respondWithResult(fullBody, error, response);
+
     }
 
 

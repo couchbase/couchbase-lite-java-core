@@ -34,6 +34,7 @@ public class QueryOptions {
     private int skip = 0;
     private int limit = Integer.MAX_VALUE;
     private int groupLevel = 0;
+    private int prefixMatchLevel = 0;
     private EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
     private boolean descending = false;
     private boolean includeDocs = false;
@@ -120,6 +121,14 @@ public class QueryOptions {
 
     public void setGroupLevel(int groupLevel) {
         this.groupLevel = groupLevel;
+    }
+
+    public int getPrefixMatchLevel() {
+        return prefixMatchLevel;
+    }
+
+    public void setPrefixMatchLevel(int prefixMatchLevel) {
+        this.prefixMatchLevel = prefixMatchLevel;
     }
 
     public boolean isReduce() {

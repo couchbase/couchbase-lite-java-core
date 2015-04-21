@@ -312,6 +312,14 @@ public class ChangeTracker implements Runnable {
             try {
                 String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
                 maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
+
+                if (client == null) {
+                    // Temp workaround around race condition
+                    // https://github.com/couchbase/couchbase-lite-java/issues/39
+                    Log.w(Log.TAG_CHANGE_TRACKER, "%s: ChangeTracker run() loop aborting because client == null", this);
+                    return;
+                }
+
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
@@ -321,15 +329,29 @@ public class ChangeTracker implements Runnable {
                     stop();
                     return;
                 }
+
+                if (client == null) {
+                    // Temp workaround around race condition
+                    // https://github.com/couchbase/couchbase-lite-java/issues/39
+                    Log.w(Log.TAG_CHANGE_TRACKER, "%s: ChangeTracker run() loop aborting because client == null", this);
+                    return;
+                }
+
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 InputStream input = null;
                 if (entity != null) {
                     try {
                         input = entity.getContent();
+                        Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
+
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
+                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                             Map<String, Object> fullBody = Manager.getObjectMapper().readValue(input, Map.class);
+                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
                             boolean responseOK = receivedPollResponse(fullBody);
+                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);
+
                             if (mode == ChangeTrackerMode.LongPoll && responseOK) {
 
                                 // TODO: this logic is questionable, there's lots
@@ -349,6 +371,7 @@ public class ChangeTracker implements Runnable {
                             }
                         } else {  // one-shot replications
 
+                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
                             JsonFactory jsonFactory = Manager.getObjectMapper().getJsonFactory();
                             JsonParser jp = jsonFactory.createJsonParser(input);
 
@@ -363,6 +386,8 @@ public class ChangeTracker implements Runnable {
                                 }
 
                             }
+
+                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
 
                             if (!caughtUp) {
                                 caughtUp = true;
@@ -397,6 +422,7 @@ public class ChangeTracker implements Runnable {
                     // close the socket underneath our read.
                 } else {
                     Log.e(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
+                    this.error = e;
                 }
 
                 backoff.sleepAppropriateAmountOfTime();
@@ -413,7 +439,10 @@ public class ChangeTracker implements Runnable {
         }
         //pass the change to the client on the thread that created this change tracker
         if(client != null) {
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: changeTrackerReceivedChange: %s", this, change);
             client.changeTrackerReceivedChange(change);
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: /changeTrackerReceivedChange: %s", this, change);
+
         }
         lastSequenceID = seq;
         return true;

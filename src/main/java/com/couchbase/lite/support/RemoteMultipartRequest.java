@@ -1,12 +1,12 @@
 package com.couchbase.lite.support;
 
 import com.couchbase.lite.Database;
+import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.entity.mime.MultipartEntity;
 
 import java.net.URL;
 import java.util.Map;

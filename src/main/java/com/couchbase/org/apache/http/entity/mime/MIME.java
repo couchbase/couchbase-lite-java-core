@@ -25,17 +25,24 @@
  *
  */
 
-package org.apache.http.entity.mime;
+package com.couchbase.org.apache.http.entity.mime;
+
+import java.nio.charset.Charset;
 
 /**
  *
  * @since 4.0
  */
-public enum HttpMultipartMode {
+public final class MIME {
 
-    /** RFC 822, RFC 2045, RFC 2046 compliant */
-    STRICT,
-    /** browser-compatible mode, i.e. only write Content-Disposition; use content charset */
-    BROWSER_COMPATIBLE
+    public static final String CONTENT_TYPE          = "Content-Type";
+    public static final String CONTENT_TRANSFER_ENC  = "Content-Transfer-Encoding";
+    public static final String CONTENT_DISPOSITION   = "Content-Disposition";
+
+    public static final String ENC_8BIT              = "8bit";
+    public static final String ENC_BINARY            = "binary";
+
+    /** The default character set to be used, i.e. "US-ASCII" */
+    public static final Charset DEFAULT_CHARSET      = Charset.forName("US-ASCII");
 
 }

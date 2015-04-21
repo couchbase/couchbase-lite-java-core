@@ -25,13 +25,13 @@
  *
  */
 
-package org.apache.http.entity.mime.content;
+package com.couchbase.org.apache.http.entity.mime.content;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import org.apache.http.entity.mime.MIME;
+import com.couchbase.org.apache.http.entity.mime.MIME;
 
 /**
  *

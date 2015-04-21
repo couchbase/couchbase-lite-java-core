@@ -20,6 +20,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.Utils;
+import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action1;
 import com.github.oxo42.stateless4j.transitions.Transition;
@@ -28,7 +29,6 @@ import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.cookie.Cookie;
-import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.IOException;
@@ -477,10 +477,18 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public Future sendAsyncRequest(String method, String relativePath, Object body, RemoteRequestCompletionBlock onCompletion) {
+        return sendAsyncRequest(method, relativePath, body, false, onCompletion);
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public Future sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404, RemoteRequestCompletionBlock onCompletion) {
         try {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
-            return sendAsyncRequest(method, url, body, onCompletion);
+            return sendAsyncRequest(method, url, body, dontLog404, onCompletion);
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
@@ -491,9 +499,10 @@ abstract class ReplicationInternal {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, URL url, Object body, final RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncRequest(String method, URL url, Object body, boolean dontLog404, final RemoteRequestCompletionBlock onCompletion) {
 
         RemoteRequestRetry request = new RemoteRequestRetry(
+                RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
                 remoteRequestExecutor,
                 workExecutor,
                 clientFactory,
@@ -504,6 +513,8 @@ abstract class ReplicationInternal {
                 getHeaders(),
                 onCompletion
         );
+
+        request.setDontLog404(dontLog404);
 
         request.setAuthenticator(getAuthenticator());
         request.setOnPreCompletionCaller(new RemoteRequestCompletionBlock() {
@@ -537,7 +548,10 @@ abstract class ReplicationInternal {
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException(e);
         }
-        RemoteMultipartRequest request = new RemoteMultipartRequest(
+
+        RemoteRequestRetry request = new RemoteRequestRetry(
+                RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_REQUEST,
+                remoteRequestExecutor,
                 workExecutor,
                 clientFactory,
                 method,
@@ -545,11 +559,14 @@ abstract class ReplicationInternal {
                 multiPartEntity,
                 getLocalDatabase(),
                 getHeaders(),
-                onCompletion);
+                onCompletion
+        );
 
         request.setAuthenticator(getAuthenticator());
 
-        return remoteRequestExecutor.submit(request);
+        Future future = request.submit();
+        return future;
+
     }
 
     /**
@@ -562,20 +579,24 @@ abstract class ReplicationInternal {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
 
-            RemoteMultipartDownloaderRequest request = new RemoteMultipartDownloaderRequest(
+            RemoteRequestRetry request = new RemoteRequestRetry(
+                    RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_DOWNLOADER_REQUEST,
+                    remoteRequestExecutor,
                     workExecutor,
                     clientFactory,
                     method,
                     url,
                     body,
-                    db,
+                    getLocalDatabase(),
                     getHeaders(),
-                    onCompletion);
+                    onCompletion
+            );
 
             request.setAuthenticator(getAuthenticator());
 
-            Future future = remoteRequestExecutor.submit(request);
+            Future future = request.submit();
             return future;
+
 
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
@@ -742,6 +763,20 @@ abstract class ReplicationInternal {
         if (remoteUrlString.endsWith("/") && relativePath.startsWith("/")) {
             remoteUrlString = remoteUrlString.substring(0, remoteUrlString.length() - 1);
         }
+
+        // workaround for https://github.com/couchbase/couchbase-lite-java-core/issues/208
+        if (relativePath.equals("_session")) {
+            try {
+                URL remoteUrl = new URL(remoteUrlString);
+                String relativePathWithLeadingSlash = String.format("/%s", relativePath);  // required on couchbase-lite-java
+                URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(), remoteUrl.getPort(), relativePathWithLeadingSlash);
+                remoteUrlString = remoteUrlNoPath.toExternalForm();
+                return remoteUrlString;
+            } catch (MalformedURLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         return remoteUrlString + relativePath;
     }
 
@@ -752,8 +787,9 @@ abstract class ReplicationInternal {
     public void fetchRemoteCheckpointDoc() {
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
+        boolean dontLog404 = true;
 
-        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
@@ -769,7 +805,7 @@ abstract class ReplicationInternal {
 
             } else {
                 if (e != null && Utils.is404(e)) {
-                    Log.d(Log.TAG_SYNC, "%s: 404 error getting remote checkpoint %s, calling maybeCreateRemoteDB", this, remoteCheckpointDocID());
+                    Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s", this, remoteCheckpointDocID());
                     maybeCreateRemoteDB();
                 }
                 Map<String, Object> response = (Map<String, Object>) result;
@@ -1139,7 +1175,7 @@ abstract class ReplicationInternal {
      */
     @InterfaceAudience.Private
     public void addToInbox(RevisionInternal rev) {
-        Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s", this, rev);
+        Log.v(Log.TAG_SYNC, "%s: addToInbox() called, rev: %s.  Thread: %s", this, rev, Thread.currentThread());
         batcher.queueObject(rev);
         Log.v(Log.TAG_SYNC, "%s: addToInbox() calling updateActive()", this);
         updateActive();

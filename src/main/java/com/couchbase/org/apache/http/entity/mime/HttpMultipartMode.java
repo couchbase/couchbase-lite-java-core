@@ -25,19 +25,17 @@
  *
  */
 
-package org.apache.http.entity.mime.content;
-
-import java.io.IOException;
-import java.io.OutputStream;
+package com.couchbase.org.apache.http.entity.mime;
 
 /**
  *
  * @since 4.0
  */
-public interface ContentBody extends ContentDescriptor {
+public enum HttpMultipartMode {
 
-    String getFilename();
-
-    void writeTo(OutputStream out) throws IOException;
+    /** RFC 822, RFC 2045, RFC 2046 compliant */
+    STRICT,
+    /** browser-compatible mode, i.e. only write Content-Disposition; use content charset */
+    BROWSER_COMPATIBLE
 
 }

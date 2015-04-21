@@ -16,12 +16,12 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
+import com.couchbase.org.apache.http.entity.mime.content.FileBody;
+import com.couchbase.org.apache.http.entity.mime.content.StringBody;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
-import org.apache.http.entity.mime.MultipartEntity;
-import org.apache.http.entity.mime.content.FileBody;
-import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.File;
 import java.io.IOException;
@@ -131,6 +131,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
                 // TODO: should we call batcher.flushAll(); here?
                 batcher.waitForPendingFutures();
+                Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
             }
 
             while (!pendingFutures.isEmpty()) {
@@ -145,6 +146,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     e.printStackTrace();
                 }
             }
+
+            // since it's possible that in the process of waiting for pendingFutures,
+            // new items were added to the batcher, let's wait for the batcher to
+            // drain again.
+            if (batcher != null) {
+                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                batcher.waitForPendingFutures();
+                Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
+            }
+
 
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
