@@ -6,8 +6,8 @@ import com.couchbase.lite.util.Log;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -42,14 +42,14 @@ public final class UnsavedRevision extends Revision {
         }
 
         if (parentRevisionProperties == null) {
-            properties = new HashMap<String, Object>();
+            properties = new LinkedHashMap<String, Object>();
             properties.put("_id", document.getId());
             if (parentRevID != null) {
                 properties.put("_rev", parentRevID);
             }
         }
         else {
-            properties = new HashMap<String, Object>(parentRevisionProperties);
+            properties = new LinkedHashMap<String, Object>(parentRevisionProperties);
         }
 
     }
@@ -130,11 +130,12 @@ public final class UnsavedRevision extends Revision {
      */
     @InterfaceAudience.Public
     public void setUserProperties(Map<String,Object> userProperties) {
-        Map<String, Object> newProps = new HashMap<String, Object>();
+        Map<String, Object> newProps = new LinkedHashMap<String, Object>();
         newProps.putAll(userProperties);
-        for (String key : properties.keySet()) {
+        for (Map.Entry<String, Object> entry : properties.entrySet()) {
+            String key = entry.getKey();
             if (key.startsWith("_")) {
-                newProps.put(key, properties.get(key));  // Preserve metadata properties
+                newProps.put(key, entry.getValue());  // Preserve metadata properties
             }
         }
         properties = newProps;
@@ -198,7 +199,7 @@ public final class UnsavedRevision extends Revision {
     public List<SavedRevision> getRevisionHistory() throws CouchbaseLiteException {
         // (Don't include self in the array, because this revision doesn't really exist yet)
         SavedRevision parent = getParent();
-        return parent != null ? parent.getRevisionHistory() : new ArrayList<SavedRevision>();
+        return parent != null ? parent.getRevisionHistory() : Collections.<SavedRevision>emptyList();
     }
 
     /**
@@ -211,7 +212,7 @@ public final class UnsavedRevision extends Revision {
     /* package */ void addAttachment(Attachment attachment, String name) {
         Map<String, Object> attachments =  (Map<String, Object>) properties.get("_attachments");
         if (attachments == null) {
-            attachments = new HashMap<String, Object>();
+            attachments = new LinkedHashMap<String, Object>();
         }
         attachments.put(name, attachment);
         properties.put("_attachments", attachments);
@@ -220,6 +221,4 @@ public final class UnsavedRevision extends Revision {
             attachment.setRevision(this);
         }
     }
-
-
 }
