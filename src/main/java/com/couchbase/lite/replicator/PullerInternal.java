@@ -825,6 +825,15 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Log.d(Log.TAG_SYNC, "changeTrackerFinished");
     }
 
+    private void waitForPendingFuturesWithNewThread() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                waitForPendingFutures();
+            }
+        }).start();
+    }
+
     @Override
     public void changeTrackerCaughtUp() {
         Log.e(Log.TAG_SYNC, "changeTrackerCaughtUp");
@@ -834,45 +843,33 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             // this has to be on a different thread than the replicator thread, or else it's a deadlock
             // because it might be waiting for jobs that have been scheduled, and not
             // yet executed (and which will never execute because this will block processing).
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        if (batcher != null) {
-                            // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
-                            try { Thread.sleep(batcher.delayToUse()); }catch(Exception e){}
-                            Log.e(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                            batcher.waitForPendingFutures();
-                        }
+            waitForPendingFuturesWithNewThread();
+        }
+    }
 
-                        Log.e(Log.TAG_SYNC, "waitForPendingFutures()");
-                        waitForPendingFutures();
-
-                        if (downloadsToInsert != null) {
-                            // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
-                            try { Thread.sleep(downloadsToInsert.delayToUse()); }catch(Exception e){}
-                            Log.e(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
-                            downloadsToInsert.waitForPendingFutures();
-                        }
-                    }
-                    catch (Exception e) {
-                        Log.e(Log.TAG_SYNC, "Exception waiting for jobs to drain: %s", e);
-                        e.printStackTrace();
-                    }
-                    finally {
-                        // TODO: this might cause inappropriate IDLE notification.
-                        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                    }
-                    Log.e(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
+    /**
+     * Implementation of BlockingQueueListener.changed(EventType, Object, BlockingQueue) for Pull Replication
+     *
+     * Note: Pull replication needs to send IDLE after PUT /{db}/_local.
+     * However sending IDLE from Push replicator breaks few unit test cases.
+     * This is reason changed() method was override for pull replicatoin
+     */
+    @Override
+    public void changed(EventType type, Object o, BlockingQueue queue) {
+        if (type == EventType.PUT || type == EventType.ADD) {
+            if (isContinuous()) {
+                if (!queue.isEmpty()) {
+                    fireTrigger(ReplicationTrigger.RESUME);
+                    waitForPendingFuturesWithNewThread();
                 }
-            }).start();
+            }
         }
     }
 
     protected void stopGraceful() {
         super.stopGraceful();
 
-        Log.d(Log.TAG_SYNC, "PullerInternal stopGraceful()");
+        Log.d(Log.TAG_SYNC, "PullerInternal.stopGraceful() started");
 
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
@@ -880,45 +877,87 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         new Thread(new Runnable() {
             @Override
             public void run() {
-
                 try {
-                    // stop things and possibly wait for them to stop ..
-                    if (batcher != null) {
-                        Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                        // TODO: should we call batcher.flushAll(); here?
-                        batcher.waitForPendingFutures();
-                    }
+                    // wait for all tasks completed
+                    waitForAllTasksCompleted();
 
-                    Log.d(Log.TAG_SYNC, "waitForPendingFutures()");
-                    waitForPendingFutures();
-
-                    if (downloadsToInsert != null) {
-                        Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
-                        // TODO: should we call downloadsToInsert.flushAll(); here?
-                        downloadsToInsert.waitForPendingFutures();
-                    }
-
+                    // stop change tracker
                     if (changeTracker != null) {
                         Log.d(Log.TAG_SYNC, "stopping change tracker");
                         changeTracker.stop();
                         Log.d(Log.TAG_SYNC, "stopped change tracker");
                     }
-
-                }
-                catch (Exception e) {
+                } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
                     e.printStackTrace();
-                }
-                finally {
+                } finally {
+                    // stop replicator immediate
                     triggerStopImmediate();
                 }
-
-                Log.e(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
+                Log.d(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
             }
         }).start();
     }
 
+    protected boolean waitingForPendingFutures = false;
+    protected Object lockWaitForPendingFutures = new Object();
+
     public void waitForPendingFutures() {
+        if (waitingForPendingFutures) {
+            return;
+        }
+        synchronized (lockWaitForPendingFutures) {
+            waitingForPendingFutures = true;
+
+            Log.d(Log.TAG_SYNC, "[PullerInternal.waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
+
+            try {
+                waitForAllTasksCompleted();
+            } catch (Exception e) {
+                Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+            } finally {
+                Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
+                fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                waitingForPendingFutures = false;
+            }
+        }
+    }
+
+    private void waitForAllTasksCompleted() {
+        // NOTE: Wait till all queue becomes empty
+        while ((batcher != null && batcher.count() > 0) ||
+                (pendingFutures != null && pendingFutures.size() > 0) ||
+                (downloadsToInsert != null && downloadsToInsert.count() > 0)) {
+
+            // Wait for batcher completed
+            if (batcher != null) {
+                // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
+                try {
+                    Thread.sleep(batcher.delayToUse());
+                } catch (Exception e) {
+                }
+                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                batcher.waitForPendingFutures();
+            }
+
+            // wait for pending featurs completed
+            Log.e(Log.TAG_SYNC, "waitPendingFuturesCompleted()");
+            waitPendingFuturesCompleted();
+
+            // wait for downloadToInsert batcher completed
+            if (downloadsToInsert != null) {
+                // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
+                try {
+                    Thread.sleep(downloadsToInsert.delayToUse());
+                } catch (Exception e) {
+                }
+                Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                downloadsToInsert.waitForPendingFutures();
+            }
+        }
+    }
+
+    private void waitPendingFuturesCompleted() {
         try {
             while (!pendingFutures.isEmpty()) {
                 Future future = pendingFutures.take();
@@ -940,12 +979,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @Override
     public boolean shouldCreateTarget() {
         return false;
-    };
+    }
 
     @Override
     public void setCreateTarget(boolean createTarget) {
         // silently ignore this -- doesn't make sense for pull replicator
-    };
+    }
 
     @Override
     protected void goOffline() {
@@ -966,38 +1005,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         // start change tracker
         beginReplicating();
-    }
-
-    /**
-     * Implementation of BlockingQueueListener.changed(EventType, Object, BlockingQueue) for Pull Replication
-     *
-     * Note: Pull replication needs to send IDLE after PUT /{db}/_local.
-     *       However sending IDLE from Push replicator breaks few unit test cases.
-     *       This is reason changed() method was override for pull replicatoin
-     */
-    @Override
-    public void changed(EventType type, Object o, BlockingQueue queue) {
-        // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
-
-        if(type == EventType.PUT || type == EventType.ADD) {
-            // in case of one shot, not necessary to switch state and call waitForPendingFutures.
-            if(isContinuous()) {
-                if (!queue.isEmpty()) {
-                    // trigger to RUNNING if state is IDLE
-                    fireTrigger(ReplicationTrigger.RESUME);
-
-                    // run waitForPendingFutures.
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            waitForPendingFutures();
-                            // trigger to RUNNING if state is not IDLE
-                            fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                        }
-                    }).start();
-                }
-            }
-        }
     }
 
     protected void pauseOrResume(){
