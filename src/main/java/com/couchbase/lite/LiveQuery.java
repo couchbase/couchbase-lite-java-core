@@ -19,7 +19,7 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
     private QueryEnumerator rows;
     private List<ChangeListener> observers = new ArrayList<ChangeListener>();
     private Throwable lastError;
-    private AtomicBoolean runningState; // true == running, false == stopped
+    private final AtomicBoolean runningState; // true == running, false == stopped
 
     /**
      * If a query is running and the user calls stop() on this query, the future
@@ -39,20 +39,8 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
      */
     @InterfaceAudience.Private
     /* package */ LiveQuery(Query query) {
-        super(query.getDatabase(), query.getView());
+        super(query.getDatabase(), query);
         runningState = new AtomicBoolean(false);
-        setLimit(query.getLimit());
-        setSkip(query.getSkip());
-        setStartKey(query.getStartKey());
-        setEndKey(query.getEndKey());
-        setDescending(query.isDescending());
-        setPrefetch(query.shouldPrefetch());
-        setKeys(query.getKeys());
-        setGroupLevel(query.getGroupLevel());
-        setMapOnly(query.isMapOnly());
-        setStartKeyDocId(query.getStartKeyDocId());
-        setEndKeyDocId(query.getEndKeyDocId());
-        setIndexUpdateMode(query.getIndexUpdateMode());
     }
 
     /**
