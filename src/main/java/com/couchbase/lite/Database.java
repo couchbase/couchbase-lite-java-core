@@ -4088,10 +4088,19 @@ public final class Database {
                 Map<String, Object> parentAttachments = getAttachments(rev.getDocId(), prevRevID);
                 if (parentAttachments != null && parentAttachments.containsKey(name)) {
                     Map<String, Object> parentAttachment = (Map<String, Object>) parentAttachments.get(name);
-                    BlobKey blobKey = new BlobKey((String) attachInfo.get("digest"));
-                    attachment.setBlobKey(blobKey);
+                    try {
+                        BlobKey blobKey = new BlobKey((String) attachInfo.get("digest"));
+                        attachment.setBlobKey(blobKey);
+                    } catch (IllegalArgumentException e) {
+                        continue;
+                    }
                 } else if (parentAttachments == null || !parentAttachments.containsKey(name)) {
-                    BlobKey blobKey = new BlobKey((String) attachInfo.get("digest"));
+                    BlobKey blobKey = null;
+                    try {
+                        blobKey = new BlobKey((String) attachInfo.get("digest"));
+                    } catch (IllegalArgumentException e) {
+                        continue;
+                    }
                     if (getAttachments().hasBlobForKey(blobKey)) {
                         attachment.setBlobKey(blobKey);
                     } else {
