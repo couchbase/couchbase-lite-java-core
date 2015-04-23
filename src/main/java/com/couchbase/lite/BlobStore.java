@@ -173,6 +173,12 @@ public class BlobStore {
         return true;
     }
 
+    public boolean hasBlobForKey(BlobKey key){
+        String path = pathForKey(key);
+        File file = new File(path);
+        return file.isFile() && file.exists();
+    }
+
     public byte[] blobForKey(BlobKey key) {
         String path = pathForKey(key);
         File file = new File(path);

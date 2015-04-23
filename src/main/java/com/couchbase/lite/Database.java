@@ -1749,11 +1749,11 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public RevisionInternal loadRevisionBody(RevisionInternal rev, EnumSet<TDContentOptions> contentOptions) throws CouchbaseLiteException {
-        if(rev.getBody() != null && contentOptions == EnumSet.noneOf(TDContentOptions.class) && rev.getSequence() != 0) {
+        if (rev.getBody() != null && contentOptions == EnumSet.noneOf(TDContentOptions.class) && rev.getSequence() != 0) {
             return rev;
         }
 
-        if((rev.getDocId() == null) || (rev.getRevId() == null)) {
+        if ((rev.getDocId() == null) || (rev.getRevId() == null)) {
             Log.e(Database.TAG, "Error loading revision body");
             throw new CouchbaseLiteException(Status.PRECONDITION_FAILED);
         }
@@ -1764,18 +1764,18 @@ public final class Database {
             // TODO: on ios this query is:
             // TODO: "SELECT sequence, json FROM revs WHERE doc_id=? AND revid=? LIMIT 1"
             String sql = "SELECT sequence, json FROM revs, docs WHERE revid=? AND docs.docid=? AND revs.doc_id=docs.doc_id LIMIT 1";
-            String[] args = { rev.getRevId(), rev.getDocId()};
+            String[] args = {rev.getRevId(), rev.getDocId()};
             cursor = database.rawQuery(sql, args);
-            if(cursor.moveToNext()) {
+            if (cursor.moveToNext()) {
                 result.setCode(Status.OK);
                 rev.setSequence(cursor.getLong(0));
                 expandStoredJSONIntoRevisionWithAttachments(cursor.getBlob(1), rev, contentOptions);
             }
-        } catch(SQLException e) {
+        } catch (SQLException e) {
             Log.e(Database.TAG, "Error loading revision body", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } finally {
-            if(cursor != null) {
+            if (cursor != null) {
                 cursor.close();
             }
         }
@@ -3852,7 +3852,7 @@ public final class Database {
             //// PART II: In which we prepare for insertion...
 
             // Get the attachments:
-            Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(oldRev);
+            Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(oldRev, prevRevId);
 
             // Bump the revID and update the JSON:
             byte[] json = null;
@@ -4024,13 +4024,24 @@ public final class Database {
         return result;
     }
 
+    Map<String, Object> getAttachments(String docID, String revID) {
+        RevisionInternal mrev = new RevisionInternal(docID, revID, false);
+        try {
+            RevisionInternal rev = loadRevisionBody(mrev, EnumSet.noneOf(TDContentOptions.class));
+            return rev.getAttachments();
+        } catch (CouchbaseLiteException e) {
+            Log.w(Log.TAG_DATABASE, "Failed to get attachments for " + mrev, e);
+            return null;
+        }
+    }
+
     /**
      * Given a revision, read its _attachments dictionary (if any), convert each attachment to a
      * AttachmentInternal object, and return a dictionary mapping names->CBL_Attachments.
      * @exclude
      */
     @InterfaceAudience.Private
-    Map<String, AttachmentInternal> getAttachmentsFromRevision(RevisionInternal rev) throws CouchbaseLiteException {
+    Map<String, AttachmentInternal> getAttachmentsFromRevision(RevisionInternal rev, String prevRevID) throws CouchbaseLiteException {
 
         Map<String, Object> revAttachments = (Map<String, Object>) rev.getPropertyForKey("_attachments");
         if (revAttachments == null || revAttachments.size() == 0 || rev.isDeleted()) {
@@ -4064,18 +4075,31 @@ public final class Database {
                 // This means it's already been registered in _pendingAttachmentsByDigest;
                 // I just need to look it up by its "digest" property and install it into the store:
                 installAttachment(attachment, attachInfo);
-
             }
             else {
                 // This item is just a stub; validate and skip it
-                if (((Boolean)attachInfo.get("stub")).booleanValue() == false) {
+                if (((Boolean) attachInfo.get("stub")).booleanValue() == false) {
                     throw new CouchbaseLiteException("Expected this attachment to be a stub", Status.BAD_ATTACHMENT);
                 }
-                int revPos = ((Integer)attachInfo.get("revpos")).intValue();
+                int revPos = ((Integer) attachInfo.get("revpos")).intValue();
                 if (revPos <= 0) {
                     throw new CouchbaseLiteException("Invalid revpos: " + revPos, Status.BAD_ATTACHMENT);
                 }
-                continue;
+                Map<String, Object> parentAttachments = getAttachments(rev.getDocId(), prevRevID);
+                if (parentAttachments != null && parentAttachments.containsKey(name)) {
+                    Map<String, Object> parentAttachment = (Map<String, Object>) parentAttachments.get(name);
+                    BlobKey blobKey = new BlobKey((String) attachInfo.get("digest"));
+                    attachment.setBlobKey(blobKey);
+                } else if (parentAttachments == null || !parentAttachments.containsKey(name)) {
+                    BlobKey blobKey = new BlobKey((String) attachInfo.get("digest"));
+                    if (getAttachments().hasBlobForKey(blobKey)) {
+                        attachment.setBlobKey(blobKey);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
             }
 
             // Handle encoded attachment:
@@ -4224,7 +4248,8 @@ public final class Database {
                     if(i == 0) {
                         // Write any changed attachments for the new revision. As the parent sequence use
                         // the latest local revision (this is to copy attachments from):
-                        Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(rev);
+                        String prevRevID = (revHistory.size() >= 2) ? revHistory.get(1) : null;
+                        Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(rev, prevRevID);
                         if (attachments != null) {
                             processAttachmentsForRevision(attachments, rev, localParentSequence);
                             stubOutAttachmentsInRevision(attachments, rev);
