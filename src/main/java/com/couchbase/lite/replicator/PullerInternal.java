@@ -903,23 +903,27 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected Object lockWaitForPendingFutures = new Object();
 
     public void waitForPendingFutures() {
-        if (waitingForPendingFutures) {
-            return;
-        }
         synchronized (lockWaitForPendingFutures) {
-            waitingForPendingFutures = true;
-
-            Log.d(Log.TAG_SYNC, "[PullerInternal.waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
-
-            try {
-                waitForAllTasksCompleted();
-            } catch (Exception e) {
-                Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
-            } finally {
-                Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
-                fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                waitingForPendingFutures = false;
+            if (waitingForPendingFutures) {
+                return;
             }
+            waitingForPendingFutures = true;
+        }
+
+        Log.d(Log.TAG_SYNC, "[PullerInternal.waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
+
+        try {
+            waitForAllTasksCompleted();
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+        }
+
+        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+
+        Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
+
+        synchronized (lockWaitForPendingFutures) {
+            waitingForPendingFutures = false;
         }
     }
 
