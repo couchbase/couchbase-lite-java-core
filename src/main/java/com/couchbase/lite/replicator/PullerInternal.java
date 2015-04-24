@@ -859,8 +859,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (type == EventType.PUT || type == EventType.ADD) {
             if (isContinuous()) {
                 if (!queue.isEmpty()) {
-                    fireTrigger(ReplicationTrigger.RESUME);
-                    waitForPendingFuturesWithNewThread();
+                    if (!waitingForPendingFutures) {
+                        fireTrigger(ReplicationTrigger.RESUME);
+                        waitForPendingFuturesWithNewThread();
+                    }
                 }
             }
         }
