@@ -4159,7 +4159,7 @@ public final class Database {
 
         String docId = rev.getDocId();
         String revId = rev.getRevId();
-        if(!isValidDocumentId(docId) || (revId == null)) {
+        if (!isValidDocumentId(docId) || (revId == null)) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
@@ -4167,29 +4167,38 @@ public final class Database {
         if (revHistory != null) {
             historyCount = revHistory.size();
         }
-        if(historyCount == 0) {
+        if (historyCount == 0) {
             revHistory = new ArrayList<String>();
             revHistory.add(revId);
             historyCount = 1;
-        } else if(!revHistory.get(0).equals(rev.getRevId())) {
+        } else if (!revHistory.get(0).equals(rev.getRevId())) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
         boolean success = false;
         beginTransaction();
         try {
-            // First look up all locally-known revisions of this document:
+            // First look up the document's row-id and all locally-known revisions of it:
+            Map<String, RevisionInternal> localRevs = null;
+            boolean isNewDoc = (historyCount == 1);
             long docNumericID = getOrInsertDocNumericID(docId);
-            RevisionList localRevs = getAllRevisionsOfDocumentID(docId, docNumericID, false);
-            if(localRevs == null) {
-                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+
+            if (!isNewDoc) {
+                RevisionList localRevsList = getAllRevisionsOfDocumentID(docId, docNumericID, false);
+                if (localRevsList == null) {
+                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                }
+                localRevs = new HashMap<String, RevisionInternal>();
+                for (RevisionInternal r : localRevsList) {
+                    localRevs.put(r.getRevId(), r);
+                }
             }
 
             // Validate against the latest common ancestor:
-            if(validations != null && validations.size() > 0) {
+            if (validations != null && validations.size() > 0) {
                 RevisionInternal oldRev = null;
                 for (int i = 1; i < historyCount; i++) {
-                    oldRev = localRevs.revWithDocIdAndRevId(docId, revHistory.get(i));
+                    oldRev = (localRevs != null) ? localRevs.get(revHistory.get(i)) : null;
                     if (oldRev != null) {
                         break;
                     }
@@ -4206,7 +4215,7 @@ public final class Database {
                 oldWinnerWasDeletion = true;
             }
             if (outIsConflict.get()) {
-               inConflict = true;
+                inConflict = true;
             }
 
             // Walk through the remote history in chronological order, matching each revision ID to
@@ -4214,35 +4223,31 @@ public final class Database {
             // in the local history:
             long sequence = 0;
             long localParentSequence = 0;
-            String localParentRevID = null;
-            for(int i = revHistory.size() - 1; i >= 0; --i) {
+            for (int i = revHistory.size() - 1; i >= 0; --i) {
                 revId = revHistory.get(i);
-                RevisionInternal localRev = localRevs.revWithDocIdAndRevId(docId, revId);
-                if(localRev != null) {
+                RevisionInternal localRev = (localRevs != null) ? localRevs.get(revId) : null;
+                if (localRev != null) {
                     // This revision is known locally. Remember its sequence as the parent of the next one:
                     sequence = localRev.getSequence();
-                    assert(sequence > 0);
+                    assert (sequence > 0);
                     localParentSequence = sequence;
-                    localParentRevID = revId;
-                }
-                else {
+                } else {
                     // This revision isn't known, so add it:
 
                     RevisionInternal newRev;
                     byte[] data = null;
                     boolean current = false;
-                    if(i == 0) {
+                    if (i == 0) {
                         // Hey, this is the leaf revision we're inserting:
-                       newRev = rev;
-                       if(!rev.isDeleted()) {
-                           data = encodeDocumentJSON(rev);
-                           if(data == null) {
-                               throw new CouchbaseLiteException(Status.BAD_REQUEST);
-                           }
-                       }
-                       current = true;
-                    }
-                    else {
+                        newRev = rev;
+                        if (!rev.isDeleted()) {
+                            data = encodeDocumentJSON(rev);
+                            if (data == null) {
+                                throw new CouchbaseLiteException(Status.BAD_REQUEST);
+                            }
+                        }
+                        current = true;
+                    } else {
                         // It's an intermediate parent, so insert a stub:
                         newRev = new RevisionInternal(docId, revId, false);
                     }
@@ -4250,11 +4255,11 @@ public final class Database {
                     // Insert it:
                     sequence = insertRevision(newRev, docNumericID, sequence, current, (newRev.getAttachments() != null && newRev.getAttachments().size() > 0), data);
 
-                    if(sequence <= 0) {
+                    if (sequence <= 0) {
                         throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
                     }
 
-                    if(i == 0) {
+                    if (i == 0) {
                         // Write any changed attachments for the new revision. As the parent sequence use
                         // the latest local revision (this is to copy attachments from):
                         String prevRevID = (revHistory.size() >= 2) ? revHistory.get(1) : null;
@@ -4269,10 +4274,10 @@ public final class Database {
             }
 
             // Mark the latest local rev as no longer current:
-            if(localParentSequence > 0 && localParentSequence != sequence) {
+            if (localParentSequence > 0 && localParentSequence != sequence) {
                 ContentValues args = new ContentValues();
                 args.put("current", 0);
-                String[] whereArgs = { Long.toString(localParentSequence) };
+                String[] whereArgs = {Long.toString(localParentSequence)};
                 int numRowsChanged = 0;
                 try {
                     numRowsChanged = database.update("revs", args, "sequence=? AND current!=0", whereArgs);
@@ -4291,7 +4296,7 @@ public final class Database {
             // Notify and return:
             databaseStorageChanged(new DocumentChange(rev, winningRev, inConflict, source));
 
-        } catch(SQLException e) {
+        } catch (SQLException e) {
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } finally {
             endTransaction(success);
