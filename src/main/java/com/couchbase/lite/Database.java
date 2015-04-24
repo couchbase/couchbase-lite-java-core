@@ -2483,6 +2483,7 @@ public final class Database {
         }
         if (maxKey != null) {
             assert(maxKey instanceof String);
+            maxKey = View.keyForPrefixMatch(maxKey, options.getPrefixMatchLevel());
             sql.append((inclusiveMax ? " AND docid <= ?" :  " AND docid < ?"));
             args.add((String)maxKey);
         }
