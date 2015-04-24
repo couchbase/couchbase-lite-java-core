@@ -2483,6 +2483,9 @@ public final class Database {
         }
         if (maxKey != null) {
             assert(maxKey instanceof String);
+            if (options.getPrefixMatchLevel() == 1) {
+                maxKey = ((String) maxKey).concat("\uffff");
+            }
             sql.append((inclusiveMax ? " AND docid <= ?" :  " AND docid < ?"));
             args.add((String)maxKey);
         }
