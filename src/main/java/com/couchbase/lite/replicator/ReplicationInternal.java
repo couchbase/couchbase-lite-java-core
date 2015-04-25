@@ -183,7 +183,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * Fire a trigger to the state machine
      */
     protected void fireTrigger(final ReplicationTrigger trigger) {
-        Log.w(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
+        Log.d(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
         // All state machine triggers need to happen on the replicator thread
         synchronized (workExecutor) {
             if (!workExecutor.isShutdown()) {
@@ -690,7 +690,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         }
 
         final String checkpointID = remoteCheckpointDocID;
-        Log.i(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
+        Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
         Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
@@ -1151,7 +1151,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
                 // state becomes IDLE.
                 if(Utils.isPermanentError(error) && isContinuous()){
-                    Log.e(Log.TAG_SYNC, "IDLE: triggerStop() " + error.toString());
+                    Log.d(Log.TAG_SYNC, "IDLE: triggerStop() " + error.toString());
                     triggerStop();
                 }
             }
