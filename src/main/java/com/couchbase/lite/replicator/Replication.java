@@ -20,6 +20,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The external facade for the Replication API
@@ -194,26 +195,34 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public void restart() {
 
-        final CountDownLatch stopped = new CountDownLatch(1);
-        addChangeListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event) {
-                if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
-                    stopped.countDown();
+        // stop replicator if necessary
+        if(this.isRunning()) {
+            final CountDownLatch stopped = new CountDownLatch(1);
+            addChangeListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent event) {
+                    if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
+                        stopped.countDown();
+                    }
                 }
+            });
+
+            // tries to stop replicator
+            stop();
+
+            try {
+                // If need to wait more than 60 sec to stop, throws Exception
+                boolean ret = stopped.await(60, TimeUnit.SECONDS);
+                if(ret == false){
+                    throw new RuntimeException("Replicator is unable to stop.");
+                }
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
-        });
-
-        stop();
-
-        try {
-            stopped.await();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
 
+        // start replicator
         start();
-
     }
 
 
@@ -764,12 +773,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 case REQUEST_HEADERS:
                     replicationInternal.setHeaders((Map)value);
                     break;
-
             }
-
         }
-
     }
-
-
 }
