@@ -512,9 +512,16 @@ public final class View {
                 }
             };
 
-            // Now scan every revision added since the last time the view was
-            // indexed:
-            StringBuffer sql = new StringBuffer( "SELECT revs.doc_id, sequence, docid, revid, json, no_attachments, deleted FROM revs, docs WHERE sequence>? AND current!=0 ");
+            // Now scan every revision added since the last time the view was indexed:
+
+            // NOTE: Below is original Query. In case query result uses a lot of memory,
+            //       Android SQLiteDatabase causes null value column. Then it causes the missing
+            //       index data because following logic skip result if column is null.
+            //       To avoid the issue, retrieving json field is isolated from original query.
+            //       Because json field could be large, maximum size is 2MB.
+            // StringBuffer sql = new StringBuffer( "SELECT revs.doc_id, sequence, docid, revid, json, no_attachments, deleted FROM revs, docs WHERE sequence>? AND current!=0 ");
+
+            StringBuffer sql = new StringBuffer( "SELECT revs.doc_id, sequence, docid, revid, no_attachments, deleted FROM revs, docs WHERE sequence>? AND current!=0 ");
             if(minLastSequence == 0) {
                 sql.append("AND deleted=0 ");
             }
@@ -542,10 +549,9 @@ public final class View {
                     continue;
                 }
                 String revId = cursor.getString(3);
-                byte[] json = cursor.getBlob(4);
 
-                boolean noAttachments = cursor.getInt(5) > 0;
-                boolean deleted = cursor.getInt(6) > 0;
+                boolean noAttachments = cursor.getInt(4) > 0;
+                boolean deleted = cursor.getInt(5) > 0;
 
                 while ((keepGoing = cursor.moveToNext()) && (cursor.isNull(0) || cursor.getLong(0) == docID)) {
                     // Skip rows with the same doc_id -- these are losing conflicts.
@@ -583,8 +589,6 @@ public final class View {
                                 revId = oldRevId;
                                 sequence = oldSequence;
                                 deleted = false;
-                                String[] selectArgs3 = { Long.toString(sequence) };
-                                json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
                             }
                         }
                     } finally {
@@ -597,6 +601,9 @@ public final class View {
                 if(deleted){
                     continue;
                 }
+
+                String[] selectArgs3 = { Long.toString(sequence) };
+                byte[] json = Utils.byteArrayResultForQuery(database.getDatabase(), "SELECT json FROM revs WHERE sequence=?", selectArgs3);
 
                 // Get the document properties, to pass to the map function:
                 EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
@@ -615,7 +622,11 @@ public final class View {
                     // pairs from this revision:
                     emitBlock.setSequence(sequence);
                     mapBlock.map(properties, emitBlock);
+
+                    properties.clear();
+                    properties = null;
                 }
+                json = null;
             }
 
             // Finally, record the last revision sequence number that was
