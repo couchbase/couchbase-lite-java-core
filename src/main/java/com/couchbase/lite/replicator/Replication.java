@@ -198,14 +198,15 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         // stop replicator if necessary
         if(this.isRunning()) {
             final CountDownLatch stopped = new CountDownLatch(1);
-            addChangeListener(new ChangeListener() {
+            ChangeListener listener = new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent event) {
                     if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
                         stopped.countDown();
                     }
                 }
-            });
+            };
+            addChangeListener(listener);
 
             // tries to stop replicator
             stop();
@@ -218,6 +219,9 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 }
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
+            }
+            finally {
+                removeChangeListener(listener);
             }
         }
 
