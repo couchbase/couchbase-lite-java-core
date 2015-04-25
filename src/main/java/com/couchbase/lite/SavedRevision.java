@@ -170,6 +170,13 @@ public final class SavedRevision extends Revision {
     }
 
     @Override
+    @InterfaceAudience.Private
+    /* package */ long getParentSequence() {
+        SavedRevision parent = getParent();
+        return (parent != null) ? parent.getSequence() : 0L;
+    }
+
+    @Override
     @InterfaceAudience.Public
     public long getSequence() {
         long sequence = revisionInternal.getSequence();
