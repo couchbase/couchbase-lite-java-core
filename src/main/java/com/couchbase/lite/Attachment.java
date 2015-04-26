@@ -28,6 +28,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 /**
  * A Couchbase Lite Document Attachment.
@@ -132,6 +133,16 @@ public final class Attachment {
             }
             Attachment attachment = db.getAttachmentForSequence(sequence, this.name);
             body = attachment.getContent();
+            if (attachment.getGZipped()) {
+                // Client does not expect a gzipped stream.
+                // Only Router handles gzipped streams and uses getAttachmentForSequence directly.
+                try {
+                    body = new GZIPInputStream(body);
+                } catch (IOException e) {
+                    throw new CouchbaseLiteException(e.getMessage(), Status.STATUS_ATTACHMENT_ERROR);
+                }
+            }
+            gzipped = false;
             return body;
         }
     }
