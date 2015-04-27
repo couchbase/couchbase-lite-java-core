@@ -675,14 +675,13 @@ public final class Manager {
         return this.options.isAutoMigrateBlobStoreFilename();
     }
 
-
     private static String OS = System.getProperty("os.name").toLowerCase();
 
     /**
      * Check if platform is Windows
      */
     @InterfaceAudience.Private
-    public static boolean isWindows() {
+    private static boolean isWindows() {
         return (OS.indexOf("win") >= 0);
     }
 }
