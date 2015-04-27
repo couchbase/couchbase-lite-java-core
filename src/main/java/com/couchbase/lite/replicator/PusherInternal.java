@@ -602,14 +602,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 File file = new File(path);
                 if (!file.exists()) {
                     Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
-                    multiPart = null;
-                }
-                else {
+                    return false;
+                } else {
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
-                    }
-                    else if (attachment.containsKey("content-type")) {
+                    } else if (attachment.containsKey("content-type")) {
                         Log.w(Log.TAG_SYNC, "Found attachment that uses content-type" +
                                 " field name instead of content_type (see couchbase-lite-android" +
                                 " issue #80): %s", attachment);
@@ -623,7 +621,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         contentEncoding = (String)attachment.get("encoding");
                     }
 
-                    FileBody fileBody = new CustomFileBody(file, contentType, contentEncoding);
+                    FileBody fileBody = new CustomFileBody(file, attachmentKey, contentType, contentEncoding);
                     multiPart.addPart(attachmentKey, fileBody);
                 }
 
@@ -730,8 +728,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private static class CustomFileBody extends FileBody {
         private String contentEncoding = null;
 
-        public CustomFileBody(final File file, final String mimeType, final String contentEncoding) {
-            super(file, mimeType);
+        public CustomFileBody(File file, String filename, String mimeType, String contentEncoding) {
+            super(file, filename, mimeType, null);
             this.contentEncoding = contentEncoding;
         }
 
