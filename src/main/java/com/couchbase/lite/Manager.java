@@ -417,7 +417,7 @@ public final class Manager {
         if ((name == null) || (name.length() == 0) || Pattern.matches(LEGAL_CHARACTERS, name)) {
             return null;
         }
-        name = name.replace('/', ':');
+        name = name.replace('/', '!');
         String result = directoryFile.getPath() + File.separator + name + Manager.DATABASE_SUFFIX;
         return result;
     }
