@@ -602,20 +602,18 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 File file = new File(path);
                 if (!file.exists()) {
                     Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
-                    multiPart = null;
-                }
-                else {
+                    return false;
+                } else {
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
-                    }
-                    else if (attachment.containsKey("content-type")) {
+                    } else if (attachment.containsKey("content-type")) {
                         Log.w(Log.TAG_SYNC, "Found attachment that uses content-type" +
                                 " field name instead of content_type (see couchbase-lite-android" +
                                 " issue #80): %s", attachment);
                     }
 
-                    FileBody fileBody = new FileBody(file, contentType);
+                    FileBody fileBody = new FileBody(file, attachmentKey, contentType, null);
                     multiPart.addPart(attachmentKey, fileBody);
                 }
 
