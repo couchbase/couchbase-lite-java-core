@@ -28,6 +28,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 /**
  * A Couchbase Lite Document Attachment.
@@ -124,13 +125,34 @@ public final class Attachment {
     public InputStream getContent() throws CouchbaseLiteException {
         if (body != null) {
             return body;
-        }
-        else {
+        } else {
             Database db = revision.getDatabase();
-            Attachment attachment = db.getAttachmentForSequence(revision.getSequence(), this.name);
+            long sequence = getAttachmentSequence();
+            if (sequence == 0) {
+                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            }
+            Attachment attachment = db.getAttachmentForSequence(sequence, this.name);
             body = attachment.getContent();
+            if (attachment.getGZipped()) {
+                // Client does not expect a gzipped stream.
+                // Only Router handles gzipped streams and uses getAttachmentForSequence directly.
+                try {
+                    body = new GZIPInputStream(body);
+                } catch (IOException e) {
+                    throw new CouchbaseLiteException(e.getMessage(), Status.STATUS_ATTACHMENT_ERROR);
+                }
+            }
+            gzipped = false;
             return body;
         }
+    }
+
+    private long getAttachmentSequence() {
+        long sequence = revision.getSequence();
+        if (sequence == 0) {
+            sequence = revision.getParentSequence();
+        }
+        return sequence;
     }
 
     /**
@@ -141,16 +163,16 @@ public final class Attachment {
     @InterfaceAudience.Private
     public URL getContentURL(){
         try {
-            if (revision.getSequence() > 0) {
-                //Database db = revision.getDatabase();
-                //Attachment attachment = db.getAttachmentForSequence(revision.getSequence(), this.name);
-                String path = revision.getDatabase().getAttachmentPathForSequence(revision.getSequence(), this.name);
+            long sequence = getAttachmentSequence();
+            if (sequence > 0) {
+                Database db = revision.getDatabase();
+                //Attachment attachment = db.getAttachmentForSequence(sequence, this.name);
+                String path = db.getAttachmentPathForSequence(sequence, this.name);
                 if (path != null) {
                     return new File(path).toURI().toURL();
                 }
             }
-        }
-        catch(Exception e){
+        } catch(Exception e){
             Log.d(Log.TAG_DATABASE, e.getMessage());
         }
         return null;

@@ -16,6 +16,7 @@ import java.util.Map;
  */
 public final class UnsavedRevision extends Revision {
 
+    private final long parentSequence;
     private Map<String, Object> properties;
 
     /**
@@ -29,8 +30,10 @@ public final class UnsavedRevision extends Revision {
 
         if (parentRevision == null) {
             parentRevID = null;
+            parentSequence = 0L;
         } else {
             parentRevID = parentRevision.getId();
+            parentSequence = parentRevision.getSequence();
         }
 
         Map<String, Object> parentRevisionProperties;
@@ -67,14 +70,16 @@ public final class UnsavedRevision extends Revision {
         }
     }
 
-    /**
-     * Get the id of the owning document.  In the case of an unsaved revision, may return null.
-     * @return
-     */
     @Override
     @InterfaceAudience.Public
     public String getId() {
         return null;
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    /* package */ long getSequence() {
+        return 0L;
     }
 
     /**
@@ -191,6 +196,12 @@ public final class UnsavedRevision extends Revision {
     @InterfaceAudience.Public
     public String getParentId() {
         return parentRevID;
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    /* package */ long getParentSequence() {
+        return parentSequence;
     }
 
     @Override

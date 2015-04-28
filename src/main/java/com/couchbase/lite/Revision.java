@@ -17,11 +17,6 @@ import java.util.Map;
  */
 public abstract class Revision {
 
-    /**re
-     * The sequence number of this revision.
-     */
-    protected long sequence;
-
     /**
      * The document this is a revision of
      */
@@ -67,7 +62,7 @@ public abstract class Revision {
     }
 
     /**
-     * Gets the Revision's id.
+     * Gets the Revision's id. In the case of an unsaved revision, may return null.
      */
     @InterfaceAudience.Public
     public abstract String getId();
@@ -192,6 +187,12 @@ public abstract class Revision {
     public abstract String getParentId();
 
     /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    /* package */ abstract long getParentSequence();
+
+    /**
      * Returns the history of this document as an array of CBLRevisions, in forward order.
      * Older revisions are NOT guaranteed to have their properties available.
      *
@@ -274,17 +275,7 @@ public abstract class Revision {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ void setSequence(long sequence) {
-        this.sequence = sequence;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    /* package */ long getSequence() {
-        return sequence;
-    }
+    /* package */ abstract long getSequence();
 
     /**
      * Generation number: 1 for a new document, 2 for the 2nd revision, ...
