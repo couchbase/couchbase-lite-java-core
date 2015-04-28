@@ -769,22 +769,23 @@ public final class View {
 
     /**
      * Changes a maxKey into one that also extends to any key it matches as a prefix
+     *
      * @exclude
      */
     @InterfaceAudience.Private
-    private static Object keyForPrefixMatch(Object key, int depth) {
+    protected static Object keyForPrefixMatch(Object key, int depth) {
         if (depth < 1) {
             return key;
         } else if (key instanceof String) {
             // Kludge: prefix match a string by appending max possible character value to it
-            return (String)key + "\uffff";
+            return (String) key + "\uffff";
         } else if (key instanceof List) {
-            List<Object> nuKey = new ArrayList<Object>(((List<Object>)key));
+            List<Object> nuKey = new ArrayList<Object>(((List<Object>) key));
             if (depth == 1) {
-                nuKey.add(new HashMap<String,Object>());
+                nuKey.add(new HashMap<String, Object>());
             } else {
-                Object lastObject = keyForPrefixMatch(nuKey.get(nuKey.size()-1), depth - 1);
-                nuKey.set(nuKey.size()-1, lastObject);
+                Object lastObject = keyForPrefixMatch(nuKey.get(nuKey.size() - 1), depth - 1);
+                nuKey.set(nuKey.size() - 1, lastObject);
             }
             return nuKey;
         } else {
@@ -792,19 +793,20 @@ public final class View {
         }
     }
 
-        /**
-         * Are key1 and key2 grouped together at this groupLevel?
-         * @exclude
-         */
+    /**
+     * Are key1 and key2 grouped together at this groupLevel?
+     *
+     * @exclude
+     */
     @InterfaceAudience.Private
     public static boolean groupTogether(Object key1, Object key2, int groupLevel) {
-        if(groupLevel == 0 || !(key1 instanceof List) || !(key2 instanceof List)) {
+        if (groupLevel == 0 || !(key1 instanceof List) || !(key2 instanceof List)) {
             return key1.equals(key2);
         }
         @SuppressWarnings("unchecked")
-        List<Object> key1List = (List<Object>)key1;
+        List<Object> key1List = (List<Object>) key1;
         @SuppressWarnings("unchecked")
-        List<Object> key2List = (List<Object>)key2;
+        List<Object> key2List = (List<Object>) key2;
 
         // if either key list is smaller than groupLevel and the key lists are different
         // sizes, they cannot be equal.
@@ -813,8 +815,8 @@ public final class View {
         }
 
         int end = Math.min(groupLevel, Math.min(key1List.size(), key2List.size()));
-        for(int i = 0; i < end; ++i) {
-            if(!key1List.get(i).equals(key2List.get(i))) {
+        for (int i = 0; i < end; ++i) {
+            if (!key1List.get(i).equals(key2List.get(i))) {
                 return false;
             }
         }

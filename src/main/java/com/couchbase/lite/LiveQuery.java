@@ -6,6 +6,7 @@ import com.couchbase.lite.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -19,7 +20,7 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
     private QueryEnumerator rows;
     private List<ChangeListener> observers = new ArrayList<ChangeListener>();
     private Throwable lastError;
-    private AtomicBoolean runningState; // true == running, false == stopped
+    private final AtomicBoolean runningState; // true == running, false == stopped
 
     /**
      * If a query is running and the user calls stop() on this query, the future
@@ -39,20 +40,8 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
      */
     @InterfaceAudience.Private
     /* package */ LiveQuery(Query query) {
-        super(query.getDatabase(), query.getView());
+        super(query.getDatabase(), query);
         runningState = new AtomicBoolean(false);
-        setLimit(query.getLimit());
-        setSkip(query.getSkip());
-        setStartKey(query.getStartKey());
-        setEndKey(query.getEndKey());
-        setDescending(query.isDescending());
-        setPrefetch(query.shouldPrefetch());
-        setKeys(query.getKeys());
-        setGroupLevel(query.getGroupLevel());
-        setMapOnly(query.isMapOnly());
-        setStartKeyDocId(query.getStartKeyDocId());
-        setEndKeyDocId(query.getEndKeyDocId());
-        setIndexUpdateMode(query.getIndexUpdateMode());
     }
 
     /**
@@ -62,25 +51,11 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
     @Override
     @InterfaceAudience.Public
     public QueryEnumerator run() throws CouchbaseLiteException {
-
-        while (true) {
-            try {
-                waitForRows();
-                break;
-            } catch (Exception e) {
-                if (e instanceof CancellationException) {
-                    continue;
-                } else {
-                    lastError = e;
-                    throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
-                }
-            }
-        }
+        waitForRows();
 
         if (rows == null) {
             return null;
-        }
-        else {
+        } else {
             // Have to return a copy because the enumeration has to start at item #0 every time
             return new QueryEnumerator(rows);
         }
@@ -162,16 +137,13 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
             try {
                 queryFuture.get();
                 break;
+            } catch (InterruptedException e) {
+                continue;
             } catch (Exception e) {
-                if (e instanceof CancellationException) {
-                    continue;
-                } else {
-                    lastError = e;
-                    throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
-                }
+                lastError = e;
+                throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
             }
         }
-
     }
 
     /**
@@ -254,10 +226,6 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
     /* package */ void update() {
         Log.v(Log.TAG_QUERY, "%s: update() called.", this);
 
-        if (getView() == null) {
-            throw new IllegalStateException("Cannot start LiveQuery when view is null");
-        }
-
         if (runningState.get() == false) {
             Log.d(Log.TAG_QUERY, "%s: update() called, but running state == false.  Ignoring.", this);
             return;
@@ -313,6 +281,9 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
      * some of the recently added items.
      */
     private Future rerunUpdateAfterQueryFinishes(final Future queryFutureInProgress) {
+        if (queryFutureInProgress == null) {
+            throw new NullPointerException();
+        }
         return getDatabase().getManager().runAsync(new Runnable() {
             @Override
             public void run() {
@@ -322,24 +293,25 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
                     return;
                 }
 
-                if (queryFutureInProgress != null) {
+                while (true) {
                     try {
                         queryFutureInProgress.get();
-
-                        if (runningState.get() == false) {
-                            Log.v(Log.TAG_QUERY, "%s: queryFutureInProgress.get() done, but running state == false.", this);
-                            return;
-                        }
-
-                        update();
-                    } catch (Exception e) {
-                        if (e instanceof CancellationException) {
-                            // can safely ignore these
-                        } else {
-                            Log.e(Log.TAG_QUERY, "Got exception waiting for queryFutureInProgress to finish", e);
-                        }
+                    } catch (InterruptedException e) {
+                        continue;
+                    } catch (CancellationException e) {
+                        // can safely ignore these
+                    } catch (ExecutionException e) {
+                        Log.e(Log.TAG_QUERY, "Got exception waiting for queryFutureInProgress to finish", e);
                     }
+                    break;
                 }
+
+                if (runningState.get() == false) {
+                    Log.v(Log.TAG_QUERY, "%s: queryFutureInProgress.get() done, but running state == false.", this);
+                    return;
+                }
+
+                update();
             }
         });
     }
