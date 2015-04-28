@@ -67,6 +67,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected int httpConnectionCount;
     protected Batcher<RevisionInternal> downloadsToInsert;
 
+    // for waitingPendingFutures
+    protected boolean waitingForPendingFutures = false;
+    protected Object lockWaitForPendingFutures = new Object();
+
     public PullerInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
     }
@@ -115,10 +119,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // it will switch to longpoll later.
         changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
 
-        Log.w(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s", this, lastSequence, changeTrackerMode);
+        Log.d(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s", this, lastSequence, changeTrackerMode);
         changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this);
         changeTracker.setAuthenticator(getAuthenticator());
-        Log.w(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
+        Log.d(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
 
         if (filterName != null) {
             changeTracker.setFilterName(filterName);
@@ -490,7 +494,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @InterfaceAudience.Private
     public void insertDownloads(List<RevisionInternal> downloads) {
 
-        Log.i(Log.TAG_SYNC, this + " inserting " + downloads.size() + " revisions...");
+        Log.d(Log.TAG_SYNC, this + " inserting " + downloads.size() + " revisions...");
         long time = System.currentTimeMillis();
         Collections.sort(downloads, getRevisionListComparator());
 
@@ -836,7 +840,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     @Override
     public void changeTrackerCaughtUp() {
-        Log.e(Log.TAG_SYNC, "changeTrackerCaughtUp");
+        Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
         // for continuous replications, once the change tracker is caught up, we
         // should try to go into the idle state.
         if (isContinuous()) {
@@ -856,13 +860,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {
-        if (type == EventType.PUT || type == EventType.ADD) {
-            if (isContinuous()) {
-                if (!queue.isEmpty()) {
-                    fireTrigger(ReplicationTrigger.RESUME);
-                    waitForPendingFuturesWithNewThread();
+        if ((type == EventType.PUT || type == EventType.ADD) &&
+                isContinuous() &&
+                !queue.isEmpty()) {
+
+            synchronized (lockWaitForPendingFutures) {
+                if (waitingForPendingFutures) {
+                    return;
                 }
             }
+
+            fireTrigger(ReplicationTrigger.RESUME);
+            waitForPendingFuturesWithNewThread();
         }
     }
 
@@ -898,9 +907,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             }
         }).start();
     }
-
-    protected boolean waitingForPendingFutures = false;
-    protected Object lockWaitForPendingFutures = new Object();
 
     public void waitForPendingFutures() {
         synchronized (lockWaitForPendingFutures) {
@@ -945,7 +951,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             }
 
             // wait for pending featurs completed
-            Log.e(Log.TAG_SYNC, "waitPendingFuturesCompleted()");
+            Log.d(Log.TAG_SYNC, "waitPendingFuturesCompleted()");
             waitPendingFuturesCompleted();
 
             // wait for downloadToInsert batcher completed

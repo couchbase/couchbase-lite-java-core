@@ -217,7 +217,7 @@ public class ChangeTracker implements Runnable {
 
     @Override
     public void run() {
-        Log.e(Log.TAG_CHANGE_TRACKER, "Thread id => " + Thread.currentThread().getId());
+        Log.d(Log.TAG_CHANGE_TRACKER, "Thread id => " + Thread.currentThread().getId());
         try {
             runLoop();
         } finally {
@@ -357,7 +357,7 @@ public class ChangeTracker implements Runnable {
                                 backoff.resetBackoff();
                                 continue;
                             } else {
-                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
+                                Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
                                 client.changeTrackerFinished(this);
                                 break;
                             }
@@ -389,7 +389,7 @@ public class ChangeTracker implements Runnable {
                             if (isContinuous()) {  // if enclosing replication is continuous
                                 mode = ChangeTrackerMode.LongPoll;
                             } else {
-                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
+                                Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
                                 client.changeTrackerFinished(this);
                                 break;
                             }
@@ -496,10 +496,10 @@ public class ChangeTracker implements Runnable {
     private void stopped() {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped()", this);
         if (client != null) {
-            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling changeTrackerStopped, client: %s", this, client);
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling changeTrackerStopped, client: %s", this, client);
             client.changeTrackerStopped(ChangeTracker.this);
         } else {
-            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker not calling changeTrackerStopped, client == null", this);
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker not calling changeTrackerStopped, client == null", this);
         }
         client = null;
         running = false; // in case stop() method was not called to stop
