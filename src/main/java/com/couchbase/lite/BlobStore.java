@@ -56,7 +56,9 @@ public class BlobStore {
         this.path = path;
         File directory = new File(path);
 
-        directory.mkdirs();
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
         if (!directory.isDirectory()) {
             throw new IllegalStateException(String.format("Unable to create directory for: %s", directory));
         }
@@ -375,7 +377,9 @@ public class BlobStore {
         File directory = new File(path);
         File tempDirectory = new File(directory, "temp_attachments");
 
-        tempDirectory.mkdirs();
+        if (!tempDirectory.exists()) {
+            tempDirectory.mkdirs();
+        }
         if (!tempDirectory.isDirectory()) {
             throw new IllegalStateException(String.format("Unable to create directory for: %s", tempDirectory));
         }

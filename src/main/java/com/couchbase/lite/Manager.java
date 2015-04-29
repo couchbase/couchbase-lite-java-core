@@ -130,7 +130,9 @@ public final class Manager {
         this.databases = new HashMap<String, Database>();
         this.replications = new ArrayList<Replication>();
 
-        directoryFile.mkdirs();
+        if (!directoryFile.exists()) {
+            directoryFile.mkdirs();
+        }
         if (!directoryFile.isDirectory()) {
             throw new IOException(String.format("Unable to create directory for: %s", directoryFile));
         }
@@ -289,7 +291,9 @@ public final class Manager {
             StreamUtils.copyStream(databaseStream, destStream);
             File attachmentsFile = new File(dstAttachmentsPath);
             FileDirUtils.deleteRecursive(attachmentsFile);
-            attachmentsFile.mkdirs();
+            if (!attachmentsFile.exists()) {
+                attachmentsFile.mkdirs();
+            }
             if (attachmentStreams != null) {
                 StreamUtils.copyStreamsToFolder(attachmentStreams, attachmentsFile);
             }

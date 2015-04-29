@@ -899,7 +899,34 @@ public final class Database {
         if( lastDotPosition > 0 ) {
             attachmentStorePath = attachmentStorePath.substring(0, lastDotPosition);
         }
+        attachmentStorePath = attachmentStorePath + " attachments";
+        return attachmentStorePath;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private String getObsoletedAttachmentStorePath() {
+        String attachmentStorePath = path;
+        int lastDotPosition = attachmentStorePath.lastIndexOf('.');
+        if( lastDotPosition > 0 ) {
+            attachmentStorePath = attachmentStorePath.substring(0, lastDotPosition);
+        }
         attachmentStorePath = attachmentStorePath + File.separator + "attachments";
+        return attachmentStorePath;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private String getObsoletedAttachmentStoreParentPath() {
+        String attachmentStorePath = path;
+        int lastDotPosition = attachmentStorePath.lastIndexOf('.');
+        if( lastDotPosition > 0 ) {
+            attachmentStorePath = attachmentStorePath.substring(0, lastDotPosition);
+        }
         return attachmentStorePath;
     }
 
@@ -1185,6 +1212,28 @@ public final class Database {
 
         if (isNew) {
             optimizeSQLIndexes(); // runs ANALYZE query
+        }
+
+        // NOTE: Migrate attachment directory path if necessary
+        // https://github.com/couchbase/couchbase-lite-java-core/issues/604
+        File obsoletedAttachmentStorePath = new File(getObsoletedAttachmentStorePath());
+        if (obsoletedAttachmentStorePath != null && obsoletedAttachmentStorePath.exists() && obsoletedAttachmentStorePath.isDirectory()) {
+            File attachmentStorePath = new File(getAttachmentStorePath());
+            if (attachmentStorePath != null && !attachmentStorePath.exists()) {
+                boolean success = obsoletedAttachmentStorePath.renameTo(attachmentStorePath);
+                if (!success) {
+                    Log.e(Database.TAG, "Could not rename attachment store path");
+                    database.close();
+                    return false;
+                }
+            }
+
+        }
+        // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
+        //       Needs to delete /files/<database name>/ too
+        File obsoletedAttachmentStoreParentPath = new File(getObsoletedAttachmentStoreParentPath());
+        if (obsoletedAttachmentStoreParentPath != null && obsoletedAttachmentStoreParentPath.exists()) {
+            obsoletedAttachmentStoreParentPath.delete();
         }
 
         try {
