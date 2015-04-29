@@ -907,13 +907,26 @@ public final class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    public String getObsoletedAttachmentStorePath() {
+    private String getObsoletedAttachmentStorePath() {
         String attachmentStorePath = path;
         int lastDotPosition = attachmentStorePath.lastIndexOf('.');
         if( lastDotPosition > 0 ) {
             attachmentStorePath = attachmentStorePath.substring(0, lastDotPosition);
         }
         attachmentStorePath = attachmentStorePath + File.separator + "attachments";
+        return attachmentStorePath;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private String getObsoletedAttachmentStoreParentPath() {
+        String attachmentStorePath = path;
+        int lastDotPosition = attachmentStorePath.lastIndexOf('.');
+        if( lastDotPosition > 0 ) {
+            attachmentStorePath = attachmentStorePath.substring(0, lastDotPosition);
+        }
         return attachmentStorePath;
     }
 
@@ -1214,17 +1227,13 @@ public final class Database {
                     return false;
                 }
             }
-            // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
-            //       Needs to delete /files/<database name>/ too
-            File obsoletedFile = new File(path);
-            if (obsoletedFile.exists()){
-                boolean success = obsoletedFile.delete();
-                if (!success) {
-                    Log.e(Database.TAG, "Could not rename attachment store path");
-                    database.close();
-                    return false;
-                }
-            }
+
+        }
+        // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
+        //       Needs to delete /files/<database name>/ too
+        File obsoletedAttachmentStoreParentPath = new File(getObsoletedAttachmentStoreParentPath());
+        if (obsoletedAttachmentStoreParentPath!=null&&obsoletedAttachmentStoreParentPath.exists()){
+                obsoletedAttachmentStoreParentPath.delete();
         }
 
         try {
