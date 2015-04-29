@@ -998,7 +998,7 @@ public final class Database {
         int dbVersion = database.getVersion();
 
         // Incompatible version changes increment the hundreds' place:
-        if(dbVersion >= 200) {
+        if (dbVersion >= 200) {
             Log.e(Database.TAG, "Database: Database version (%d) is newer than I know how to work with", dbVersion);
             database.close();
             return false;
@@ -1211,7 +1211,11 @@ public final class Database {
             dbVersion = 18;
         }
 
-        // NOTE: CBL iOS v1.1.0 => 101
+        // NOTE: Following lines of code are for compatibility with Couchbase Lite iOS v1.1.0 database format.
+        //       https://github.com/couchbase/couchbase-lite-java-core/issues/596
+        //       CBL iOS v1.1.0 => 101
+        //       1. Creates attachments table if it does not exist.
+        //       2. Iterate revs table to populate attachments table.
         if (dbVersion >= 101) {
             // Check if attachments table exists. If not, create the table, and iterate revs
             // to populate attachment table
@@ -1238,15 +1242,15 @@ public final class Database {
             if (!existsAttachments) {
                 // 1. create attachments table
                 String upgradeSql = "CREATE TABLE attachments ( " +
-                    "sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
-                    "filename TEXT NOT NULL, " +
-                    "key BLOB NOT NULL, " +
-                    "type TEXT, " +
-                    "length INTEGER NOT NULL, " +
-                    "revpos INTEGER DEFAULT 0); " +
-                    "CREATE INDEX attachments_by_sequence on attachments(sequence, filename); " +
-                    "CREATE INDEX attachments_sequence ON attachments(sequence); " +
-                    "PRAGMA user_version = 20";
+                        "sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
+                        "filename TEXT NOT NULL, " +
+                        "key BLOB NOT NULL, " +
+                        "type TEXT, " +
+                        "length INTEGER NOT NULL, " +
+                        "revpos INTEGER DEFAULT 0); " +
+                        "CREATE INDEX attachments_by_sequence on attachments(sequence, filename); " +
+                        "CREATE INDEX attachments_sequence ON attachments(sequence); " +
+                        "PRAGMA user_version = 20";
                 if (!initialize(upgradeSql)) {
                     database.close();
                     return false;
@@ -1258,30 +1262,30 @@ public final class Database {
                 try {
                     cursor2 = database.rawQuery(sql, null);
                     while (cursor2.moveToNext()) {
-                        if(!cursor2.isNull(1)) {
+                        if (!cursor2.isNull(1)) {
                             long sequence = cursor2.getLong(0);
                             byte[] json = cursor2.getBlob(1);
                             try {
                                 Map<String, Object> docProperties = Manager.getObjectMapper().readValue(json, Map.class);
                                 Log.e(Log.TAG_DATABASE, docProperties.toString());
-                                Map<String, Object> attachments = (Map<String, Object>)docProperties.get("_attachments");
+                                Map<String, Object> attachments = (Map<String, Object>) docProperties.get("_attachments");
                                 Iterator<String> itr = attachments.keySet().iterator();
-                                while(itr.hasNext()) {
-                                    String name =  itr.next();
-                                    Map<String, Object> attachment = (Map<String, Object>)attachments.get(name);
-                                    String contentType = (String)attachment.get("content_type");
-                                    int revPos = (Integer)attachment.get("revpos");
-                                    int length = (Integer)attachment.get("length");
-                                    String digest = (String)attachment.get("digest");
+                                while (itr.hasNext()) {
+                                    String name = itr.next();
+                                    Map<String, Object> attachment = (Map<String, Object>) attachments.get(name);
+                                    String contentType = (String) attachment.get("content_type");
+                                    int revPos = (Integer) attachment.get("revpos");
+                                    int length = (Integer) attachment.get("length");
+                                    String digest = (String) attachment.get("digest");
                                     BlobKey key = new BlobKey(digest);
                                     try {
                                         insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length);
                                     } catch (CouchbaseLiteException e) {
-                                        Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "="+ attachment.toString(), e);
+                                        Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "=" + attachment.toString(), e);
                                     }
                                 }
                             } catch (Exception e) {
-                                Log.e(Log.TAG_DATABASE, "JSON parsing error: " +  new String(json) , e);
+                                Log.e(Log.TAG_DATABASE, "JSON parsing error: " + new String(json), e);
                             }
                         }
                     }
@@ -1303,7 +1307,7 @@ public final class Database {
 
         // NOTE: CBL Android/Java v1.1.0 Set database version 20.
         //       20 is higher than any previous release, but lower than CBL iOS v1.1.0 - 101
-        if(dbVersion < 20) {
+        if (dbVersion < 20) {
             String upgradeSql = "PRAGMA user_version = 20";
             if (!initialize(upgradeSql)) {
                 database.close();
