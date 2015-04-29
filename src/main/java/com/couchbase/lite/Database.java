@@ -1232,8 +1232,8 @@ public final class Database {
         // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
         //       Needs to delete /files/<database name>/ too
         File obsoletedAttachmentStoreParentPath = new File(getObsoletedAttachmentStoreParentPath());
-        if (obsoletedAttachmentStoreParentPath!=null&&obsoletedAttachmentStoreParentPath.exists()){
-                obsoletedAttachmentStoreParentPath.delete();
+        if (obsoletedAttachmentStoreParentPath != null && obsoletedAttachmentStoreParentPath.exists()) {
+            obsoletedAttachmentStoreParentPath.delete();
         }
 
         try {
