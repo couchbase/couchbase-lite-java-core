@@ -1214,6 +1214,17 @@ public final class Database {
                     return false;
                 }
             }
+            // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
+            //       Needs to delete /files/<database name>/ too
+            File obsoletedFile = new File(path);
+            if (obsoletedFile.exists()){
+                boolean success = obsoletedFile.delete();
+                if (!success) {
+                    Log.e(Database.TAG, "Could not rename attachment store path");
+                    database.close();
+                    return false;
+                }
+            }
         }
 
         try {
