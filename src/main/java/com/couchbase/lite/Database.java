@@ -1222,9 +1222,6 @@ public final class Database {
                     }
                 } catch (SQLException e) {
                     Log.e(Database.TAG, "Failed to check if attachments table exists", e);
-                    if (cursor != null) {
-                        cursor.close();
-                    }
                     return false;
                 } finally {
                     if (cursor != null) {
@@ -1273,18 +1270,17 @@ public final class Database {
                                             insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length);
                                         } catch (CouchbaseLiteException e) {
                                             Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "=" + attachment.toString(), e);
+                                            return false;
                                         }
                                     }
                                 } catch (Exception e) {
                                     Log.e(Log.TAG_DATABASE, "JSON parsing error: " + new String(json), e);
+                                    return false;
                                 }
                             }
                         }
                     } catch (SQLException e) {
                         Log.e(Database.TAG, "Failed to check if attachments table exists", e);
-                        if (cursor2 != null) {
-                            cursor2.close();
-                        }
                         return false;
                     } finally {
                         if (cursor2 != null) {
