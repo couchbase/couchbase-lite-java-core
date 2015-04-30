@@ -53,6 +53,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -997,7 +998,7 @@ public final class Database {
         int dbVersion = database.getVersion();
 
         // Incompatible version changes increment the hundreds' place:
-        if(dbVersion >= 100) {
+        if (dbVersion >= 200) {
             Log.e(Database.TAG, "Database: Database version (%d) is newer than I know how to work with", dbVersion);
             database.close();
             return false;
@@ -1208,6 +1209,110 @@ public final class Database {
                 return false;
             }
             dbVersion = 18;
+        }
+
+        // NOTE: Following lines of code are for compatibility with Couchbase Lite iOS v1.1.0 database format.
+        //       https://github.com/couchbase/couchbase-lite-java-core/issues/596
+        //       CBL iOS v1.1.0 => 101
+        //       1. Creates attachments table if it does not exist.
+        //       2. Iterate revs table to populate attachments table.
+        if (dbVersion >= 101) {
+            // Check if attachments table exists. If not, create the table, and iterate revs
+            // to populate attachment table
+            boolean existsAttachments = false;
+            Cursor cursor = null;
+            try {
+                cursor = database.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'", null);
+                if (cursor.moveToNext()) {
+                    existsAttachments = true;
+                }
+            } catch (SQLException e) {
+                Log.e(Database.TAG, "Failed to check if attachments table exists", e);
+                if (cursor != null) {
+                    cursor.close();
+                }
+                database.close();
+                return false;
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            if (!existsAttachments) {
+                // 1. create attachments table
+                String upgradeSql = "CREATE TABLE attachments ( " +
+                        "sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
+                        "filename TEXT NOT NULL, " +
+                        "key BLOB NOT NULL, " +
+                        "type TEXT, " +
+                        "length INTEGER NOT NULL, " +
+                        "revpos INTEGER DEFAULT 0); " +
+                        "CREATE INDEX attachments_by_sequence on attachments(sequence, filename); " +
+                        "CREATE INDEX attachments_sequence ON attachments(sequence); " +
+                        "PRAGMA user_version = 20";
+                if (!initialize(upgradeSql)) {
+                    database.close();
+                    return false;
+                }
+
+                // 2. iterate revs table, and populate attachment table
+                String sql = "SELECT sequence, json FROM revs WHERE no_attachments=0";
+                Cursor cursor2 = null;
+                try {
+                    cursor2 = database.rawQuery(sql, null);
+                    while (cursor2.moveToNext()) {
+                        if (!cursor2.isNull(1)) {
+                            long sequence = cursor2.getLong(0);
+                            byte[] json = cursor2.getBlob(1);
+                            try {
+                                Map<String, Object> docProperties = Manager.getObjectMapper().readValue(json, Map.class);
+                                Map<String, Object> attachments = (Map<String, Object>) docProperties.get("_attachments");
+                                Iterator<String> itr = attachments.keySet().iterator();
+                                while (itr.hasNext()) {
+                                    String name = itr.next();
+                                    Map<String, Object> attachment = (Map<String, Object>) attachments.get(name);
+                                    String contentType = (String) attachment.get("content_type");
+                                    int revPos = (Integer) attachment.get("revpos");
+                                    int length = (Integer) attachment.get("length");
+                                    String digest = (String) attachment.get("digest");
+                                    BlobKey key = new BlobKey(digest);
+                                    try {
+                                        insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length);
+                                    } catch (CouchbaseLiteException e) {
+                                        Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "=" + attachment.toString(), e);
+                                    }
+                                }
+                            } catch (Exception e) {
+                                Log.e(Log.TAG_DATABASE, "JSON parsing error: " + new String(json), e);
+                            }
+                        }
+                    }
+                } catch (SQLException e) {
+                    Log.e(Database.TAG, "Failed to check if attachments table exists", e);
+                    if (cursor2 != null) {
+                        cursor2.close();
+                    }
+                    database.close();
+                    return false;
+                } finally {
+                    if (cursor2 != null) {
+                        cursor2.close();
+                    }
+                }
+            }
+            dbVersion = 20;
+        }
+
+        // NOTE: CBL Android/Java v1.1.0 Set database version 20.
+        //       20 is higher than any previous release, but lower than CBL iOS v1.1.0 - 101
+        if (dbVersion < 20) {
+            String upgradeSql = "PRAGMA user_version = 20";
+            if (!initialize(upgradeSql)) {
+                database.close();
+                return false;
+            }
+            dbVersion = 20;
         }
 
         if (isNew) {
@@ -2751,7 +2856,7 @@ public final class Database {
             ContentValues args = new ContentValues();
             args.put("sequence", sequence);
             args.put("filename", name);
-            if (key != null){
+            if (key != null) {
                 args.put("key", key.getBytes());
                 args.put("length", attachments.getSizeOfBlob(key));
             }
@@ -2763,13 +2868,32 @@ public final class Database {
                 Log.e(Database.TAG, msg);
                 throw new CouchbaseLiteException(msg, Status.INTERNAL_SERVER_ERROR);
             }
-
         } catch (SQLException e) {
             Log.e(Database.TAG, "Error inserting attachment", e);
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         }
     }
 
+    private void insertAttachmentForSequenceWithNameAndType(long sequence, String name, String contentType, int revpos, BlobKey key, long length) throws CouchbaseLiteException {
+        try {
+            ContentValues args = new ContentValues();
+            args.put("sequence", sequence);
+            args.put("filename", name);
+            args.put("key", key.getBytes());
+            args.put("length", length);
+            args.put("type", contentType);
+            args.put("revpos", revpos);
+            long result = database.insert("attachments", null, args);
+            if (result == -1) {
+                String msg = "Insert attachment failed (returned -1)";
+                Log.e(Database.TAG, msg);
+                throw new CouchbaseLiteException(msg, Status.INTERNAL_SERVER_ERROR);
+            }
+        } catch (SQLException e) {
+            Log.e(Database.TAG, "Error inserting attachment", e);
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
+        }
+    }
     /**
      * @exclude
      */
