@@ -1267,7 +1267,6 @@ public final class Database {
                             byte[] json = cursor2.getBlob(1);
                             try {
                                 Map<String, Object> docProperties = Manager.getObjectMapper().readValue(json, Map.class);
-                                Log.e(Log.TAG_DATABASE, docProperties.toString());
                                 Map<String, Object> attachments = (Map<String, Object>) docProperties.get("_attachments");
                                 Iterator<String> itr = attachments.keySet().iterator();
                                 while (itr.hasNext()) {
