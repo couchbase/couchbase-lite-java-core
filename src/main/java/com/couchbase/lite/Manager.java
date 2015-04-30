@@ -10,7 +10,6 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
-
 import com.couchbase.lite.util.Utils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -130,7 +129,9 @@ public final class Manager {
         this.databases = new HashMap<String, Database>();
         this.replications = new ArrayList<Replication>();
 
-        directoryFile.mkdirs();
+        if (!directoryFile.exists()) {
+            directoryFile.mkdirs();
+        }
         if (!directoryFile.isDirectory()) {
             throw new IOException(String.format("Unable to create directory for: %s", directoryFile));
         }
@@ -289,7 +290,9 @@ public final class Manager {
             StreamUtils.copyStream(databaseStream, destStream);
             File attachmentsFile = new File(dstAttachmentsPath);
             FileDirUtils.deleteRecursive(attachmentsFile);
-            attachmentsFile.mkdirs();
+            if (!attachmentsFile.exists()) {
+                attachmentsFile.mkdirs();
+            }
             if (attachmentStreams != null) {
                 StreamUtils.copyStreamsToFolder(attachmentStreams, attachmentsFile);
             }
@@ -417,7 +420,14 @@ public final class Manager {
         if ((name == null) || (name.length() == 0) || Pattern.matches(LEGAL_CHARACTERS, name)) {
             return null;
         }
-        name = name.replace('/', ':');
+        // NOTE: CouchDB allows forward slash as part of database name.
+        //       However, ':' is illegal character on Windows platform.
+        //       For Windows, substitute with period '.'
+        if(isWindows()) {
+            name = name.replace('/', '.');
+        }else{
+            name = name.replace('/', ':');
+        }
         String result = directoryFile.getPath() + File.separator + name + Manager.DATABASE_SUFFIX;
         return result;
     }
@@ -667,6 +677,16 @@ public final class Manager {
     @InterfaceAudience.Private
     protected boolean isAutoMigrateBlobStoreFilename() {
         return this.options.isAutoMigrateBlobStoreFilename();
+    }
+
+    private static String OS = System.getProperty("os.name").toLowerCase();
+
+    /**
+     * Check if platform is Windows
+     */
+    @InterfaceAudience.Private
+    private static boolean isWindows() {
+        return (OS.indexOf("win") >= 0);
     }
 }
 
