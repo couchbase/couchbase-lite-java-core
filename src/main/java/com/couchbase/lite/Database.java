@@ -972,8 +972,8 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public synchronized boolean open() {
-        
-        if(open) {
+
+        if (open) {
             return true;
         }
 
@@ -989,7 +989,7 @@ public final class Database {
         }
 
         // Stuff we need to initialize every time the sqliteDb opens:
-        if(!initialize("PRAGMA foreign_keys = ON;")) {
+        if (!initialize("PRAGMA foreign_keys = ON;")) {
             Log.e(Database.TAG, "Error turning on foreign keys");
             return false;
         }
@@ -1005,318 +1005,317 @@ public final class Database {
         }
 
         boolean isNew = (dbVersion == 0);
+        boolean isSuccessful = false;
 
-        if(dbVersion < 1) {
-            // First-time initialization:
-            // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
-            // monotonically increasing, never reused. See <http://www.sqlite.org/autoinc.html>)
-            if(!initialize(SCHEMA)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 3;
+        // BEGIN TRANSACTION
+        if (!beginTransaction()) {
+            database.close();
+            return false;
         }
 
-        if (dbVersion < 2) {
-            // Version 2: added attachments.revpos
-            String upgradeSql = "ALTER TABLE attachments ADD COLUMN revpos INTEGER DEFAULT 0; " +
-                                "PRAGMA user_version = 2";
-            if(!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 2;
-        }
-
-        if (dbVersion < 3) {
-            String upgradeSql = "CREATE TABLE IF NOT EXISTS localdocs ( " +
-                    "docid TEXT UNIQUE NOT NULL, " +
-                    "revid TEXT NOT NULL, " +
-                    "json BLOB); " +
-                    "CREATE INDEX IF NOT EXISTS localdocs_by_docid ON localdocs(docid); " +
-                    "PRAGMA user_version = 3";
-            if(!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 3;
-        }
-
-        if (dbVersion < 4) {
-            String upgradeSql = "CREATE TABLE info ( " +
-                    "key TEXT PRIMARY KEY, " +
-                    "value TEXT); " +
-                    "INSERT INTO INFO (key, value) VALUES ('privateUUID', '" + Misc.TDCreateUUID() + "'); " +
-                    "INSERT INTO INFO (key, value) VALUES ('publicUUID',  '" + Misc.TDCreateUUID() + "'); " +
-                    "PRAGMA user_version = 4";
-            if(!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 4;
-        }
-
-        if (dbVersion < 5) {
-            // Version 5: added encoding for attachments
-            String upgradeSql = "ALTER TABLE attachments ADD COLUMN encoding INTEGER DEFAULT 0; " +
-                    "ALTER TABLE attachments ADD COLUMN encoded_length INTEGER; " +
-                    "PRAGMA user_version = 5";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 5;
-        }
-
-
-        if (dbVersion < 6) {
-            // Version 6: enable Write-Ahead Log (WAL) <http://sqlite.org/wal.html>
-            // Not supported on Android, require SQLite 3.7.0
-            //String upgradeSql  = "PRAGMA journal_mode=WAL; " +
-
-            // NOTE: For Android, WAL should be set when open the database
-            //       Check AndroidSQLiteStorageEngine.java public boolean open(String path) method.
-            //       http://developer.android.com/reference/android/database/sqlite/SQLiteDatabase.html#enableWriteAheadLogging()
-
-            String upgradeSql  = "PRAGMA user_version = 6";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 6;
-        }
-
-        if (dbVersion < 7) {
-            // Version 7: enable full-text search
-            // Note: Apple's SQLite build does not support the icu or unicode61 tokenizers :(
-            // OPT: Could add compress/decompress functions to make stored content smaller
-            // Not supported on Android
-            //String upgradeSql = "CREATE VIRTUAL TABLE fulltext USING fts4(content, tokenize=unicodesn); " +
-            //"ALTER TABLE maps ADD COLUMN fulltext_id INTEGER; " +
-            //"CREATE INDEX IF NOT EXISTS maps_by_fulltext ON maps(fulltext_id); " +
-            //"CREATE TRIGGER del_fulltext DELETE ON maps WHEN old.fulltext_id not null " +
-            //"BEGIN DELETE FROM fulltext WHERE rowid=old.fulltext_id| END; " +
-            String upgradeSql = "PRAGMA user_version = 7";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 7;
-        }
-
-        // (Version 8 was an older version of the geo index)
-
-        if (dbVersion < 9) {
-            // Version 9: Add geo-query index
-            //String upgradeSql = "CREATE VIRTUAL TABLE bboxes USING rtree(rowid, x0, x1, y0, y1); " +
-            //"ALTER TABLE maps ADD COLUMN bbox_id INTEGER; " +
-            //"ALTER TABLE maps ADD COLUMN geokey BLOB; " +
-            //"CREATE TRIGGER del_bbox DELETE ON maps WHEN old.bbox_id not null " +
-            //"BEGIN DELETE FROM bboxes WHERE rowid=old.bbox_id| END; " +
-            String upgradeSql = "PRAGMA user_version = 9";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 9;
-        }
-
-        if (dbVersion < 10) {
-            // Version 10: Add rev flag for whether it has an attachment
-            String upgradeSql =  "ALTER TABLE revs ADD COLUMN no_attachments BOOLEAN; " +
-                    "PRAGMA user_version = 10";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 10;
-        }
-
-        // (Version 11 used to create the index revs_cur_deleted, which is obsoleted in version 16)
-
-        // (Version 12: CBL Android/Java skipped 12 before. Instead, we ported bug fix at dbVersion 18)
-
-        if (dbVersion < 13) {
-            // Version 13: Add rows to track number of rows in the views
-            String upgradeSql =  "ALTER TABLE views ADD COLUMN total_docs INTEGER DEFAULT -1; " +
-                    "PRAGMA user_version = 13";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 13;
-        }
-
-        if (dbVersion < 14) {
-            // Version 14: Add index for getting a document with doc and rev id
-            String upgradeSql =  "CREATE INDEX IF NOT EXISTS revs_by_docid_revid ON revs(doc_id, revid desc, current, deleted); " +
-                    "PRAGMA user_version = 14";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 14;
-        }
-
-        if (dbVersion < 15) {
-            // Version 15: Add sequence index on maps and attachments for revs(sequence) on DELETE CASCADE
-            String upgradeSql =  "CREATE INDEX maps_sequence ON maps(sequence); " +
-                    "CREATE INDEX attachments_sequence ON attachments(sequence); " +
-                    "PRAGMA user_version = 15";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 15;
-        }
-
-
-        if (dbVersion < 16) {
-            // Version 16: Fix the very suboptimal index revs_cur_deleted.
-            // The new revs_current is an optimal index for finding the winning revision of a doc.
-            String upgradeSql =  "DROP INDEX IF EXISTS revs_current; " +
-                    "DROP INDEX IF EXISTS revs_cur_deleted; " +
-                    "CREATE INDEX revs_current ON revs(doc_id, current desc, deleted, revid desc);" +
-                    "PRAGMA user_version = 16";
-
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 16;
-        }
-
-        if (dbVersion < 17) {
-            // Version 17: https://github.com/couchbase/couchbase-lite-ios/issues/615
-            String upgradeSql = "CREATE INDEX maps_view_sequence ON maps(view_id, sequence); " +
-                    "PRAGMA user_version = 17";
-
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 17;
-        }
-
-        // Note: We skipped change for dbVersion 12 before. 18 is for JSONCollator bug fix.
-        //       Android version should be one version higher.
-        if (dbVersion < 18) {
-            // Version 12: Because of a bug fix that changes JSON collation, invalidate view indexes
-            String upgradeSql = "DELETE FROM maps; UPDATE views SET lastsequence=0; " +
-                    "PRAGMA user_version = 18";
-            if (!initialize(upgradeSql)) {
-                database.close();
-                return false;
-            }
-            dbVersion = 18;
-        }
-
-        // NOTE: Following lines of code are for compatibility with Couchbase Lite iOS v1.1.0 database format.
-        //       https://github.com/couchbase/couchbase-lite-java-core/issues/596
-        //       CBL iOS v1.1.0 => 101
-        //       1. Creates attachments table if it does not exist.
-        //       2. Iterate revs table to populate attachments table.
-        if (dbVersion >= 101) {
-            // Check if attachments table exists. If not, create the table, and iterate revs
-            // to populate attachment table
-            boolean existsAttachments = false;
-            Cursor cursor = null;
-            try {
-                cursor = database.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'", null);
-                if (cursor.moveToNext()) {
-                    existsAttachments = true;
+        try {
+            if (dbVersion < 1) {
+                // First-time initialization:
+                // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
+                // monotonically increasing, never reused. See <http://www.sqlite.org/autoinc.html>)
+                if (!initialize(SCHEMA)) {
+                    return false;
                 }
-            } catch (SQLException e) {
-                Log.e(Database.TAG, "Failed to check if attachments table exists", e);
-                if (cursor != null) {
-                    cursor.close();
-                }
-                database.close();
-                return false;
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
+                dbVersion = 3;
             }
 
-            if (!existsAttachments) {
-                // 1. create attachments table
-                String upgradeSql = "CREATE TABLE attachments ( " +
-                        "sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
-                        "filename TEXT NOT NULL, " +
-                        "key BLOB NOT NULL, " +
-                        "type TEXT, " +
-                        "length INTEGER NOT NULL, " +
-                        "revpos INTEGER DEFAULT 0); " +
-                        "CREATE INDEX attachments_by_sequence on attachments(sequence, filename); " +
+            if (dbVersion < 2) {
+                // Version 2: added attachments.revpos
+                String upgradeSql = "ALTER TABLE attachments ADD COLUMN revpos INTEGER DEFAULT 0; " +
+                        "PRAGMA user_version = 2";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 2;
+            }
+
+            if (dbVersion < 3) {
+                String upgradeSql = "CREATE TABLE IF NOT EXISTS localdocs ( " +
+                        "docid TEXT UNIQUE NOT NULL, " +
+                        "revid TEXT NOT NULL, " +
+                        "json BLOB); " +
+                        "CREATE INDEX IF NOT EXISTS localdocs_by_docid ON localdocs(docid); " +
+                        "PRAGMA user_version = 3";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 3;
+            }
+
+            if (dbVersion < 4) {
+                String upgradeSql = "CREATE TABLE info ( " +
+                        "key TEXT PRIMARY KEY, " +
+                        "value TEXT); " +
+                        "INSERT INTO INFO (key, value) VALUES ('privateUUID', '" + Misc.TDCreateUUID() + "'); " +
+                        "INSERT INTO INFO (key, value) VALUES ('publicUUID',  '" + Misc.TDCreateUUID() + "'); " +
+                        "PRAGMA user_version = 4";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 4;
+            }
+
+            if (dbVersion < 5) {
+                // Version 5: added encoding for attachments
+                String upgradeSql = "ALTER TABLE attachments ADD COLUMN encoding INTEGER DEFAULT 0; " +
+                        "ALTER TABLE attachments ADD COLUMN encoded_length INTEGER; " +
+                        "PRAGMA user_version = 5";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 5;
+            }
+
+
+            if (dbVersion < 6) {
+                // Version 6: enable Write-Ahead Log (WAL) <http://sqlite.org/wal.html>
+                // Not supported on Android, require SQLite 3.7.0
+                //String upgradeSql  = "PRAGMA journal_mode=WAL; " +
+
+                // NOTE: For Android, WAL should be set when open the database
+                //       Check AndroidSQLiteStorageEngine.java public boolean open(String path) method.
+                //       http://developer.android.com/reference/android/database/sqlite/SQLiteDatabase.html#enableWriteAheadLogging()
+
+                String upgradeSql = "PRAGMA user_version = 6";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 6;
+            }
+
+            if (dbVersion < 7) {
+                // Version 7: enable full-text search
+                // Note: Apple's SQLite build does not support the icu or unicode61 tokenizers :(
+                // OPT: Could add compress/decompress functions to make stored content smaller
+                // Not supported on Android
+                //String upgradeSql = "CREATE VIRTUAL TABLE fulltext USING fts4(content, tokenize=unicodesn); " +
+                //"ALTER TABLE maps ADD COLUMN fulltext_id INTEGER; " +
+                //"CREATE INDEX IF NOT EXISTS maps_by_fulltext ON maps(fulltext_id); " +
+                //"CREATE TRIGGER del_fulltext DELETE ON maps WHEN old.fulltext_id not null " +
+                //"BEGIN DELETE FROM fulltext WHERE rowid=old.fulltext_id| END; " +
+                String upgradeSql = "PRAGMA user_version = 7";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 7;
+            }
+
+            // (Version 8 was an older version of the geo index)
+
+            if (dbVersion < 9) {
+                // Version 9: Add geo-query index
+                //String upgradeSql = "CREATE VIRTUAL TABLE bboxes USING rtree(rowid, x0, x1, y0, y1); " +
+                //"ALTER TABLE maps ADD COLUMN bbox_id INTEGER; " +
+                //"ALTER TABLE maps ADD COLUMN geokey BLOB; " +
+                //"CREATE TRIGGER del_bbox DELETE ON maps WHEN old.bbox_id not null " +
+                //"BEGIN DELETE FROM bboxes WHERE rowid=old.bbox_id| END; " +
+                String upgradeSql = "PRAGMA user_version = 9";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 9;
+            }
+
+            if (dbVersion < 10) {
+                // Version 10: Add rev flag for whether it has an attachment
+                String upgradeSql = "ALTER TABLE revs ADD COLUMN no_attachments BOOLEAN; " +
+                        "PRAGMA user_version = 10";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 10;
+            }
+
+            // (Version 11 used to create the index revs_cur_deleted, which is obsoleted in version 16)
+
+            // (Version 12: CBL Android/Java skipped 12 before. Instead, we ported bug fix at dbVersion 18)
+
+            if (dbVersion < 13) {
+                // Version 13: Add rows to track number of rows in the views
+                String upgradeSql = "ALTER TABLE views ADD COLUMN total_docs INTEGER DEFAULT -1; " +
+                        "PRAGMA user_version = 13";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 13;
+            }
+
+            if (dbVersion < 14) {
+                // Version 14: Add index for getting a document with doc and rev id
+                String upgradeSql = "CREATE INDEX IF NOT EXISTS revs_by_docid_revid ON revs(doc_id, revid desc, current, deleted); " +
+                        "PRAGMA user_version = 14";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 14;
+            }
+
+            if (dbVersion < 15) {
+                // Version 15: Add sequence index on maps and attachments for revs(sequence) on DELETE CASCADE
+                String upgradeSql = "CREATE INDEX maps_sequence ON maps(sequence); " +
                         "CREATE INDEX attachments_sequence ON attachments(sequence); " +
-                        "PRAGMA user_version = 20";
+                        "PRAGMA user_version = 15";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 15;
+            }
+
+
+            if (dbVersion < 16) {
+                // Version 16: Fix the very suboptimal index revs_cur_deleted.
+                // The new revs_current is an optimal index for finding the winning revision of a doc.
+                String upgradeSql = "DROP INDEX IF EXISTS revs_current; " +
+                        "DROP INDEX IF EXISTS revs_cur_deleted; " +
+                        "CREATE INDEX revs_current ON revs(doc_id, current desc, deleted, revid desc);" +
+                        "PRAGMA user_version = 16";
+
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 16;
+            }
+
+            if (dbVersion < 17) {
+                // Version 17: https://github.com/couchbase/couchbase-lite-ios/issues/615
+                String upgradeSql = "CREATE INDEX maps_view_sequence ON maps(view_id, sequence); " +
+                        "PRAGMA user_version = 17";
+
                 if (!initialize(upgradeSql)) {
                     database.close();
                     return false;
                 }
+                dbVersion = 17;
+            }
 
-                // 2. iterate revs table, and populate attachment table
-                String sql = "SELECT sequence, json FROM revs WHERE no_attachments=0";
-                Cursor cursor2 = null;
+            // Note: We skipped change for dbVersion 12 before. 18 is for JSONCollator bug fix.
+            //       Android version should be one version higher.
+            if (dbVersion < 18) {
+                // Version 12: Because of a bug fix that changes JSON collation, invalidate view indexes
+                String upgradeSql = "DELETE FROM maps; UPDATE views SET lastsequence=0; " +
+                        "PRAGMA user_version = 18";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 18;
+            }
+
+            // NOTE: Following lines of code are for compatibility with Couchbase Lite iOS v1.1.0 database format.
+            //       https://github.com/couchbase/couchbase-lite-java-core/issues/596
+            //       CBL iOS v1.1.0 => 101
+            //       1. Creates attachments table if it does not exist.
+            //       2. Iterate revs table to populate attachments table.
+            if (dbVersion >= 101) {
+                // Check if attachments table exists. If not, create the table, and iterate revs
+                // to populate attachment table
+                boolean existsAttachments = false;
+                Cursor cursor = null;
                 try {
-                    cursor2 = database.rawQuery(sql, null);
-                    while (cursor2.moveToNext()) {
-                        if (!cursor2.isNull(1)) {
-                            long sequence = cursor2.getLong(0);
-                            byte[] json = cursor2.getBlob(1);
-                            try {
-                                Map<String, Object> docProperties = Manager.getObjectMapper().readValue(json, Map.class);
-                                Map<String, Object> attachments = (Map<String, Object>) docProperties.get("_attachments");
-                                Iterator<String> itr = attachments.keySet().iterator();
-                                while (itr.hasNext()) {
-                                    String name = itr.next();
-                                    Map<String, Object> attachment = (Map<String, Object>) attachments.get(name);
-                                    String contentType = (String) attachment.get("content_type");
-                                    int revPos = (Integer) attachment.get("revpos");
-                                    int length = (Integer) attachment.get("length");
-                                    String digest = (String) attachment.get("digest");
-                                    BlobKey key = new BlobKey(digest);
-                                    try {
-                                        insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length);
-                                    } catch (CouchbaseLiteException e) {
-                                        Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "=" + attachment.toString(), e);
-                                    }
-                                }
-                            } catch (Exception e) {
-                                Log.e(Log.TAG_DATABASE, "JSON parsing error: " + new String(json), e);
-                            }
-                        }
+                    cursor = database.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'", null);
+                    if (cursor.moveToNext()) {
+                        existsAttachments = true;
                     }
                 } catch (SQLException e) {
                     Log.e(Database.TAG, "Failed to check if attachments table exists", e);
-                    if (cursor2 != null) {
-                        cursor2.close();
-                    }
-                    database.close();
                     return false;
                 } finally {
-                    if (cursor2 != null) {
-                        cursor2.close();
+                    if (cursor != null) {
+                        cursor.close();
                     }
                 }
-            }
-            dbVersion = 20;
-        }
 
-        // NOTE: CBL Android/Java v1.1.0 Set database version 20.
-        //       20 is higher than any previous release, but lower than CBL iOS v1.1.0 - 101
-        if (dbVersion < 20) {
-            String upgradeSql = "PRAGMA user_version = 20";
-            if (!initialize(upgradeSql)) {
+                if (!existsAttachments) {
+                    // 1. create attachments table
+                    String upgradeSql = "CREATE TABLE attachments ( " +
+                            "sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
+                            "filename TEXT NOT NULL, " +
+                            "key BLOB NOT NULL, " +
+                            "type TEXT, " +
+                            "length INTEGER NOT NULL, " +
+                            "revpos INTEGER DEFAULT 0); " +
+                            "CREATE INDEX attachments_by_sequence on attachments(sequence, filename); " +
+                            "CREATE INDEX attachments_sequence ON attachments(sequence); " +
+                            "PRAGMA user_version = 20";
+                    if (!initialize(upgradeSql)) {
+                        return false;
+                    }
+
+                    // 2. iterate revs table, and populate attachment table
+                    String sql = "SELECT sequence, json FROM revs WHERE no_attachments=0";
+                    Cursor cursor2 = null;
+                    try {
+                        cursor2 = database.rawQuery(sql, null);
+                        while (cursor2.moveToNext()) {
+                            if (!cursor2.isNull(1)) {
+                                long sequence = cursor2.getLong(0);
+                                byte[] json = cursor2.getBlob(1);
+                                try {
+                                    Map<String, Object> docProperties = Manager.getObjectMapper().readValue(json, Map.class);
+                                    Map<String, Object> attachments = (Map<String, Object>) docProperties.get("_attachments");
+                                    Iterator<String> itr = attachments.keySet().iterator();
+                                    while (itr.hasNext()) {
+                                        String name = itr.next();
+                                        Map<String, Object> attachment = (Map<String, Object>) attachments.get(name);
+                                        String contentType = (String) attachment.get("content_type");
+                                        int revPos = (Integer) attachment.get("revpos");
+                                        int length = (Integer) attachment.get("length");
+                                        String digest = (String) attachment.get("digest");
+                                        BlobKey key = new BlobKey(digest);
+                                        try {
+                                            insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length);
+                                        } catch (CouchbaseLiteException e) {
+                                            Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "=" + attachment.toString(), e);
+                                            return false;
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    Log.e(Log.TAG_DATABASE, "JSON parsing error: " + new String(json), e);
+                                    return false;
+                                }
+                            }
+                        }
+                    } catch (SQLException e) {
+                        Log.e(Database.TAG, "Failed to check if attachments table exists", e);
+                        return false;
+                    } finally {
+                        if (cursor2 != null) {
+                            cursor2.close();
+                        }
+                    }
+                }
+                dbVersion = 20;
+            }
+
+            // NOTE: CBL Android/Java v1.1.0 Set database version 20.
+            //       20 is higher than any previous release, but lower than CBL iOS v1.1.0 - 101
+            if (dbVersion < 20) {
+                String upgradeSql = "PRAGMA user_version = 20";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+                dbVersion = 20;
+            }
+
+            if (isNew) {
+                optimizeSQLIndexes(); // runs ANALYZE query
+            }
+
+            // successfully updated database schema
+            isSuccessful = true;
+
+        } finally {
+            // END TRANSACTION WITH COMMIT OR ROLLBACK
+            endTransaction(isSuccessful);
+
+            // if failed, close database before return
+            if (!isSuccessful) {
                 database.close();
-                return false;
             }
-            dbVersion = 20;
-        }
-
-        if (isNew) {
-            optimizeSQLIndexes(); // runs ANALYZE query
         }
 
         // NOTE: Migrate attachment directory path if necessary
@@ -1332,8 +1331,8 @@ public final class Database {
                     return false;
                 }
             }
-
         }
+
         // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
         //       Needs to delete /files/<database name>/ too
         File obsoletedAttachmentStoreParentPath = new File(getObsoletedAttachmentStoreParentPath());
@@ -1342,10 +1341,9 @@ public final class Database {
         }
 
         try {
-            if(isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()){
+            if (isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()) {
                 attachments = new BlobStore(getAttachmentStorePath(), false);
-            }
-            else{
+            } else {
                 attachments = new BlobStore(getAttachmentStorePath(), true);
                 markBlobstoreMigrated();
             }
