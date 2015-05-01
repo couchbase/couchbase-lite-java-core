@@ -673,8 +673,8 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    public int getExecutorThreadPooSize() {
-        return this.options.getExecutorThreadPooSize();
+    public int getExecutorThreadPoolSize() {
+        return this.options.getExecutorThreadPoolSize();
     }
 }
 

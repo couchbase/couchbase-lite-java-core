@@ -320,10 +320,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     protected void goOnlineInitialStartup() {
 
-        int executorThreadPooSize = db.getManager().getExecutorThreadPooSize() <= 0 ?
-                EXECUTOR_THREAD_POOL_SIZE: db.getManager().getExecutorThreadPooSize();
-        Log.e(Log.TAG_SYNC, "executorThreadPooSize=" +  executorThreadPooSize);
-        remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPooSize, new ThreadFactory() {
+        int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
+                EXECUTOR_THREAD_POOL_SIZE: db.getManager().getExecutorThreadPoolSize();
+        Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" +  executorThreadPoolSize);
+        remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
             private int counter = 0;
             @Override
             public Thread newThread(Runnable r) {

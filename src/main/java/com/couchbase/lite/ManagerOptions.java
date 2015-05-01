@@ -20,7 +20,7 @@ public class ManagerOptions {
      * ReplicationInternal.java: public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
      * https://github.com/couchbase/couchbase-lite-java-core/issues/343
      */
-    private int executorThreadPooSize = -1;
+    private int executorThreadPoolSize = 0;
 
     public ManagerOptions() {
     }
@@ -41,11 +41,11 @@ public class ManagerOptions {
         this.autoMigrateBlobStoreFilename = autoMigrateBlobStoreFilename;
     }
 
-    public int getExecutorThreadPooSize() {
-        return executorThreadPooSize;
+    public int getExecutorThreadPoolSize() {
+        return executorThreadPoolSize;
     }
 
-    public void setExecutorThreadPooSize(int executorThreadPooSize) {
-        this.executorThreadPooSize = executorThreadPooSize;
+    public void setExecutorThreadPoolSize(int executorThreadPoolSize) {
+        this.executorThreadPoolSize = executorThreadPoolSize;
     }
 }
