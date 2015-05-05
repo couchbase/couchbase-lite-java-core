@@ -284,7 +284,8 @@ public final class Manager {
 
     private void replaceDatabase(String databaseName, InputStream databaseStream, Iterator<Map.Entry<String, InputStream>> attachmentStreams) throws CouchbaseLiteException {
         try {
-            Database database = getDatabase(databaseName);
+            //Database database = getDatabase(databaseName);
+            Database database = getDatabaseWithoutOpening(databaseName, false);
             String dstAttachmentsPath = database.getAttachmentStorePath();
             OutputStream destStream = new FileOutputStream(new File(database.getPath()));
             StreamUtils.copyStream(databaseStream, destStream);
