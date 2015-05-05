@@ -1197,7 +1197,25 @@ public final class Database {
             //       Android version should be one version higher.
             if (dbVersion < 18) {
                 // Version 12: Because of a bug fix that changes JSON collation, invalidate view indexes
-                String upgradeSql = "DELETE FROM maps; UPDATE views SET lastsequence=0; " +
+
+                // instead of delete all rows in maps table, drop table and recreate it.
+                String upgradeSql = "DROP TABLE maps";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+
+                upgradeSql = "CREATE TABLE IF NOT EXISTS maps ( " +
+                    " view_id INTEGER NOT NULL REFERENCES views(view_id) ON DELETE CASCADE, " +
+                    " sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
+                    " key TEXT NOT NULL COLLATE JSON, " +
+                    " value TEXT); " +
+                    " CREATE INDEX IF NOT EXISTS maps_keys on maps(view_id, key COLLATE JSON); " +
+                    " CREATE INDEX IF NOT EXISTS maps_sequence ON maps(sequence);";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+
+                upgradeSql = "UPDATE views SET lastsequence=0; " +
                         "PRAGMA user_version = 18";
                 if (!initialize(upgradeSql)) {
                     return false;
@@ -1211,6 +1229,20 @@ public final class Database {
             //       1. Creates attachments table if it does not exist.
             //       2. Iterate revs table to populate attachments table.
             if (dbVersion >= 101) {
+
+                // NOTE: CBL iOS v1.1.0 does not have maps table, Needs to create it if it does not exist.
+                String upgradeSql = "CREATE TABLE IF NOT EXISTS maps ( " +
+                        " view_id INTEGER NOT NULL REFERENCES views(view_id) ON DELETE CASCADE, " +
+                        " sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
+                        " key TEXT NOT NULL COLLATE JSON, " +
+                        " value TEXT); " +
+                        " CREATE INDEX IF NOT EXISTS maps_keys on maps(view_id, key COLLATE JSON); " +
+                        " CREATE INDEX IF NOT EXISTS maps_sequence ON maps(sequence);";
+                if (!initialize(upgradeSql)) {
+                    return false;
+                }
+
+
                 // Check if attachments table exists. If not, create the table, and iterate revs
                 // to populate attachment table
                 boolean existsAttachments = false;
@@ -1231,7 +1263,7 @@ public final class Database {
 
                 if (!existsAttachments) {
                     // 1. create attachments table
-                    String upgradeSql = "CREATE TABLE attachments ( " +
+                    upgradeSql = "CREATE TABLE attachments ( " +
                             "sequence INTEGER NOT NULL REFERENCES revs(sequence) ON DELETE CASCADE, " +
                             "filename TEXT NOT NULL, " +
                             "key BLOB NOT NULL, " +
