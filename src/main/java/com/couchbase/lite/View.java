@@ -247,7 +247,7 @@ public final class View {
      */
     @InterfaceAudience.Public
     public void deleteIndex() {
-        if (getViewId() < 0) {
+        if (getViewId() <= 0) {
             return;
         }
 
@@ -295,18 +295,15 @@ public final class View {
     public int getViewId() {
         if (viewId < 0) {
             String sql = "SELECT view_id FROM views WHERE name=?";
-            String[] args = { name };
+            String[] args = {name};
             Cursor cursor = null;
             try {
                 cursor = database.getDatabase().rawQuery(sql, args);
                 if (cursor.moveToNext()) {
                     viewId = cursor.getInt(0);
-                } else {
-                    viewId = 0;
                 }
             } catch (SQLException e) {
                 Log.e(Log.TAG_VIEW, "Error getting view id", e);
-                viewId = 0;
             } finally {
                 if (cursor != null) {
                     cursor.close();
