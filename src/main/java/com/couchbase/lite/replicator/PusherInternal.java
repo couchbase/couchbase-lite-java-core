@@ -583,8 +583,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             if(compressed.length < uncompressed.length){
                                 contentEncoding = "gzip";
                             }
+                            multiPart.addPart("param1", new StringBody(compressed, "application/json", utf8charset, contentEncoding));
+                        } else {
+                            multiPart.addPart("param1", new StringBody(uncompressed, "application/json", utf8charset));
                         }
-                        multiPart.addPart("param1", new StringBody(compressed, "application/json", utf8charset, contentEncoding));
+
                         uncompressed = null;
                         compressed = null;
                     } catch (IOException e) {
@@ -612,7 +615,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                 " issue #80): %s", attachment);
                     }
 
-                    FileBody fileBody = new FileBody(file, contentType);
+                    FileBody fileBody = new FileBody(file, attachmentKey, contentType, null);
                     multiPart.addPart(attachmentKey, fileBody);
                 }
 
