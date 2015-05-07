@@ -689,5 +689,13 @@ public final class Manager {
     private static boolean isWindows() {
         return (OS.indexOf("win") >= 0);
     }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public int getExecutorThreadPoolSize() {
+        return this.options.getExecutorThreadPoolSize();
+    }
 }
 
