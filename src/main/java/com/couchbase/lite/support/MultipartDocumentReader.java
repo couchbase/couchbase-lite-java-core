@@ -11,11 +11,13 @@ import org.apache.http.util.ByteArrayBuffer;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
 public class MultipartDocumentReader implements MultipartReaderDelegate {
+    private static final int BUF_LEN = 1024;
 
     private MultipartReader multipartReader;
     private BlobStoreWriter curAttachment;
@@ -67,7 +69,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
     public void setHeaders(Map<String, String> headers){
         String contentType = headers.get("Content-Type");
-        if(contentType.startsWith("multipart/")){
+        if(contentType != null && contentType.startsWith("multipart/")){
             // Multipart, so initialize the parser:
             multipartReader = new MultipartReader(contentType, this);
             attachmentsByName = new HashMap<String, BlobStoreWriter>();
@@ -267,5 +269,20 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             attachmentsByMd5Digest.put(md5String, curAttachment);
             curAttachment = null;
         }
+    }
+
+    public void readStream(InputStream inputStream, Map<String, String> headers) throws IOException {
+        // Set headers:
+        setHeaders(headers);
+
+        // Read stream and append data:
+        byte[] buffer = new byte[BUF_LEN];
+        int numBytes = 0;
+        while ((numBytes = inputStream.read(buffer)) != -1) {
+            appendData(buffer, 0, numBytes);
+        }
+
+        // Done:
+        finish();
     }
 }

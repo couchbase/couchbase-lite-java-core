@@ -31,6 +31,7 @@ import com.couchbase.lite.replicator.Replication.ChangeListener;
 import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.support.MultipartDocumentReader;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
@@ -1789,20 +1790,32 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return status;
     }
 
-    public Status do_PUT_Document(Database _db, String docID, String _attachmentName) throws CouchbaseLiteException {
+    private Body readDocumentBody(Database db) throws IOException {
+        Map<String, String>headers = new HashMap<String, String>();
+        headers.put("Content-Type", connection.getRequestProperty("content-type"));
+        headers.put("Content-Encoding", connection.getRequestProperty("content-encoding"));
 
+        MultipartDocumentReader reader = new MultipartDocumentReader(db);
+        reader.readStream(connection.getRequestInputStream(), headers);
+
+        Body body = new Body(reader.getDocumentProperties());
+        return body;
+    }
+
+    public Status do_PUT_Document(Database _db, String docID, String _attachmentName) throws CouchbaseLiteException {
         Status status = new Status(Status.CREATED);
-        Map<String, Object> bodyDict = getBodyAsDictionary();
-        if (bodyDict == null) {
+        Body body = null;
+        try {
+            body = readDocumentBody(_db);
+        } catch (IOException e) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
         if (getQuery("new_edits") == null || (getQuery("new_edits") != null && (new Boolean(getQuery("new_edits"))))) {
             // Regular PUT
-            status = update(_db, docID, bodyDict, false);
+            status = update(_db, docID, body.getProperties(), false);
         } else {
             // PUT with new_edits=false -- forcible insertion of existing revision:
-            Body body = new Body(bodyDict);
             RevisionInternal rev = new RevisionInternal(body);
             if (rev.getRevId() == null || rev.getDocId() == null || !rev.getDocId().equals(docID)) {
                 throw new CouchbaseLiteException(Status.BAD_REQUEST);
