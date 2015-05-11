@@ -35,9 +35,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
     @Override
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
-
-        preemptivelySetAuthCredentials(httpClient);
-
+        setAuthCredentials(httpClient);
         request.addHeader("Accept", "multipart/related, application/json");
         request.addHeader("X-Accept-Part-Encoding", "gzip");
         request.addHeader("User-Agent", Manager.USER_AGENT);

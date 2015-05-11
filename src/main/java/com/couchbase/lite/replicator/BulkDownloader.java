@@ -74,7 +74,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
 
-        preemptivelySetAuthCredentials(httpClient);
+        setAuthCredentials(httpClient);
 
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");

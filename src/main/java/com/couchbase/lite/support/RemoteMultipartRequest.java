@@ -27,7 +27,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
 
-        preemptivelySetAuthCredentials(httpClient);
+        setAuthCredentials(httpClient);
 
         HttpUriRequest request = null;
         if (method.equalsIgnoreCase("PUT")) {

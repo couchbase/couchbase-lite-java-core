@@ -14,6 +14,7 @@ import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
+import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.AuthState;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -89,7 +90,7 @@ public class RemoteRequest implements Runnable {
 
             HttpClient httpClient = clientFactory.getHttpClient();
 
-            preemptivelySetAuthCredentials(httpClient);
+            setAuthCredentials(httpClient);
 
             request.addHeader("Accept", "multipart/related, application/json");
             request.addHeader("User-Agent", Manager.USER_AGENT);
@@ -244,13 +245,11 @@ public class RemoteRequest implements Runnable {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
         }
 
-
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
         respondWithResult(fullBody, error, response);
-
     }
 
-    protected void preemptivelySetAuthCredentials(HttpClient httpClient) {
+    protected void setAuthCredentials(HttpClient httpClient) {
         boolean isUrlBasedUserInfo = false;
 
         String userInfo = url.getUserInfo();
@@ -268,21 +267,11 @@ public class RemoteRequest implements Runnable {
                 String[] userInfoElements = userInfo.split(":");
                 String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]): userInfoElements[0];
                 String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]): userInfoElements[1];
-                final Credentials credentials = new UsernamePasswordCredentials(username, password);
-
                 if (httpClient instanceof DefaultHttpClient) {
                     DefaultHttpClient dhc = (DefaultHttpClient) httpClient;
-                    HttpRequestInterceptor preemptiveAuth = new HttpRequestInterceptor() {
-                        @Override
-                        public void process(HttpRequest request, HttpContext context) throws HttpException, IOException {
-                            AuthState authState = (AuthState) context.getAttribute(ClientContext.TARGET_AUTH_STATE);
-                            if (authState.getAuthScheme() == null) {
-                                authState.setAuthScheme(new BasicScheme());
-                                authState.setCredentials(credentials);
-                            }
-                        }
-                    };
-                    dhc.addRequestInterceptor(preemptiveAuth, 0);
+                    dhc.getCredentialsProvider().setCredentials(
+                            new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT),
+                            new UsernamePasswordCredentials(username, password));
                 }
             } else {
                 Log.w(Log.TAG_REMOTE_REQUEST, "RemoteRequest Unable to parse user info, not setting credentials");
