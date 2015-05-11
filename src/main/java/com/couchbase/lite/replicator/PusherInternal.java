@@ -381,8 +381,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Map<String, Object> results = (Map<String, Object>) response;
                 if (e != null) {
                     setError(e);
-                }
-                else {
+                } else {
                     if (results.size() != 0) {
                         // Go through the list of local changes again, selecting the ones the destination server
                         // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
@@ -545,6 +544,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     }
 
+    /**
+     * in CBL_Pusher.m
+     * - (CBLMultipartWriter*)multipartWriterForRevision: (CBL_Revision*)rev
+     */
     @InterfaceAudience.Private
     private boolean uploadMultipartRevision(final RevisionInternal revision) {
 
@@ -576,17 +579,17 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         Charset utf8charset = Charset.forName("UTF-8");
                         byte[] uncompressed = json.getBytes(utf8charset);
                         byte[] compressed = null;
+                        byte[] data = uncompressed;
                         String contentEncoding = null;
-
                         if(uncompressed.length > RemoteRequest.MIN_JSON_LENGTH_TO_COMPRESS && canSendCompressedRequests()){
                             compressed = Utils.compressByGzip(uncompressed);
                             if(compressed.length < uncompressed.length){
+                                data = compressed;
                                 contentEncoding = "gzip";
                             }
                         }
-                        multiPart.addPart("param1", new StringBody(compressed, "application/json", utf8charset, contentEncoding));
-                        uncompressed = null;
-                        compressed = null;
+                        // NOTE: StringBody.contentEncoding default value is null. Setting null value to contentEncoding does not cause any impact.
+                        multiPart.addPart("param1", new StringBody(data, "application/json", utf8charset, contentEncoding));
                     } catch (IOException e) {
                         throw new IllegalArgumentException(e);
                     }
