@@ -42,6 +42,7 @@ import java.util.zip.GZIPInputStream;
  * @exclude
  */
 public class RemoteRequest implements Runnable {
+    // Don't compress data shorter than this (not worth the CPU time, plus it might not shrink)
     public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
 
     protected ScheduledExecutorService workExecutor;
