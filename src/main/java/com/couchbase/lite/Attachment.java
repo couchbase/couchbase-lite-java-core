@@ -21,8 +21,8 @@ import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
 
-import java.io.IOException;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Collections;
@@ -132,7 +132,7 @@ public final class Attachment {
                 throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
             }
             Attachment attachment = db.getAttachmentForSequence(sequence, this.name);
-            body = attachment.getContent();
+            body = attachment.getBodyIfNew();
             if (attachment.getGZipped()) {
                 // Client does not expect a gzipped stream.
                 // Only Router handles gzipped streams and uses getAttachmentForSequence directly.
