@@ -405,14 +405,6 @@ public final class Database {
         //recursively delete attachments path
         boolean deleteAttachmentStatus = FileDirUtils.deleteRecursive(attachmentsFile);
 
-        //recursively delete path where attachments stored( see getAttachmentStorePath())
-        int lastDotPosition = path.lastIndexOf('.');
-        if( lastDotPosition > 0 ) {
-            File attachmentsFileUpFolder = new File(path.substring(0, lastDotPosition));
-            FileDirUtils.deleteRecursive(attachmentsFileUpFolder);
-        }
-
-
         if (!deleteStatus) {
             throw new CouchbaseLiteException("Was not able to delete the database file", Status.INTERNAL_SERVER_ERROR);
         }
