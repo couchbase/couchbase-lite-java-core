@@ -270,6 +270,9 @@ public final class Attachment {
     }
 
     /**
+     * NOTE: getGZipped() can return correct value if Attachment is returned from Database.getAttachmentForSequence(long, String).
+     *       This method should be internal use only.
+     *
      * @exclude
      */
     @InterfaceAudience.Private
