@@ -632,7 +632,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return false;
         }
 
-        final String path = String.format("/%s?new_edits=false", revision.getDocId());
+        final String path = String.format("/%s?new_edits=false", URIUtils.encode(revision.getDocId()));
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
 
