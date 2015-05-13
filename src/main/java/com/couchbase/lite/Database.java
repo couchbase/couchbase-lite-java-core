@@ -1261,6 +1261,8 @@ public final class Database {
                             "key BLOB NOT NULL, " +
                             "type TEXT, " +
                             "length INTEGER NOT NULL, " +
+                            "encoding INTEGER DEFAULT 0, " +
+                            "encoded_length INTEGER, " +
                             "revpos INTEGER DEFAULT 0); " +
                             "CREATE INDEX attachments_by_sequence on attachments(sequence, filename); " +
                             "CREATE INDEX attachments_sequence ON attachments(sequence); " +
@@ -1289,9 +1291,16 @@ public final class Database {
                                         int revPos = (Integer) attachment.get("revpos");
                                         int length = (Integer) attachment.get("length");
                                         String digest = (String) attachment.get("digest");
+                                        int encodedLength = -1;
+                                        if(attachment.containsKey("encoded_length"))
+                                            encodedLength = (Integer)attachment.get("encoded_length");
+                                        AttachmentInternal.AttachmentEncoding encoding = AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone;
+                                        if(attachment.containsKey("encoding") && attachment.get("encoding").equals("gzip")){
+                                            encoding = AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP;
+                                        }
                                         BlobKey key = new BlobKey(digest);
                                         try {
-                                            insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length);
+                                            insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revPos, key, length, encoding, encodedLength);
                                         } catch (CouchbaseLiteException e) {
                                             Log.e(Log.TAG_DATABASE, "Attachment information inserstion error: " + name + "=" + attachment.toString(), e);
                                             return false;
@@ -2846,10 +2855,15 @@ public final class Database {
                 attachment.getName(),
                 attachment.getContentType(),
                 attachment.getRevpos(),
-                attachment.getBlobKey());
+                attachment.getBlobKey(),
+                attachment.getLength(),
+                attachment.getEncoding(),
+                attachment.getEncodedLength());
     }
 
     /**
+     * Note: This method is used only from unit tests.
+     *
      * @exclude
      */
     @InterfaceAudience.Private
@@ -2874,16 +2888,28 @@ public final class Database {
      */
     @InterfaceAudience.Private
     public void insertAttachmentForSequenceWithNameAndType(long sequence, String name, String contentType, int revpos, BlobKey key) throws CouchbaseLiteException {
+        insertAttachmentForSequenceWithNameAndType(sequence, name, contentType, revpos, key, key != null ? attachments.getSizeOfBlob(key): -1, AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone, -1);
+    }
+
+    private void insertAttachmentForSequenceWithNameAndType(long sequence, String name, String contentType, int revpos, BlobKey key, long length, AttachmentInternal.AttachmentEncoding encoding, long encodedLength) throws CouchbaseLiteException {
         try {
             ContentValues args = new ContentValues();
             args.put("sequence", sequence);
             args.put("filename", name);
-            if (key != null) {
-                args.put("key", key.getBytes());
-                args.put("length", attachments.getSizeOfBlob(key));
-            }
             args.put("type", contentType);
             args.put("revpos", revpos);
+            if (key != null) {
+                args.put("key", key.getBytes());
+            }
+            if (length >= 0) {
+                args.put("length", length);
+            }
+            if(encoding == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) {
+                args.put("encoding", encoding.ordinal());
+                if (encodedLength >= 0) {
+                    args.put("encoded_length", encodedLength);
+                }
+            }
             long result = database.insert("attachments", null, args);
             if (result == -1) {
                 String msg = "Insert attachment failed (returned -1)";
@@ -2896,26 +2922,6 @@ public final class Database {
         }
     }
 
-    private void insertAttachmentForSequenceWithNameAndType(long sequence, String name, String contentType, int revpos, BlobKey key, long length) throws CouchbaseLiteException {
-        try {
-            ContentValues args = new ContentValues();
-            args.put("sequence", sequence);
-            args.put("filename", name);
-            args.put("key", key.getBytes());
-            args.put("length", length);
-            args.put("type", contentType);
-            args.put("revpos", revpos);
-            long result = database.insert("attachments", null, args);
-            if (result == -1) {
-                String msg = "Insert attachment failed (returned -1)";
-                Log.e(Database.TAG, msg);
-                throw new CouchbaseLiteException(msg, Status.INTERNAL_SERVER_ERROR);
-            }
-        } catch (SQLException e) {
-            Log.e(Database.TAG, "Error inserting attachment", e);
-            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
-        }
-    }
     /**
      * @exclude
      */
@@ -3108,7 +3114,7 @@ public final class Database {
 
         String args[] = { Long.toString(sequence) };
         try {
-            cursor = database.rawQuery("SELECT filename, key, type, length, revpos FROM attachments WHERE sequence=?", args);
+            cursor = database.rawQuery("SELECT filename, key, type, encoding, length, encoded_length, revpos FROM attachments WHERE sequence=?", args);
 
             if(!cursor.moveToNext()) {
                 return null;
@@ -3119,7 +3125,10 @@ public final class Database {
             while(!cursor.isAfterLast()) {
 
                 boolean dataSuppressed = false;
-                int length = cursor.getInt(3);
+                int length = cursor.getInt(4);
+
+                AttachmentInternal.AttachmentEncoding encoding = AttachmentInternal.AttachmentEncoding.values()[cursor.getInt(3)];
+                int encodedLength = cursor.getInt(5);
 
                 byte[] keyData = cursor.getBlob(1);
                 BlobKey key = new BlobKey(keyData);
@@ -3132,39 +3141,42 @@ public final class Database {
                     }
                     else {
                         byte[] data = attachments.blobForKey(key);
-
                         if(data != null) {
                             dataBase64 = Base64.encodeBytes(data);  // <-- very expensive
                         }
                         else {
                             Log.w(Database.TAG, "Error loading attachment.  Sequence: %s", sequence);
                         }
-
                     }
+                }
 
+                String encodingStr = null;
+                if (encoding == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) {
+                    // NOTE: iOS decode if attachment is included int the dict.
+                    encodingStr = "gzip";
                 }
 
                 Map<String, Object> attachment = new HashMap<String, Object>();
-
-
-
-                if(!(dataBase64 != null || dataSuppressed)) {
+                if (!(dataBase64 != null || dataSuppressed)) {
                     attachment.put("stub", true);
                 }
-
-                if(dataBase64 != null) {
+                if (dataBase64 != null) {
                     attachment.put("data", dataBase64);
                 }
-
                 if (dataSuppressed == true) {
                     attachment.put("follows", true);
                 }
-
                 attachment.put("digest", digestString);
                 String contentType = cursor.getString(2);
                 attachment.put("content_type", contentType);
+                if (encodingStr != null) {
+                    attachment.put("encoding", encodingStr);
+                }
                 attachment.put("length", length);
-                attachment.put("revpos", cursor.getInt(4));
+                if (encodingStr != null && encodedLength >= 0) {
+                    attachment.put("encoded_length", encodedLength);
+                }
+                attachment.put("revpos", cursor.getInt(6));
 
                 String filename = cursor.getString(0);
                 result.put(filename, attachment);
@@ -4254,7 +4266,7 @@ public final class Database {
                 // If there's inline attachment data, decode and store it:
                 byte[] newContents;
                 try {
-                    newContents = Base64.decode(newContentBase64);
+                    newContents = Base64.decode(newContentBase64, Base64.DONT_GUNZIP);
                 } catch (IOException e) {
                     throw new CouchbaseLiteException(e, Status.BAD_ENCODING);
                 }
