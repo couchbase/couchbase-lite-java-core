@@ -16,6 +16,7 @@ import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.SequenceMap;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
 
 import org.apache.http.HttpResponse;
@@ -23,7 +24,6 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.HttpResponseException;
 
 import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -591,7 +591,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // Construct a query. We want the revision history, and the bodies of attachments that have
         // been added since the latest revisions we have locally.
         // See: http://wiki.apache.org/couchdb/HTTP_Document_API#Getting_Attachments_With_a_Document
-        StringBuilder path = new StringBuilder("/" + URLEncoder.encode(rev.getDocId()) + "?rev=" + URLEncoder.encode(rev.getRevId()) + "&revs=true&attachments=true");
+        StringBuilder path = new StringBuilder("/");
+        path.append(encodeDocumentId(rev.getDocId()));
+        path.append("?rev=").append(URIUtils.encode(rev.getRevId()));
+        path.append("&revs=true&attachments=true");
 
         // If the document has attachments, add an 'atts_since' param with a list of
         // already-known revisions, so the server can skip sending the bodies of any
@@ -645,9 +648,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         try {
             json = Manager.getObjectMapper().writeValueAsBytes(strings);
         } catch (Exception e) {
-            Log.w(Log.TAG_SYNC, "Unable to serialize json", e);
+            throw new IllegalStateException("Unable to serialize json", e);
         }
-        return URLEncoder.encode(new String(json));
+        return URIUtils.encode(new String(json));
     }
 
     /**

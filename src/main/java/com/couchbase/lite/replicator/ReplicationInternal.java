@@ -18,6 +18,7 @@ import com.couchbase.lite.support.RemoteRequestRetry;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
+import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 import com.github.oxo42.stateless4j.StateMachine;
@@ -1609,6 +1610,21 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     }).start();
                 }
             }
+        }
+    }
+
+    /**
+     * Encodes the given document id for use in an URI.
+     * <p>
+     * Avoids encoding the slash in _design documents since it may cause a 301 redirect.
+     */
+    /* package */ String encodeDocumentId(String docId) {
+        if (docId.startsWith("_design/")) {
+            // http://docs.couchdb.org/en/1.6.1/http-api.html#cap-/{db}/_design/{ddoc}
+            String designDocId = docId.substring("_design/".length());
+            return "_design/".concat(URIUtils.encode(designDocId));
+        } else {
+            return URIUtils.encode(docId);
         }
     }
 }
