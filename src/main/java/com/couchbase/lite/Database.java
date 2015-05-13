@@ -3159,16 +3159,16 @@ public final class Database {
                 }
 
                 String encodingStr = null;
-                if(encoding!=AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone){
+                if (encoding == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) {
                     // NOTE: iOS decode if attachment is included int the dict.
                     encodingStr = "gzip";
                 }
 
                 Map<String, Object> attachment = new HashMap<String, Object>();
-                if(!(dataBase64 != null || dataSuppressed)) {
+                if (!(dataBase64 != null || dataSuppressed)) {
                     attachment.put("stub", true);
                 }
-                if(dataBase64 != null) {
+                if (dataBase64 != null) {
                     attachment.put("data", dataBase64);
                 }
                 if (dataSuppressed == true) {
@@ -3177,11 +3177,13 @@ public final class Database {
                 attachment.put("digest", digestString);
                 String contentType = cursor.getString(2);
                 attachment.put("content_type", contentType);
-                if (encodingStr != null)
+                if (encodingStr != null) {
                     attachment.put("encoding", encodingStr);
+                }
                 attachment.put("length", length);
-                if (encodingStr != null && encodedLength >= 0)
+                if (encodingStr != null && encodedLength >= 0) {
                     attachment.put("encoded_length", encodedLength);
+                }
                 attachment.put("revpos", cursor.getInt(6));
 
                 String filename = cursor.getString(0);
