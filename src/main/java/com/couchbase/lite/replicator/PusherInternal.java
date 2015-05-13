@@ -632,7 +632,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return false;
         }
 
-        final String path = String.format("/%s?new_edits=false", URIUtils.encode(revision.getDocId()));
+        final String path = String.format("/%s?new_edits=false", encodeDocumentId(revision.getDocId()));
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
 
@@ -681,7 +681,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return;
         }
 
-        final String path = String.format("/%s?new_edits=false", URIUtils.encode(rev.getDocId()));
+        final String path = String.format("/%s?new_edits=false", encodeDocumentId(rev.getDocId()));
         Future future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),
@@ -697,9 +697,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 });
         pendingFutures.add(future);
     }
-
-
-
 
     // Given a revision and an array of revIDs, finds the latest common ancestor revID
     // and returns its generation #. If there is none, returns 0.
