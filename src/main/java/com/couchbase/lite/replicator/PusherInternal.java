@@ -615,7 +615,15 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                 " issue #80): %s", attachment);
                     }
 
-                    FileBody fileBody = new FileBody(file, contentType);
+                    // NOTE: Content-Encoding might not be necessary to set. Apache FileBody does not set Content-Encoding.
+                    //       FileBody always return null for getContentEncoding(), and Content-Encoding header is not set in multipart
+                    // CBL iOS: https://github.com/couchbase/couchbase-lite-ios/blob/feb7ff5eda1e80bd00e5eb19f1d46c793f7a1951/Source/CBL_Pusher.m#L449-L452
+                    String contentEncoding = null;
+                    if(attachment.containsKey("encoding")){
+                        contentEncoding = (String)attachment.get("encoding");
+                    }
+
+                    FileBody fileBody = new CustomFileBody(file, contentType, contentEncoding);
                     multiPart.addPart(attachmentKey, fileBody);
                 }
 
@@ -716,5 +724,20 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         int generation = Database.parseRevIDNumber(ancestorID);
 
         return generation;
+    }
+
+    // CustomFileBody to support contentEncoding. FileBody returns always null for getContentEncoding()
+    private static class CustomFileBody extends FileBody {
+        private String contentEncoding = null;
+
+        public CustomFileBody(final File file, final String mimeType, final String contentEncoding) {
+            super(file, mimeType);
+            this.contentEncoding = contentEncoding;
+        }
+
+        @Override
+        public String getContentEncoding() {
+            return contentEncoding;
+        }
     }
 }
