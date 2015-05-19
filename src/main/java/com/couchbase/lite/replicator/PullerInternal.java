@@ -620,11 +620,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     Map<String, Object> properties = (Map<String, Object>) result;
                     PulledRevision gotRev = new PulledRevision(properties);
                     gotRev.setSequence(rev.getSequence());
-
-                    //if(gotRev.getBody() != null)
-                    //    gotRev.getBody().compact();
-
+                    
                     Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s", PullerInternal.this, gotRev, downloadsToInsert);
+
+                    if(gotRev.getBody() != null)
+                        gotRev.getBody().compact();
 
                     // Add to batcher ... eventually it will be fed to -insertRevisions:.
                     downloadsToInsert.queueObject(gotRev);
