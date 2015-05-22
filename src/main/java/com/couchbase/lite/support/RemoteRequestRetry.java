@@ -185,7 +185,6 @@ public class RemoteRequestRetry<T> implements Future<T> {
         return request;
     }
 
-
     RemoteRequestCompletionBlock onCompletionInner = new RemoteRequestCompletionBlock() {
 
         private void completed(HttpResponse httpResponse, Object result, Throwable e) {
@@ -193,7 +192,13 @@ public class RemoteRequestRetry<T> implements Future<T> {
             requestResult = result;
             requestThrowable = e;
             completedSuccessfully.set(true);
+
             onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
+
+            // release unnecessary references to reduce memory usage as soon as called onComplete().
+            requestHttpResponse = null;
+            requestResult = null;
+            requestThrowable = null;
         }
 
         @Override
