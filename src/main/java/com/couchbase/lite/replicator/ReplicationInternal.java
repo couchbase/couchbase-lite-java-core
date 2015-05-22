@@ -11,6 +11,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.BlockingQueueListener;
+import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.CustomLinkedBlockingQueue;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
@@ -596,7 +597,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncMultipartDownloaderRequest(String method, String relativePath, Object body, Database db, RemoteRequestCompletionBlock onCompletion) {
+    public CustomFuture sendAsyncMultipartDownloaderRequest(String method, String relativePath, Object body, Database db, RemoteRequestCompletionBlock onCompletion) {
         try {
 
             String urlStr = buildRelativeURLString(relativePath);
@@ -617,7 +618,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             request.setAuthenticator(getAuthenticator());
 
-            Future future = request.submit();
+            CustomFuture future = request.submit();
             return future;
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);

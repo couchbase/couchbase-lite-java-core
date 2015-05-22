@@ -11,6 +11,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
+import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.SequenceMap;
@@ -609,7 +610,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         //create a final version of this variable for the log statement inside
         //FIXME find a way to avoid this
         final String pathInside = path.toString();
-        Future future = sendAsyncMultipartDownloaderRequest("GET", pathInside, null, db, new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncMultipartDownloaderRequest("GET", pathInside, null, db, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
@@ -632,10 +633,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                 // Note that we've finished this task:
                 --httpConnectionCount;
+
                 // Start another task if there are still revisions waiting to be pulled:
                 pullRemoteRevisions();
             }
         });
+        future.setQueue(pendingFutures);
         pendingFutures.add(future);
     }
 
