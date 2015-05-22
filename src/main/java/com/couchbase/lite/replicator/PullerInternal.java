@@ -62,9 +62,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     private ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
     protected Boolean canBulkGet;  // Does the server support _bulk_get requests?
-    protected List<RevisionInternal> revsToPull;
-    protected List<RevisionInternal> bulkRevsToPull;
-    protected List<RevisionInternal> deletedRevsToPull;
+    protected List<RevisionInternal> revsToPull        = Collections.synchronizedList(new ArrayList<RevisionInternal>(100));
+    protected List<RevisionInternal> bulkRevsToPull    = Collections.synchronizedList(new ArrayList<RevisionInternal>(100));
+    protected List<RevisionInternal> deletedRevsToPull = Collections.synchronizedList(new ArrayList<RevisionInternal>(100));
     protected int httpConnectionCount;
     protected Batcher<RevisionInternal> downloadsToInsert;
 
@@ -198,12 +198,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
             //TODO: add support for rev isConflicted
             if (canBulkGet || (rev.getGeneration() == 1 && !rev.isDeleted())) { // &&!rev.isConflicted)
-
-                //optimistically pull 1st-gen revs in bulk
-                if (bulkRevsToPull == null)
-                    // bulkRevsToPull could be accessed from multiple threads
-                    bulkRevsToPull = Collections.synchronizedList(new ArrayList<RevisionInternal>(100));
-
                 bulkRevsToPull.add(rev);
             }
             else {
@@ -228,34 +222,31 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         List<RevisionInternal> workToStartNow = new ArrayList<RevisionInternal>();
         List<RevisionInternal> bulkWorkToStartNow = new ArrayList<RevisionInternal>();
         while (httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS) {
-            int nBulk = 0;
-            if (bulkRevsToPull != null) {
-                nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
-            }
+            int nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
+
             if (nBulk == 1) {
                 // Rather than pulling a single revision in 'bulk', just pull it normally:
-                queueRemoteRevision(bulkRevsToPull.get(0));
-                bulkRevsToPull.remove(0);
+                queueRemoteRevision(bulkRevsToPull.remove(0));
                 nBulk = 0;
             }
+
             if (nBulk > 0) {
                 // Prefer to pull bulk revisions:
                 // Note: ArrayList.addAll(Collection) iterates parameter collection
                 //       https://github.com/couchbase/couchbase-lite-java-core/issues/361
                 synchronized (bulkRevsToPull) {
                     bulkWorkToStartNow.addAll(bulkRevsToPull.subList(0, nBulk));
+                    bulkRevsToPull.subList(0, nBulk).clear();
                 }
-                bulkRevsToPull.subList(0, nBulk).clear();
             } else {
                 // Prefer to pull an existing revision over a deleted one:
-                List<RevisionInternal> queue = revsToPull;
-                if (queue == null || queue.size() == 0) {
-                    queue = deletedRevsToPull;
-                    if (queue == null || queue.size() == 0)
-                        break;  // both queues are empty
+                if (revsToPull.size() == 0 && deletedRevsToPull.size() == 0) {
+                    break;  // both queues are empty
+                } else if (revsToPull.size() > 0) {
+                    workToStartNow.add(revsToPull.remove(0));
+                } else if (deletedRevsToPull.size() > 0) {
+                    workToStartNow.add(deletedRevsToPull.remove(0));
                 }
-                workToStartNow.add(queue.get(0));
-                queue.remove(0);
             }
         }
 
@@ -662,14 +653,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @InterfaceAudience.Private
     protected void queueRemoteRevision(RevisionInternal rev) {
         if (rev.isDeleted()) {
-            if (deletedRevsToPull == null) {
-                deletedRevsToPull = new ArrayList<RevisionInternal>(100);
-            }
-
             deletedRevsToPull.add(rev);
         } else {
-            if (revsToPull == null)
-                revsToPull = new ArrayList<RevisionInternal>(100);
             revsToPull.add(rev);
         }
     }
@@ -1026,6 +1011,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     protected void pauseOrResume(){
         int pending = batcher.count() + pendingSequences.count();
+        //Log.e(Log.TAG_SYNC, "[pauseOrResume()] batcher.count()="+batcher.count() + ", pendingSequences.count()="+pendingSequences.count()+", pendingFutures.size()=" +pendingFutures.size());
         changeTracker.setPaused(pending >= MAX_PENDING_DOCS);
     }
 }
