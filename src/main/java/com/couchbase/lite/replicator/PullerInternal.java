@@ -702,27 +702,23 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     @Override
     public void changeTrackerReceivedChange(final Map<String, Object> change) {
-        // this callback will be on the changetracker thread, but we need
-        // to do the work on the replicator thread.
-        synchronized (workExecutor) {
-            if (!workExecutor.isShutdown()) {
-                workExecutor.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
-                            processChangeTrackerChange(change);
-                        } catch (Exception e) {
-                            Log.e(Log.TAG_SYNC, "Error processChangeTrackerChange(): %s", e);
-                            e.printStackTrace();
-                            throw new RuntimeException(e);
-                        }
-                    }
-                });
-            }
+        try {
+            Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+            processChangeTrackerChange(change);
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Error processChangeTrackerChange(): %s", e);
+            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
+    /**
+     * in CBL_Puller.m
+     * - (void) changeTrackerReceivedSequence: (id)remoteSequenceID
+     *                                  docID: (NSString*)docID
+     *                                 revIDs: (NSArray*)revIDs
+     *                                deleted: (BOOL)deleted
+     */
     protected void processChangeTrackerChange(final Map<String, Object> change)
     {
         String lastSequence = change.get("seq").toString();
@@ -744,6 +740,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             }
             PulledRevision rev = new PulledRevision(docID, revID, deleted);
             rev.setRemoteSequenceID(lastSequence);
+
+            // TODO: Need to do conflict check?
+            // if (revIDs.count > 1)
+            //    rev.conflicted = true;
+
             Log.d(Log.TAG_SYNC, "%s: adding rev to inbox %s", this, rev);
 
             Log.v(Log.TAG_SYNC, "%s: changeTrackerReceivedChange() incrementing changesCount by 1", this);
