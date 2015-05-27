@@ -8,6 +8,7 @@ import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
 import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 
@@ -74,6 +75,7 @@ public class ChangeTracker implements Runnable {
     private boolean running = false;
     private HttpUriRequest request;
     protected ChangeTrackerBackoff backoff;
+    private long startTime = 0;
 
 
     public enum ChangeTrackerMode {
@@ -252,6 +254,8 @@ public class ChangeTracker implements Runnable {
 
         while (running) {
 
+            startTime = System.currentTimeMillis();
+
             URL url = getChangesFeedURL();
             if (usePOST) {
                 HttpPost postRequest = new HttpPost(url.toString());
@@ -340,26 +344,40 @@ public class ChangeTracker implements Runnable {
                             // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
                             boolean responseOK = false; // default value
                             if (entity.getContentLength() != 0) {
-                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
-                                Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
-                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
-                                responseOK = receivedPollResponse(fullBody);
+                                try {
+                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
+                                    Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
+                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
+                                    responseOK = receivedPollResponse(fullBody);
+                                } catch (JsonParseException jpe) {
+                                    Log.w(Log.TAG_CHANGE_TRACKER, "%s: json parsing error; %s", this, jpe.toString());
+                                }
                             }
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);
 
-                            if (mode == ChangeTrackerMode.LongPoll && responseOK) {
-
+                            if (responseOK) {
                                 // TODO: this logic is questionable, there's lots
                                 // TODO: of differences in the iOS changetracker code,
                                 client.changeTrackerCaughtUp();
-
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
                                 backoff.resetBackoff();
                                 continue;
                             } else {
-                                Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
-                                client.changeTrackerFinished(this);
-                                break;
+                                long elapsed = (System.currentTimeMillis() - startTime) / 1000;
+                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Longpoll connection closed (by proxy?) after %.1f sec", this, elapsed);
+                                if (elapsed >= 30) {
+                                    // Looks like the connection got closed by a proxy (like AWS' load balancer) while the
+                                    // server was waiting for a change to send, due to lack of activity.
+                                    // Lower the heartbeat time to work around this, and reconnect:
+                                    this.heartBeatSeconds = Math.min(this.heartBeatSeconds, (int) (elapsed * 0.75));
+                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
+                                    backoff.resetBackoff();
+                                    continue;
+                                } else {
+                                    Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
+                                    client.changeTrackerFinished(this);
+                                    break;
+                                }
                             }
                         } else {  // one-shot replications
 
@@ -379,7 +397,6 @@ public class ChangeTracker implements Runnable {
 
                             if (jp != null) {
                                 jp.close();
-                                jp = null;
                             }
 
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
@@ -403,14 +420,12 @@ public class ChangeTracker implements Runnable {
                             }
                         } catch (IOException e) {
                         }
-                        inputStream = null;
                         if (entity != null) {
                             try {
                                 entity.consumeContent();
                             } catch (IOException e) {
                             }
                         }
-                        entity = null;
                     }
                 }
             } catch (Exception e) {
