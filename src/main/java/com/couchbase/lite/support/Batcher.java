@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -107,28 +108,25 @@ public class Batcher<T> {
     }
 
     public void waitForPendingFutures() {
-
         Log.d(Log.TAG_BATCHER, "%s: waitForPendingFutures", this);
-
         try {
-
             while (!pendingFutures.isEmpty()) {
                 Future future = pendingFutures.take();
                 try {
                     Log.d(Log.TAG_BATCHER, "calling future.get() on %s", future);
                     future.get();
                     Log.d(Log.TAG_BATCHER, "done calling future.get() on %s", future);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                } catch (CancellationException e) {
+                    Log.i(Log.TAG_BATCHER, "Task was canceled: " + e.getMessage());
                 } catch (ExecutionException e) {
-                    e.printStackTrace();
+                    Log.e(Log.TAG_BATCHER, "ERROR: Task aborted: " + e.getMessage());
+                } catch (InterruptedException e) {
+                    Log.w(Log.TAG_BATCHER, e.getMessage());
                 }
             }
-
         } catch (Exception e) {
             Log.e(Log.TAG_BATCHER, "Exception waiting for pending futures: %s", e);
         }
-
         Log.d(Log.TAG_BATCHER, "%s: /waitForPendingFutures", this);
     }
 
