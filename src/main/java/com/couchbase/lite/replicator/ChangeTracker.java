@@ -609,8 +609,10 @@ public class ChangeTracker implements Runnable {
     public void setPaused(boolean paused) {
         Log.v(Log.TAG, "setPaused: " + paused);
         synchronized (pausedObj) {
-            this.paused = paused;
-            pausedObj.notifyAll();
+            if(this.paused != paused) {
+                this.paused = paused;
+                pausedObj.notifyAll();
+            }
         }
     }
 

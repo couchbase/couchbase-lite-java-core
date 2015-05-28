@@ -12,6 +12,7 @@ import org.apache.http.client.methods.HttpUriRequest;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -31,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * in between the retries.
  *
  */
-public class RemoteRequestRetry<T> implements Future<T> {
+public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
     public static int MAX_RETRIES = 3;  // total number of attempts = 4 (1 initial + MAX_RETRIES)
     public static int RETRY_DELAY_MS = 4 * 1000; // 4 sec
@@ -64,8 +65,17 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
     private RemoteRequestType requestType;
 
+
     // for Retry task
     ScheduledFuture retryFuture = null;
+
+    private Queue queue = null;
+
+    @Override
+    public void setQueue(Queue queue) {
+        this.queue = queue;
+    }
+
 
     /**
      * The kind of RemoteRequest that will be created on each retry attempt
@@ -105,14 +115,14 @@ public class RemoteRequestRetry<T> implements Future<T> {
 
     }
 
-    public Future submit() {
+    public CustomFuture submit() {
         return submit(false);
     }
 
     /**
      * @param gzip true - send gzipped request
      */
-    public Future submit(boolean gzip) {
+    public CustomFuture submit(boolean gzip) {
 
         RemoteRequest request = generateRemoteRequest();
 
@@ -185,6 +195,12 @@ public class RemoteRequestRetry<T> implements Future<T> {
         return request;
     }
 
+    void removeFromQueue() {
+        if (queue != null) {
+            queue.remove(this);
+            setQueue(null);
+        }
+    }
 
     RemoteRequestCompletionBlock onCompletionInner = new RemoteRequestCompletionBlock() {
 
@@ -193,7 +209,15 @@ public class RemoteRequestRetry<T> implements Future<T> {
             requestResult = result;
             requestThrowable = e;
             completedSuccessfully.set(true);
+
             onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
+            
+            // release unnecessary references to reduce memory usage as soon as called onComplete().
+            requestHttpResponse = null;
+            requestResult = null;
+            requestThrowable = null;
+
+            removeFromQueue();
         }
 
         @Override
