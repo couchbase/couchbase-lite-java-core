@@ -364,7 +364,7 @@ public class ChangeTracker implements Runnable {
                                 continue;
                             } else {
                                 long elapsed = (System.currentTimeMillis() - startTime) / 1000;
-                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Longpoll connection closed (by proxy?) after %.1f sec", this, elapsed);
+                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Longpoll connection closed (by proxy?) after %d sec", this, elapsed);
                                 if (elapsed >= 30) {
                                     // Looks like the connection got closed by a proxy (like AWS' load balancer) while the
                                     // server was waiting for a change to send, due to lack of activity.
