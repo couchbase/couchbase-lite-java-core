@@ -693,7 +693,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             processChangeTrackerChange(change);
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Error processChangeTrackerChange(): %s", e);
-            e.printStackTrace();
             throw new RuntimeException(e);
         }
     }
@@ -1009,7 +1008,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     protected void pauseOrResume(){
         int pending = batcher.count() + pendingSequences.count();
-        //Log.e(Log.TAG_SYNC, "[pauseOrResume()] batcher.count()="+batcher.count() + ", pendingSequences.count()="+pendingSequences.count()+", pendingFutures.size()=" +pendingFutures.size());
         changeTracker.setPaused(pending >= MAX_PENDING_DOCS);
     }
 }
