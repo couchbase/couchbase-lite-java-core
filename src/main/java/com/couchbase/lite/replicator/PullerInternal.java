@@ -221,37 +221,35 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         //find the work to be done in a synchronized block
         List<RevisionInternal> workToStartNow = new ArrayList<RevisionInternal>();
         List<RevisionInternal> bulkWorkToStartNow = new ArrayList<RevisionInternal>();
-        while (httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS) {
-            int nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
 
-            if (nBulk == 1) {
-                // Rather than pulling a single revision in 'bulk', just pull it normally:
-                queueRemoteRevision(bulkRevsToPull.remove(0));
-                nBulk = 0;
-            }
+        synchronized (bulkRevsToPull) {
+            while (httpConnectionCount + workToStartNow.size() < MAX_OPEN_HTTP_CONNECTIONS) {
+                int nBulk = (bulkRevsToPull.size() < MAX_REVS_TO_GET_IN_BULK) ? bulkRevsToPull.size() : MAX_REVS_TO_GET_IN_BULK;
 
-            if (nBulk > 0) {
-                // Prefer to pull bulk revisions:
-                // Note: ArrayList.addAll(Collection) iterates parameter collection
-                //       https://github.com/couchbase/couchbase-lite-java-core/issues/361
-                synchronized (bulkRevsToPull) {
+                if (nBulk == 1) {
+                    // Rather than pulling a single revision in 'bulk', just pull it normally:
+                    queueRemoteRevision(bulkRevsToPull.remove(0));
+                    nBulk = 0;
+                }
+
+                if (nBulk > 0) {
                     bulkWorkToStartNow.addAll(bulkRevsToPull.subList(0, nBulk));
                     bulkRevsToPull.subList(0, nBulk).clear();
-                }
-            } else {
-                // Prefer to pull an existing revision over a deleted one:
-                if (revsToPull.size() == 0 && deletedRevsToPull.size() == 0) {
-                    break;  // both queues are empty
-                } else if (revsToPull.size() > 0) {
-                    workToStartNow.add(revsToPull.remove(0));
-                } else if (deletedRevsToPull.size() > 0) {
-                    workToStartNow.add(deletedRevsToPull.remove(0));
+                } else {
+                    // Prefer to pull an existing revision over a deleted one:
+                    if (revsToPull.size() == 0 && deletedRevsToPull.size() == 0) {
+                        break;  // both queues are empty
+                    } else if (revsToPull.size() > 0) {
+                        workToStartNow.add(revsToPull.remove(0));
+                    } else if (deletedRevsToPull.size() > 0) {
+                        workToStartNow.add(deletedRevsToPull.remove(0));
+                    }
                 }
             }
         }
 
         //actually run it outside the synchronized block
-        if(bulkWorkToStartNow.size() > 0) {
+        if (bulkWorkToStartNow.size() > 0) {
             pullBulkRevisions(bulkWorkToStartNow);
         }
 
