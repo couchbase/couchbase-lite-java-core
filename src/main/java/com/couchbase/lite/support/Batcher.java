@@ -80,30 +80,32 @@ public class Batcher<T> {
      */
     public void queueObjects(List<T> objects) {
 
-        Log.v(Log.TAG_BATCHER, "%s: queueObjects called with %d objects. Thread: %s", this, objects.size(), Thread.currentThread());
-        if (objects.size() == 0) {
-            return;
-        }
-
-        Log.v(Log.TAG_BATCHER, "%s: inbox size before adding objects: %d", this, inbox.size());
-
-        inbox.addAll(objects);
-
-        if (inbox.size() >= capacity) {
-            Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(0)", this);
-            if (!isCurrentlyProcessing()) {
-                // we only want to unschedule and re-schedule immediately if we
-                // aren't currently processing, otherwise we'll end up in a situation where
-                // the things currently processed get interrupted and re-scheduled,
-                // and nothing ever gets done.  at the end of the processNow() method,
-                // it will schedule tasks if more are still pending.
-                unscheduleAllPending();
-                scheduleWithDelay(0);
+        synchronized (inbox) {
+            Log.v(Log.TAG_BATCHER, "%s: queueObjects called with %d objects. Thread: %s", this, objects.size(), Thread.currentThread());
+            if (objects.size() == 0) {
+                return;
             }
-        } else {
-            int suggestedDelay = delayToUse();
-            Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(%d)", this, suggestedDelay);
-            scheduleWithDelay(suggestedDelay);
+
+            Log.v(Log.TAG_BATCHER, "%s: inbox size before adding objects: %d", this, inbox.size());
+
+            inbox.addAll(objects);
+
+            if (inbox.size() >= capacity) {
+                Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(0)", this);
+                if (!isCurrentlyProcessing()) {
+                    // we only want to unschedule and re-schedule immediately if we
+                    // aren't currently processing, otherwise we'll end up in a situation where
+                    // the things currently processed get interrupted and re-scheduled,
+                    // and nothing ever gets done.  at the end of the processNow() method,
+                    // it will schedule tasks if more are still pending.
+                    unscheduleAllPending();
+                    scheduleWithDelay(0);
+                }
+            } else {
+                int suggestedDelay = delayToUse();
+                Log.v(Log.TAG_BATCHER, "%s: calling scheduleWithDelay(%d)", this, suggestedDelay);
+                scheduleWithDelay(suggestedDelay);
+            }
         }
     }
 
@@ -146,10 +148,7 @@ public class Batcher<T> {
     }
 
     public int count() {
-        synchronized(this) {
-            if(inbox == null) {
-                return 0;
-            }
+        synchronized (inbox) {
             return inbox.size();
         }
     }
@@ -158,65 +157,65 @@ public class Batcher<T> {
      * this is mainly for debugging
      */
     public int sizeOfPendingFutures() {
-        synchronized(this) {
-            if(pendingFutures == null) {
-                return 0;
-            }
+        synchronized (pendingFutures) {
             return pendingFutures.size();
         }
     }
 
     private void processNow() {
-        Log.v(Log.TAG_BATCHER, this + ": processNow() called");
 
-        List<T> toProcess = new ArrayList<T>();
+        synchronized (inbox) {
+            Log.v(Log.TAG_BATCHER, this + ": processNow() called");
 
-        if (inbox == null || inbox.size() == 0) {
-            Log.v(Log.TAG_BATCHER, this + ": processNow() called, but inbox is empty");
-            return;
-        } else if (inbox.size() <= capacity) {
-            Log.v(Log.TAG_BATCHER, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
-            while (inbox.size() > 0) {
-                try {
-                    T t = inbox.take();
-                    toProcess.add(t);
-                } catch (InterruptedException e) {
-                    Log.w(Log.TAG_BATCHER, "%s: processNow(): %s", this, e.getMessage());
+            List<T> toProcess = new ArrayList<T>();
+
+            if (inbox.size() == 0) {
+                Log.v(Log.TAG_BATCHER, this + ": processNow() called, but inbox is empty");
+                return;
+            } else if (inbox.size() <= capacity) {
+                Log.v(Log.TAG_BATCHER, "%s: inbox.size() <= capacity, adding %d items from inbox -> toProcess", this, inbox.size());
+                while (inbox.size() > 0) {
+                    try {
+                        T t = inbox.take();
+                        toProcess.add(t);
+                    } catch (InterruptedException e) {
+                        Log.w(Log.TAG_BATCHER, "%s: processNow(): %s", this, e.getMessage());
+                    }
                 }
-            }
-        } else {
-            Log.v(Log.TAG_BATCHER, "%s: processNow() called, inbox size: %d", this, inbox.size());
-            int i = 0;
-            while (inbox.size() > 0 && i < capacity) {
-                try {
-                    T t = inbox.take();
-                    toProcess.add(t);
-                } catch (InterruptedException e) {
-                    Log.w(Log.TAG_BATCHER, "%s: processNow(): %s", this, e.getMessage());
+            } else {
+                Log.v(Log.TAG_BATCHER, "%s: processNow() called, inbox size: %d", this, inbox.size());
+                int i = 0;
+                while (inbox.size() > 0 && i < capacity) {
+                    try {
+                        T t = inbox.take();
+                        toProcess.add(t);
+                    } catch (InterruptedException e) {
+                        Log.w(Log.TAG_BATCHER, "%s: processNow(): %s", this, e.getMessage());
+                    }
+                    i += 1;
                 }
-                i += 1;
+
+                Log.v(Log.TAG_BATCHER, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
             }
 
-            Log.v(Log.TAG_BATCHER, "%s: inbox.size() > capacity, moving %d items from inbox -> toProcess array", this, toProcess.size());
-        }
+            if (toProcess != null && toProcess.size() > 0) {
+                Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items ", this, processor, toProcess.size());
+                processor.process(toProcess);
+            } else {
+                Log.v(Log.TAG_BATCHER, "%s: nothing to process", this);
+            }
+            lastProcessedTime = System.currentTimeMillis();
 
-        if (toProcess != null && toProcess.size() > 0) {
-            Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items ", this, processor, toProcess.size());
-            processor.process(toProcess);
-        } else {
-            Log.v(Log.TAG_BATCHER, "%s: nothing to process", this);
-        }
-        lastProcessedTime = System.currentTimeMillis();
-
-        // in case we ignored any schedule requests while processing, if
-        // we have more items in inbox, lets schedule another processing attempt
-        if (inbox.size() > 0) {
-            Log.v(Log.TAG_BATCHER, "%s: finished processing a batch, but inbox size > 0: %d", this, inbox.size());
-            //int delayToUse = delayToUse();
-            int delayToUse = 0;
-            Log.v(Log.TAG_BATCHER, "%s: going to process with delay: %d", this, delayToUse);
-            ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
-            pendingFutures.add(pendingFuture);
+            // in case we ignored any schedule requests while processing, if
+            // we have more items in inbox, lets schedule another processing attempt
+            if (inbox.size() > 0) {
+                Log.v(Log.TAG_BATCHER, "%s: finished processing a batch, but inbox size > 0: %d", this, inbox.size());
+                //int delayToUse = delayToUse();
+                int delayToUse = 0;
+                Log.v(Log.TAG_BATCHER, "%s: going to process with delay: %d", this, delayToUse);
+                ScheduledFuture pendingFuture = workExecutor.schedule(processNowRunnable, delayToUse, TimeUnit.MILLISECONDS);
+                pendingFutures.add(pendingFuture);
+            }
         }
     }
 

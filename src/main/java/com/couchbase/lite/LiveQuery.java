@@ -128,6 +128,9 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
 
     /**
      * Blocks until the intial async query finishes. After this call either .rows or .error will be non-nil.
+     *
+     * TODO: It seems that implementation of waitForRows() is not correct. Should fix this!!!
+     *       https://github.com/couchbase/couchbase-lite-java-core/issues/647
      */
     @InterfaceAudience.Public
     public void waitForRows() throws CouchbaseLiteException {
@@ -264,6 +267,8 @@ public final class LiveQuery extends Query implements Database.ChangeListener {
                         setRows(rowsParam);
                         for (ChangeListener observer : observers) {
                             Log.d(Log.TAG_QUERY, "%s: update() calling back observer with rows", LiveQuery.this);
+                            // TODO: LiveQuery.ChangeListener should not be fired for non-match?
+                            // https://github.com/couchbase/couchbase-lite-java-core/issues/648
                             observer.changed(new ChangeEvent(LiveQuery.this, rows));
                         }
                     }
