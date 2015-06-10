@@ -12,6 +12,9 @@ import java.util.Map;
 @InterfaceAudience.Private
 class PulledRevision extends RevisionInternal {
 
+    protected String remoteSequenceID = null;
+    protected boolean conflicted = false;
+
     public PulledRevision(Body body) {
         super(body);
     }
@@ -24,8 +27,6 @@ class PulledRevision extends RevisionInternal {
         super(properties);
     }
 
-    protected String remoteSequenceID;
-
     public String getRemoteSequenceID() {
         return remoteSequenceID;
     }
@@ -34,4 +35,11 @@ class PulledRevision extends RevisionInternal {
         this.remoteSequenceID = remoteSequenceID;
     }
 
+    public boolean isConflicted() {
+        return conflicted;
+    }
+
+    public void setConflicted(boolean conflicted) {
+        this.conflicted = conflicted;
+    }
 }
