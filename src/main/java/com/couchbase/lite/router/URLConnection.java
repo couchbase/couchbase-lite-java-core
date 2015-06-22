@@ -9,8 +9,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
 import java.net.HttpURLConnection;
 import java.net.ProtocolException;
 import java.net.URL;
@@ -47,12 +45,8 @@ public class URLConnection extends HttpURLConnection {
 
     public URLConnection(URL url) {
         super(url);
-        responseInputStream = new PipedInputStream();
-        try {
-            responseOutputStream = new PipedOutputStream((PipedInputStream)responseInputStream);
-        } catch (IOException e) {
-            Log.e(Log.TAG_ROUTER, "Exception creating piped output stream", e);
-        }
+        responseOutputStream = new BufferOutputStream();
+        responseInputStream = new BufferInputStream((BufferOutputStream)responseOutputStream);
     }
 
     @Override
@@ -334,7 +328,7 @@ class Header {
     public Map<String, List<String>> getFieldMap() {
         Map<String, List<String>> result = new TreeMap<String, List<String>>(
                 String.CASE_INSENSITIVE_ORDER); // android-changed
-        for (Map.Entry<String, LinkedList<String>> next : keyTable
+        for (Entry<String, LinkedList<String>> next : keyTable
                 .entrySet()) {
             List<String> v = next.getValue();
             result.put(next.getKey(), Collections.unmodifiableList(v));
