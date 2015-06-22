@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedList;
 
-/**
- * Created by florian on 19.06.2015.
- */
 public class BufferInputStream extends InputStream {
 
     private BufferOutputStream os;

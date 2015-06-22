@@ -5,9 +5,6 @@ import java.io.OutputStream;
 import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Created by florian on 19.06.2015.
- */
 public class BufferOutputStream extends OutputStream {
 
     LinkedList<Byte> buffer = new LinkedList<Byte>();
