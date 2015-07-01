@@ -13,28 +13,37 @@ public class BufferInputStream extends InputStream {
     }
 
     public int read() throws IOException {
-        while(os.getBuffer().size() == 0) {
+        while(os.getBuffer().isEmpty()) {
             if(os.isClosed()) {
-                if(os.getBuffer().size() == 0) {
+                if(os.getBuffer().isEmpty()) {
                     return -1;
                 }
             }
         }
         synchronized (os.getBuffer()) {
-            return (int)os.getBuffer().removeFirst();
+            return (int)os.getBuffer().pop();
         }
     }
 
     public int read(byte[] bytes, int offset, int length) throws IOException {
-        int firstByte = read();
-        int count = 1;
-        if(firstByte < 0) {
-            return -1;
+        if(bytes == null) {
+            throw new NullPointerException();
         }
-        bytes[offset] = (byte)firstByte;
-        while(count <= length && os.getBuffer().size() > 0) {
-            bytes[count++] = (byte)read();
+        if(offset + length > bytes.length) {
+            throw new ArrayIndexOutOfBoundsException();
         }
-        return count;
+        if(offset < 0) {
+            throw new IllegalArgumentException("offset can not be negative");
+        }
+        while(os.getBuffer().isEmpty()) {
+            if(os.isClosed()) {
+                if(os.getBuffer().isEmpty()) {
+                    return -1;
+                }
+            }
+        }
+        synchronized (os.getBuffer()) {
+            return os.getBuffer().pop(bytes, offset, length);
+        }
     }
 }

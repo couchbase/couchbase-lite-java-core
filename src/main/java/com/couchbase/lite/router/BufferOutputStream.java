@@ -7,16 +7,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BufferOutputStream extends OutputStream {
 
-    LinkedList<Byte> buffer = new LinkedList<Byte>();
+    ByteBuffer buffer = new ByteBuffer();
     AtomicBoolean closed = new AtomicBoolean(false);
 
     public void write(int i) throws IOException {
-        synchronized (buffer) {
-            buffer.addLast((byte)i);
+        if(!isClosed()) {
+            synchronized (buffer) {
+                buffer.push((byte) i);
+            }
+        } else {
+            throw new IOException("Can't write to closed stream.");
         }
     }
 
-    LinkedList<Byte> getBuffer() {
+    ByteBuffer getBuffer() {
         return buffer;
     }
 
