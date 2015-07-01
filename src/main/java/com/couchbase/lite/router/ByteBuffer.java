@@ -78,7 +78,9 @@ public class ByteBuffer {
     private void resize() {
         byte[] temp = buffer;
         int count = 0;
-        buffer = new byte[temp.length + CHUNK_SIZE];
+        if(readIndex < (CHUNK_SIZE / 2)) {
+            buffer = new byte[temp.length + CHUNK_SIZE];
+        }
         for(count = 0; readIndex + count < writeIndex; count++) {
             buffer[count] = temp[readIndex + count];
         }
