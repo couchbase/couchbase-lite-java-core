@@ -68,7 +68,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * A CouchbaseLite database.
  */
-public final class Database {
+public class Database {
 
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
