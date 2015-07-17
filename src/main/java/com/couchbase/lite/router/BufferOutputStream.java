@@ -2,7 +2,6 @@ package com.couchbase.lite.router;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BufferOutputStream extends OutputStream {
@@ -14,6 +13,7 @@ public class BufferOutputStream extends OutputStream {
         if(!isClosed()) {
             synchronized (buffer) {
                 buffer.push((byte) i);
+                buffer.notify();
             }
         } else {
             throw new IOException("Can't write to closed stream.");
@@ -26,6 +26,9 @@ public class BufferOutputStream extends OutputStream {
 
     public void close() {
         closed.set(true);
+        synchronized(buffer) {
+            buffer.notify();
+        }
     }
 
     public boolean isClosed() {

@@ -2,7 +2,6 @@ package com.couchbase.lite.router;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.LinkedList;
 
 public class BufferInputStream extends InputStream {
 
@@ -13,15 +12,19 @@ public class BufferInputStream extends InputStream {
     }
 
     public int read() throws IOException {
-        while(os.getBuffer().isEmpty()) {
-            if(os.isClosed()) {
-                if(os.getBuffer().isEmpty()) {
+        ByteBuffer buffer = os.getBuffer();
+        synchronized (buffer) {
+            while(buffer.isEmpty()) {
+                if(os.isClosed()) {
                     return -1;
                 }
+                try {
+                    buffer.wait();
+                } catch (InterruptedException e) {
+                    // ignore
+                }
             }
-        }
-        synchronized (os.getBuffer()) {
-            return (int)os.getBuffer().pop();
+            return (int)buffer.pop();
         }
     }
 
@@ -35,14 +38,18 @@ public class BufferInputStream extends InputStream {
         if(offset < 0) {
             throw new IllegalArgumentException("offset can not be negative");
         }
-        while(os.getBuffer().isEmpty()) {
-            if(os.isClosed()) {
-                if(os.getBuffer().isEmpty()) {
+        ByteBuffer buffer = os.getBuffer();
+        synchronized (buffer) {
+            while(buffer.isEmpty()) {
+                if(os.isClosed()) {
                     return -1;
                 }
+                try {
+                    buffer.wait();
+                } catch (InterruptedException e) {
+                    // ignore
+                }
             }
-        }
-        synchronized (os.getBuffer()) {
             return os.getBuffer().pop(bytes, offset, length);
         }
     }
