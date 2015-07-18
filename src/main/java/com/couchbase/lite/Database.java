@@ -573,7 +573,7 @@ public class Database {
         if(view.getViewId() > 0) {
             return view;
         }
-        
+
         return null;
     }
 
@@ -3376,7 +3376,7 @@ public class Database {
      * @exclude
      */
     @InterfaceAudience.Private
-    void processAttachmentsForRevision(Map<String, AttachmentInternal> attachments, RevisionInternal rev, long parentSequence) throws CouchbaseLiteException {
+    void processAttachmentsForRevision(Map<String, AttachmentInternal> attachments, RevisionInternal rev, long parentSequence, RevisionList localRevsList) throws CouchbaseLiteException {
 
         assert(rev != null);
         long newSequence = rev.getSequence();
@@ -3411,9 +3411,19 @@ public class Database {
 
             }
             else {
+
+                long attachmentSequence = parentSequence;
+                // try to find the right sequence for the attachment
+                if(localRevsList != null) {
+                    int revpos = (Integer) ((Map) revAttachments.get(name)).get("revpos");
+                    RevisionInternal attachmentRev = localRevsList.revWithDocIdAndGeneration(rev.getDocId(), revpos);
+                    if (attachmentRev != null) {
+                        attachmentSequence = attachmentRev.getSequence();
+                    }
+                }
                 // It's just a stub, so copy the previous revision's attachment entry:
                 //? Should I enforce that the type and digest (if any) match?
-                copyAttachmentNamedFromSequenceToSequence(name, parentSequence, newSequence);
+                copyAttachmentNamedFromSequenceToSequence(name, attachmentSequence, newSequence);
             }
 
         }
@@ -4125,7 +4135,7 @@ public class Database {
 
             // Store any attachments:
             if(attachments != null) {
-                processAttachmentsForRevision(attachments, newRev, parentSequence);
+                processAttachmentsForRevision(attachments, newRev, parentSequence, null);
             }
 
 
@@ -4390,9 +4400,9 @@ public class Database {
             Map<String, RevisionInternal> localRevs = null;
             boolean isNewDoc = (historyCount == 1);
             long docNumericID = getOrInsertDocNumericID(docId);
-
+            RevisionList localRevsList = null;
             if (!isNewDoc) {
-                RevisionList localRevsList = getAllRevisionsOfDocumentID(docId, docNumericID, false);
+                localRevsList = getAllRevisionsOfDocumentID(docId, docNumericID, false);
                 if (localRevsList == null) {
                     throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
                 }
@@ -4473,7 +4483,7 @@ public class Database {
                         String prevRevID = (revHistory.size() >= 2) ? revHistory.get(1) : null;
                         Map<String, AttachmentInternal> attachments = getAttachmentsFromRevision(rev, prevRevID);
                         if (attachments != null) {
-                            processAttachmentsForRevision(attachments, rev, localParentSequence);
+                            processAttachmentsForRevision(attachments, rev, localParentSequence, localRevsList);
                             stubOutAttachmentsInRevision(attachments, rev);
                         }
                     }

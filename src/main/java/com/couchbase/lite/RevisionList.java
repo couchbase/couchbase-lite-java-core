@@ -55,6 +55,17 @@ public class RevisionList extends ArrayList<RevisionInternal> {
         return null;
     }
 
+    public RevisionInternal revWithDocIdAndGeneration(String docId, int generation) {
+        Iterator<RevisionInternal> iterator = iterator();
+        while(iterator.hasNext()) {
+            RevisionInternal rev = iterator.next();
+            if(docId.equals(rev.getDocId()) && rev.getGeneration() == generation) {
+                return rev;
+            }
+        }
+        return null;
+    }
+
     public List<String> getAllDocIds() {
         List<String> result = new ArrayList<String>();
 
