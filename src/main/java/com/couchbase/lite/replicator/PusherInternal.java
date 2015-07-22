@@ -587,11 +587,17 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
+                    } else if (attachment.containsKey("type")) {
+                        contentType = (String) attachment.get("type");
                     } else if (attachment.containsKey("content-type")) {
                         Log.w(Log.TAG_SYNC, "Found attachment that uses content-type" +
                                 " field name instead of content_type (see couchbase-lite-android" +
                                 " issue #80): %s", attachment);
                     }
+
+                    // contentType = null causes Exception from FileBody of apache.
+                    if(contentType == null)
+                        contentType = "application/octet-stream"; // default
 
                     // NOTE: Content-Encoding might not be necessary to set. Apache FileBody does not set Content-Encoding.
                     //       FileBody always return null for getContentEncoding(), and Content-Encoding header is not set in multipart
