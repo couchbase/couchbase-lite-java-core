@@ -223,8 +223,6 @@ final public class DatabaseUpgrade {
                     RevisionInternal rev = new RevisionInternal(docID, revID, deleted);
                     rev.setJSON(json);
 
-                    Log.e(TAG, "json => " + new String(json));
-
                     List<String> history = new ArrayList<String>();
                     history.add(revID);
                     while (parentSeq > 0) {
