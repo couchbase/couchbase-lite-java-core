@@ -1,7 +1,7 @@
 //
-//  ViewStorageDelegate.java
+//  ViewStoreDelegate.java
 //
-//  Created by Hideki Itakura on 6/10/15.
+//  Created by Hideki Itakura on 6/23/15.
 //  Copyright (c) 2015 Couchbase, Inc All rights reserved.
 //
 package com.couchbase.lite.store;
@@ -12,16 +12,16 @@ import com.couchbase.lite.Reducer;
 /**
  * Delegate of a CBL_ViewStorage instance. CBLView implements this.
  */
-public interface ViewStorageDelegate {
+public interface ViewStoreDelegate {
     /**
      * The current map block. Never nil.
      */
-    Mapper getMapBlock();
+    Mapper getMap();
 
     /**
      * The current reduce block, or nil if there is none.
      */
-    Reducer getReduceBlock();
+    Reducer getReduce();
 
     /**
      * The current map version string. If this changes, the storage's -setVersion: method will be

@@ -1,7 +1,5 @@
 package com.couchbase.lite.router;
 
-
-import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.util.Log;
 
@@ -23,7 +21,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.SortedMap;
 import java.util.TreeMap;
-
 
 public class URLConnection extends HttpURLConnection {
 
@@ -49,7 +46,7 @@ public class URLConnection extends HttpURLConnection {
         super(url);
         responseInputStream = new PipedInputStream();
         try {
-            responseOutputStream = new PipedOutputStream((PipedInputStream)responseInputStream);
+            responseOutputStream = new PipedOutputStream((PipedInputStream) responseInputStream);
         } catch (IOException e) {
             Log.e(Log.TAG_ROUTER, "Exception creating piped output stream", e);
         }
@@ -151,7 +148,7 @@ public class URLConnection extends HttpURLConnection {
     }
 
     Header getResHeader() {
-        if(resHeader == null) {
+        if (resHeader == null) {
             resHeader = new Header();
         }
         return resHeader;
@@ -176,11 +173,11 @@ public class URLConnection extends HttpURLConnection {
 
     String getBaseContentType() {
         String type = resHeader.get("Content-Type");
-        if(type == null) {
+        if (type == null) {
             return null;
         }
         int delimeterPos = type.indexOf(';');
-        if(delimeterPos > 0) {
+        if (delimeterPos > 0) {
             type = type.substring(delimeterPos);
         }
         return type;
@@ -257,7 +254,6 @@ public class URLConnection extends HttpURLConnection {
  * Heavily borrowed from Apache Harmony
  * https://github.com/apache/harmony/blob/trunk/classlib/modules/luni/src/main/java/org/apache/harmony/luni/internal/net/www/protocol/http/Header.java
  * Under Apache License Version 2.0
- *
  */
 class Header {
 
@@ -265,14 +261,14 @@ class Header {
     private SortedMap<String, LinkedList<String>> keyTable;
 
     public Header() {
-        super ();
-        this .props = new ArrayList<String>(20);
-        this .keyTable = new TreeMap<String, LinkedList<String>>(
+        super();
+        this.props = new ArrayList<String>(20);
+        this.keyTable = new TreeMap<String, LinkedList<String>>(
                 String.CASE_INSENSITIVE_ORDER);
     }
 
     public Header(Map<String, List<String>> map) {
-        this (); // initialize fields
+        this(); // initialize fields
         for (Entry<String, List<String>> next : map.entrySet()) {
             String key = next.getKey();
             List<String> value = next.getValue();
@@ -367,5 +363,4 @@ class Header {
     public int length() {
         return props.size() / 2;
     }
-
 }

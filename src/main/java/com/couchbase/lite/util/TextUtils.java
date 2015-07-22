@@ -16,22 +16,27 @@
 
 package com.couchbase.lite.util;
 
+import com.couchbase.lite.internal.InterfaceAudience;
+
 import org.apache.http.util.ByteArrayBuffer;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 // COPY: Partially copied from android.text.TextUtils
 public class TextUtils {
     /**
      * Returns a string containing the tokens joined by delimiters.
+     *
      * @param tokens an array objects to be joined. Strings will be formed from
-     *     the objects by calling object.toString().
+     *               the objects by calling object.toString().
      */
     public static String join(CharSequence delimiter, Iterable tokens) {
         StringBuilder sb = new StringBuilder();
         boolean firstTime = true;
-        for (Object token: tokens) {
+        for (Object token : tokens) {
             if (firstTime) {
                 firstTime = false;
             } else {
@@ -49,11 +54,50 @@ public class TextUtils {
         int offset = 0;
         int numRead = 0;
 
-        while ((numRead = is.read(bytes, offset, bytes.length-offset)) >= 0) {
+        while ((numRead = is.read(bytes, offset, bytes.length - offset)) >= 0) {
             byteArrayBuffer.append(bytes, 0, numRead);
             offset += numRead;
         }
         return byteArrayBuffer.toByteArray();
     }
 
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public static String joinQuoted(List<String> strings) {
+        if (strings.size() == 0) {
+            return "";
+        }
+
+        String result = "'";
+        boolean first = true;
+        for (String string : strings) {
+            if (first) {
+                first = false;
+            } else {
+                result = result + "','";
+            }
+            result = result + quote(string);
+        }
+        result = result + "'";
+
+        return result;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public static String joinQuotedObjects(List<Object> objects) {
+        List<String> strings = new ArrayList<String>();
+        for (Object object : objects) {
+            strings.add(object != null ? object.toString() : null);
+        }
+        return joinQuoted(strings);
+    }
+
+    public static String quote(String string) {
+        return string.replace("'", "''");
+    }
 }

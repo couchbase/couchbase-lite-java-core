@@ -1,14 +1,14 @@
 /**
  * Original iOS version by  Jens Alfke
  * Ported to Android by Marty Schoch
- *
+ * <p/>
  * Copyright (c) 2012 Couchbase, Inc. All rights reserved.
- *
+ * <p/>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
- *
+ * <p/>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p/>
  * Unless required by applicable law or agreed to in writing, software distributed under the
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions
@@ -17,25 +17,24 @@
 
 package com.couchbase.lite;
 
-import com.couchbase.lite.Database.TDContentOptions;
-
-import java.util.EnumSet;
 import java.util.List;
 
 /**
  * Standard query options for views.
+ *
  * @exclude
  */
 public class QueryOptions {
+
+    public static int QUERY_OPTIONS_DEFAULT_LIMIT = Integer.MAX_VALUE;
 
     private Object startKey = null;
     private Object endKey = null;
     private List<Object> keys = null;
     private int skip = 0;
-    private int limit = Integer.MAX_VALUE;
+    private int limit = QUERY_OPTIONS_DEFAULT_LIMIT;
     private int groupLevel = 0;
     private int prefixMatchLevel = 0;
-    private EnumSet<TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
     private boolean descending = false;
     private boolean includeDocs = false;
 
@@ -147,14 +146,6 @@ public class QueryOptions {
 
     public void setGroup(boolean group) {
         this.group = group;
-    }
-
-    public EnumSet<TDContentOptions> getContentOptions() {
-        return contentOptions;
-    }
-
-    public void setContentOptions(EnumSet<TDContentOptions> contentOptions) {
-        this.contentOptions = contentOptions;
     }
 
     public List<Object> getKeys() {

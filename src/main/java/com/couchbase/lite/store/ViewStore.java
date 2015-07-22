@@ -6,17 +6,16 @@
 //
 package com.couchbase.lite.store;
 
-import com.couchbase.lite.CouchbaseLiteException;
-import com.couchbase.lite.QueryOptions;
-import com.couchbase.lite.QueryRow;
+import com.couchbase.lite.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * Storage for a view. Instances are created by Storage implementations, and are owned by View instances.
+ * Storage for a view. Instances are created by Storage implementations,
+ * and are owned by View instances.
  */
-public interface ViewStorage {
-
+public interface ViewStore {
     /**
      * The name of the view.
      */
@@ -25,7 +24,9 @@ public interface ViewStorage {
     /**
      * The delegate (in practice, the owning View itself.)
      */
-    ViewStorageDelegate getDelegate();
+    ViewStoreDelegate getDelegate();
+
+    void setDelegate(ViewStoreDelegate delegate);
 
     /**
      * Closes the storage.
@@ -65,20 +66,32 @@ public interface ViewStorage {
 
     /**
      * Updates the indexes of one or more views in parallel.
-     * @param views views  An array of CBL_ViewStorage instances, always including the receiver.
+     *
+     * @param views An array of CBL_ViewStorage instances, always including the receiver.
      * @throws CouchbaseLiteException
      */
-    void updateIndexes(List<ViewStorage> views) throws CouchbaseLiteException;
+    //void updateIndexes(List<ViewStorage> views) throws CouchbaseLiteException;
+    void updateIndex() throws CouchbaseLiteException;
 
     /**
      * Queries the view without performing any reducing or grouping.
      */
-    List<QueryRow> regularQuery(QueryOptions options);
+    List<QueryRow> regularQuery(QueryOptions options) throws CouchbaseLiteException;
 
     /**
-     *  Queries the view, with reducing or grouping as per the options.
+     * Queries the view, with reducing or grouping as per the options.
      */
-    List<QueryRow> reducedQuery(QueryOptions options);
+    List<QueryRow> reducedQuery(QueryOptions options) throws CouchbaseLiteException;
 
-    QueryRowStorage storageForQueryRow(QueryRow row);
+    QueryRowStore storageForQueryRow(QueryRow row);
+
+    /**
+     * Methods for debugging
+     */
+    List<Map<String, Object>> dump();
+
+    // TODO: Not sure if this is required, review later
+    int getViewID();
+
+    void setCollation(View.TDViewCollation collation);
 }

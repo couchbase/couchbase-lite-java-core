@@ -4,7 +4,6 @@ package com.couchbase.lite;
  * A delegate that can be invoked to compile source code into a ReplicationFilter.
  */
 public interface ReplicationFilterCompiler {
-
     /**
      *
      * Compile Filter Function
@@ -14,5 +13,4 @@ public interface ReplicationFilterCompiler {
      * @return A compiled ReplicationFilter.
      */
     ReplicationFilter compileFilterFunction(String source, String language);
-
 }

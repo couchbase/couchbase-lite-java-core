@@ -6,11 +6,12 @@
 //
 package com.couchbase.lite.store;
 
-import com.couchbase.lite.Revision;
+import com.couchbase.lite.Status;
+import com.couchbase.lite.internal.RevisionInternal;
 
 public interface StorageValidation {
     /**
      * Document validation callback, passed to the insertion methods.
      */
-    void validate(Revision newRev, Revision prevRev, String parentRevID);
+    Status validate(RevisionInternal newRev, RevisionInternal prevRev, String parentRevID);
 }

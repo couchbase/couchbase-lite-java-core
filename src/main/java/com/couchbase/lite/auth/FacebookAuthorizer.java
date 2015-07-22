@@ -1,6 +1,5 @@
 package com.couchbase.lite.auth;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
@@ -67,7 +66,6 @@ public class FacebookAuthorizer extends Authorizer {
         return email;
     }
 
-
     public static String accessTokenForEmailAndSite(String email, URL site) {
         try {
             List<String> key = new ArrayList<String>();
@@ -80,5 +78,4 @@ public class FacebookAuthorizer extends Authorizer {
         }
         return null;
     }
-
 }

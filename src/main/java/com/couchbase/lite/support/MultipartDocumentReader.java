@@ -34,8 +34,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         return document;
     }
 
-    public void parseJsonBuffer()
-    {
+    public void parseJsonBuffer() {
         ByteArrayInputStream inputStream = null;
         try {
             inputStream = new ByteArrayInputStream(jsonBuffer.buffer(), 0, jsonBuffer.length());
@@ -45,48 +44,53 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 try {
                     gzipStream = new GZIPInputStream(inputStream);
                     document = Manager.getObjectMapper().readValue(gzipStream, Map.class);
-                }
-                finally {
-                    if (gzipStream != null) { try { gzipStream.close(); } catch (IOException e) { } }
+                } finally {
+                    if (gzipStream != null) {
+                        try {
+                            gzipStream.close();
+                        } catch (IOException e) {
+                        }
+                    }
                 }
             }
             //  plain json
             else {
                 document = Manager.getObjectMapper().readValue(inputStream, Map.class);
             }
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             throw new IllegalStateException("Failed to parse json buffer", e);
-        }
-        finally {
-            if (inputStream != null) { try { inputStream.close(); } catch (IOException e) { } }
+        } finally {
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (IOException e) {
+                }
+            }
             jsonBuffer.clear();
             jsonBuffer = null;
         }
     }
 
-    public void setHeaders(Map<String, String> headers){
+    public void setHeaders(Map<String, String> headers) {
         String contentType = headers.get("Content-Type");
-        if(contentType.startsWith("multipart/")){
+        if (contentType.startsWith("multipart/")) {
             // Multipart, so initialize the parser:
             multipartReader = new MultipartReader(contentType, this);
             attachmentsByName = new HashMap<String, BlobStoreWriter>();
             attachmentsByMd5Digest = new HashMap<String, BlobStoreWriter>();
-        }
-        else if (contentType == null ||
+        } else if (contentType == null ||
                 contentType.startsWith("application/json") ||
                 contentType.startsWith("text/plain")) {
 
             // No multipart, so no attachments. Body is pure JSON. (We allow text/plain because CouchDB
             // sends JSON responses using the wrong content-type.)
             startJSONBufferWithHeaders(headers);
-        }
-        else {
+        } else {
             throw new IllegalArgumentException("Unknown/invalid MIME type");
         }
     }
 
-    protected void startJSONBufferWithHeaders(Map<String, String> headers){
+    protected void startJSONBufferWithHeaders(Map<String, String> headers) {
         jsonBuffer = new ByteArrayBuffer(1024);
         jsonCompressed = Utils.isGzip(headers.get("Content-Encoding"));
     }
@@ -94,16 +98,15 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     public void appendData(byte[] data) {
         if (multipartReader != null) {
             multipartReader.appendData(data);
-        }
-        else {
+        } else {
             jsonBuffer.append(data, 0, data.length);
         }
     }
+
     public void appendData(byte[] data, int off, int len) {
         if (multipartReader != null) {
             multipartReader.appendData(data, off, len);
-        }
-        else {
+        } else {
             jsonBuffer.append(data, off, len);
         }
     }
@@ -115,8 +118,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             }
 
             registerAttachments();
-        }
-        else {
+        } else {
             parseJsonBuffer();
         }
     }
@@ -135,17 +137,17 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
             int length = 0;
             if (attachment.containsKey("length")) {
-                length = ((Integer)attachment.get("length")).intValue();
+                length = ((Integer) attachment.get("length")).intValue();
             }
             if (attachment.containsKey("encoded_length")) {
-                length = ((Integer)attachment.get("encoded_length")).intValue();
+                length = ((Integer) attachment.get("encoded_length")).intValue();
             }
 
             if (attachment.containsKey("follows") &&
-                    ((Boolean)attachment.get("follows")).booleanValue() == true) {
+                    ((Boolean) attachment.get("follows")).booleanValue() == true) {
 
                 // Check that each attachment in the JSON corresponds to an attachment MIME body.
-                // Look up the attachment by either its MIME Content-Disposition header or MD5 digest:
+                // Look up the attachment by either its MIME Content-Disposition header or MD5 getDigest:
                 String digest = (String) attachment.get("digest");
                 BlobStoreWriter writer = attachmentsByName.get(attachmentName);
                 if (writer != null) {
@@ -154,29 +156,26 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                     if (digest != null &&
                             !digest.equals(actualDigest) &&
                             !digest.equals(writer.sHA1DigestString())) {
-                        String errMsg = String.format("Attachment '%s' has incorrect MD5 digest (%s; should be either %s or %s)",
+                        String errMsg = String.format("Attachment '%s' has incorrect MD5 getDigest (%s; should be either %s or %s)",
                                 attachmentName, digest, actualDigest, writer.sHA1DigestString());
                         throw new IllegalStateException(errMsg);
                     }
                     attachment.put("digest", actualDigest);
 
-                }
-                else if (digest != null) {
+                } else if (digest != null) {
                     writer = attachmentsByMd5Digest.get(digest);
                     if (writer == null) {
                         String errMsg = String.format("Attachment '%s' does not appear in MIME body",
                                 attachmentName);
                         throw new IllegalStateException(errMsg);
                     }
-                }
-                else if (attachments.size() == 1 && attachmentsByMd5Digest.size() == 1) {
+                } else if (attachments.size() == 1 && attachmentsByMd5Digest.size() == 1) {
                     // Else there's only one attachment, so just assume it matches & use it:
                     writer = attachmentsByMd5Digest.values().iterator().next();
                     attachment.put("digest", writer.mD5DigestString());
-                }
-                else {
-                    // No digest metatata, no filename in MIME body; give up:
-                    String errMsg = String.format("Attachment '%s' has no digest metadata; cannot identify MIME body",
+                } else {
+                    // No getDigest metatata, no filename in MIME body; give up:
+                    String errMsg = String.format("Attachment '%s' has no getDigest metadata; cannot identify MIME body",
                             attachmentName);
                     throw new IllegalStateException(errMsg);
                 }
@@ -190,8 +189,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
                 ++numAttachmentsInDoc;
 
-            }
-            else if (attachment.containsKey("data") && length > 1000) {
+            } else if (attachment.containsKey("data") && length > 1000) {
                 Log.w(Log.TAG_REMOTE_REQUEST, "Attachment '%s' sent inline (len=%d).  Large attachments " +
                         "should be sent in MIME parts for reduced memory overhead.", attachmentName, length);
             }
@@ -213,8 +211,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
         if (document == null) {
             startJSONBufferWithHeaders(headers);
-        }
-        else {
+        } else {
             curAttachment = database.getAttachmentWriter();
 
             String contentDisposition = headers.get("Content-Disposition");
@@ -242,8 +239,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     public void appendToPart(final byte[] data, int off, int len) {
         if (jsonBuffer != null) {
             jsonBuffer.append(data, off, len);
-        }
-        else {
+        } else {
             try {
                 curAttachment.appendData(data, off, len);
             } catch (IOException e) {
@@ -256,8 +252,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     public void finishedPart() {
         if (jsonBuffer != null) {
             parseJsonBuffer();
-        }
-        else {
+        } else {
             try {
                 curAttachment.finish();
             } catch (IOException e) {

@@ -1,6 +1,5 @@
 package com.couchbase.lite.replicator;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
 
@@ -19,7 +18,7 @@ public class ChangeTrackerBackoff {
 
     public int getSleepMilliseconds() {
 
-        int result =  (int) (Math.pow(numAttempts, 2) - 1) / 2;
+        int result = (int) (Math.pow(numAttempts, 2) - 1) / 2;
 
         result *= 100;
 
@@ -30,7 +29,6 @@ public class ChangeTrackerBackoff {
         result = Math.abs(result);
 
         return result;
-
     }
 
     public void sleepAppropriateAmountOfTime() {
@@ -51,5 +49,4 @@ public class ChangeTrackerBackoff {
     public int getNumAttempts() {
         return numAttempts;
     }
-
 }
