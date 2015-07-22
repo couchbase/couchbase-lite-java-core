@@ -1896,7 +1896,7 @@ public final class Database implements StoreDelegate {
             RevisionInternal rev = loadRevisionBody(mrev);
             return rev.getAttachments();
         } catch (CouchbaseLiteException e) {
-            Log.w(Log.TAG_DATABASE, "Failed to get attachments for " + mrev, e);
+            Log.w(Log.TAG_DATABASE, "Failed to get attachments for " + mrev);
             return null;
         }
     }
