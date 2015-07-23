@@ -930,7 +930,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (batcher != null) {
                 // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
                 try {
-                    Thread.sleep(batcher.delayToUse());
+                    Thread.sleep(batcher.getDelay());
                 } catch (Exception e) {
                 }
                 Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
@@ -945,7 +945,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (downloadsToInsert != null) {
                 // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
                 try {
-                    Thread.sleep(downloadsToInsert.delayToUse());
+                    Thread.sleep(downloadsToInsert.getDelay());
                 } catch (Exception e) {
                 }
                 Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
