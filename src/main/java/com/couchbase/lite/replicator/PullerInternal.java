@@ -206,18 +206,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Log.v(Log.TAG_SYNC, "%s: fetching %s remote revisions...", this, inboxCount);
 
         // Dump the revs into the queue of revs to pull from the remote db:
-
         for (int i = 0; i < inbox.size(); i++) {
-
             PulledRevision rev = (PulledRevision) inbox.get(i);
-
-            //TODO: add support for rev isConflicted
-            if (canBulkGet || (rev.getGeneration() == 1 && !rev.isDeleted())) { // &&!rev.isConflicted)
+            if (canBulkGet || (rev.getGeneration() == 1 && !rev.isDeleted() && !rev.isConflicted())) {
                 bulkRevsToPull.add(rev);
             } else {
                 queueRemoteRevision(rev);
             }
-
             rev.setSequence(pendingSequences.addValue(rev.getRemoteSequenceID()));
         }
         pullRemoteRevisions();
@@ -753,12 +748,15 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (revID == null) {
                 continue;
             }
+
             PulledRevision rev = new PulledRevision(docID, revID, deleted);
+
+            // Remember its remote sequence ID (opaque), and make up a numeric sequence
+            // based on the order in which it appeared in the _changes feed:
             rev.setRemoteSequenceID(lastSequence);
 
-            // TODO: Need to do conflict check?
-            // if (revIDs.count > 1)
-            //    rev.conflicted = true;
+            if(changes.size() > 1)
+                rev.setConflicted(true);
 
             Log.d(Log.TAG_SYNC, "%s: adding rev to inbox %s", this, rev);
 
@@ -961,7 +959,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (batcher != null) {
                 // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
                 try {
-                    Thread.sleep(batcher.delayToUse());
+                    Thread.sleep(batcher.getDelay());
                 } catch (Exception e) {
                 }
                 Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
@@ -976,7 +974,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (downloadsToInsert != null) {
                 // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
                 try {
-                    Thread.sleep(downloadsToInsert.delayToUse());
+                    Thread.sleep(downloadsToInsert.getDelay());
                 } catch (Exception e) {
                 }
                 Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");

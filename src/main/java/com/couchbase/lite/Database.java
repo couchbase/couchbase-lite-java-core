@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * A CouchbaseLite Database.
  */
-public final class Database implements StoreDelegate {
+public class Database implements StoreDelegate {
 
     public static final String TAG = Log.TAG_DATABASE;
     // When this many changes pile up in _changesToNotify, start removing their bodies to save RAM
