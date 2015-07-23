@@ -8,11 +8,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- *
  * A Couchbase Lite Document Revision.
- *
+ * <p/>
  * Stores information about a revision -- its docID, revID, and whether it's deleted.
- *
+ * <p/>
  * It can also store the sequence number and document contents (they can be added after creation).
  */
 public abstract class Revision {
@@ -29,6 +28,7 @@ public abstract class Revision {
 
     /**
      * Constructor
+     *
      * @exclude
      */
     @InterfaceAudience.Private
@@ -38,6 +38,7 @@ public abstract class Revision {
 
     /**
      * Constructor
+     *
      * @exclude
      */
     @InterfaceAudience.Private
@@ -84,12 +85,13 @@ public abstract class Revision {
 
     /**
      * The contents of this revision of the document.
-     * Any keys in the dictionary that begin with "_", such as "_id" and "_rev", contain CouchbaseLite metadata.
+     * Any keys in the dictionary that begin with "_", such as "_id" and "_rev", contain
+     * CouchbaseLite metadata.
      *
      * @return contents of this revision of the document.
      */
     @InterfaceAudience.Public
-    public abstract Map<String,Object> getProperties();
+    public abstract Map<String, Object> getProperties();
 
 
     /**
@@ -99,11 +101,11 @@ public abstract class Revision {
      * @return user-defined properties, without the ones reserved by CouchDB.
      */
     @InterfaceAudience.Public
-    public Map<String,Object> getUserProperties() {
+    public Map<String, Object> getUserProperties() {
 
-        Map<String,Object> result = new HashMap<String, Object>();
+        Map<String, Object> result = new HashMap<String, Object>();
 
-        Map<String,Object> sourceMap = getProperties();
+        Map<String, Object> sourceMap = getProperties();
         for (String key : sourceMap.keySet()) {
             if (!key.startsWith("_")) {
                 result.put(key, sourceMap.get(key));
@@ -134,7 +136,7 @@ public abstract class Revision {
             return new ArrayList<Attachment>();
         }
         List<Attachment> result = new ArrayList<Attachment>(attachmentMetadata.size());
-        for (Map.Entry<String, Object> entry: attachmentMetadata.entrySet()) {
+        for (Map.Entry<String, Object> entry : attachmentMetadata.entrySet()) {
             Attachment attachment = toAttachment(entry.getKey(), entry.getValue());
             if (attachment != null) {
                 result.add(attachment);
@@ -227,9 +229,9 @@ public abstract class Revision {
     @InterfaceAudience.Public
     public boolean equals(Object o) {
         boolean result = false;
-        if(o instanceof SavedRevision) {
-            SavedRevision other = (SavedRevision)o;
-            if(document.getId().equals(other.getDocument().getId()) && getId().equals(other.getId())) {
+        if (o instanceof SavedRevision) {
+            SavedRevision other = (SavedRevision) o;
+            if (document.getId().equals(other.getDocument().getId()) && getId().equals(other.getId())) {
                 result = true;
             }
         }
@@ -259,7 +261,7 @@ public abstract class Revision {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ Map<String, Object> getAttachmentMetadata() {
+    protected Map<String, Object> getAttachmentMetadata() {
         return (Map<String, Object>) getProperty("_attachments");
     }
 
@@ -267,7 +269,7 @@ public abstract class Revision {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ void setParentRevisionID(String parentRevID) {
+    protected void setParentRevisionID(String parentRevID) {
         this.parentRevID = parentRevID;
     }
 
@@ -275,15 +277,16 @@ public abstract class Revision {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ abstract long getSequence();
+    protected abstract long getSequence();
 
     /**
      * Generation number: 1 for a new document, 2 for the 2nd revision, ...
      * Extracted from the numeric prefix of the revID.
+     *
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ int getGeneration() {
+    protected int getGeneration() {
         return generationFromRevID(getId());
     }
 
@@ -291,13 +294,18 @@ public abstract class Revision {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ static int generationFromRevID(String revID) {
+    public static int generationFromRevID(String revID) {
         int generation = 0;
-        int dashPos = revID.indexOf("-");
-        if(dashPos > 0) {
-            generation = Integer.parseInt(revID.substring(0, dashPos));
+        int length = Math.min(revID == null ? 0 : revID.length(), 9);
+        for (int i = 0; i < length; ++i) {
+            char c = revID.charAt(i);
+            if (Character.isDigit(c))
+                generation = 10 * generation + Character.getNumericValue(c);
+            else if (c == '-')
+                return generation;
+            else
+                break;
         }
-        return generation;
+        return 0;
     }
-
 }

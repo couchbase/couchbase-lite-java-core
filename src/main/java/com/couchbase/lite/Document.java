@@ -1,12 +1,11 @@
 package com.couchbase.lite;
 
-import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +48,19 @@ public class Document {
         this.documentId = documentId;
     }
 
+    @InterfaceAudience.Private
+    public static boolean isValidDocumentId(String id) {
+        // http://wiki.apache.org/couchdb/HTTP_Document_API#Documents
+        if (id == null || id.length() == 0) {
+            return false;
+        }
+        if (id.charAt(0) == '_') {
+            return (id.startsWith("_design/"));
+        }
+        return true;
+        // "_local/*" is not a valid document ID. Local docs have their own API and shouldn't get here.
+    }
+
     /**
      * Get the document's owning database.
      */
@@ -67,6 +79,7 @@ public class Document {
 
     /**
      * Is this document deleted? (That is, does its current revision have the '_deleted' property?)
+     *
      * @return boolean to indicate whether deleted or not
      */
     @InterfaceAudience.Public
@@ -84,7 +97,7 @@ public class Document {
     @InterfaceAudience.Public
     public String getCurrentRevisionId() {
         SavedRevision rev = getCurrentRevision();
-        if(rev == null){
+        if (rev == null) {
             return null;
         }
         return rev.getId();
@@ -95,9 +108,8 @@ public class Document {
      */
     @InterfaceAudience.Public
     public SavedRevision getCurrentRevision() {
-        if (currentRevision == null) {
-            currentRevision = getRevisionWithId(null);
-        }
+        if (currentRevision == null)
+            currentRevision = getRevision(null);
         return currentRevision;
     }
 
@@ -146,10 +158,10 @@ public class Document {
      * Any keys in the dictionary that begin with "_", such as "_id" and "_rev", contain CouchbaseLite metadata.
      *
      * @return contents of the current revision of the document.
-     *         null if currentRevision is null
+     * null if currentRevision is null
      */
     @InterfaceAudience.Public
-    public Map<String,Object> getProperties() {
+    public Map<String, Object> getProperties() {
         SavedRevision currentRevision = getCurrentRevision();
         return currentRevision == null ? null : currentRevision.getProperties();
     }
@@ -161,7 +173,7 @@ public class Document {
      * @return user-defined properties, without the ones reserved by CouchDB.
      */
     @InterfaceAudience.Public
-    public Map<String,Object> getUserProperties() {
+    public Map<String, Object> getUserProperties() {
         return getCurrentRevision().getUserProperties();
     }
 
@@ -197,20 +209,15 @@ public class Document {
     /**
      * The revision with the specified ID.
      *
-     *
-     * @param id the revision ID
+     * @param revID the revision ID
      * @return the SavedRevision object
      */
     @InterfaceAudience.Public
-    public SavedRevision getRevision(String id) {
-        if (currentRevision != null && id.equals(currentRevision.getId())) {
+    public SavedRevision getRevision(String revID) {
+        if (revID != null && currentRevision != null && revID.equals(currentRevision.getId()))
             return currentRevision;
-        }
-        EnumSet<Database.TDContentOptions> contentOptions = EnumSet.noneOf(Database.TDContentOptions.class);
-        RevisionInternal revisionInternal = database.getDocumentWithIDAndRev(getId(), id, contentOptions);
-        SavedRevision revision = null;
-        revision = getRevisionFromRev(revisionInternal);
-        return revision;
+        RevisionInternal revisionInternal = database.getDocument(getId(), revID, true);
+        return getRevisionFromRev(revisionInternal);
     }
 
     /**
@@ -231,7 +238,7 @@ public class Document {
      */
     @InterfaceAudience.Public
     public Object getProperty(String key) {
-        if (getCurrentRevision().getProperties().containsKey(key)){
+        if (getCurrentRevision().getProperties().containsKey(key)) {
             return getCurrentRevision().getProperties().get(key);
         }
         return null;
@@ -246,7 +253,7 @@ public class Document {
      * @return a new SavedRevision
      */
     @InterfaceAudience.Public
-    public SavedRevision putProperties(Map<String,Object> properties) throws CouchbaseLiteException {
+    public SavedRevision putProperties(Map<String, Object> properties) throws CouchbaseLiteException {
         String prevID = (String) properties.get("_rev");
         boolean allowConflict = false;
         return putProperties(properties, prevID, allowConflict);
@@ -315,7 +322,7 @@ public class Document {
          * @return True if the UnsavedRevision should be saved, otherwise false.
          */
         public boolean update(UnsavedRevision newRevision);
-        
+
     }
 
     /**
@@ -345,12 +352,13 @@ public class Document {
      * A delegate that can be used to listen for Document changes.
      */
     @InterfaceAudience.Public
-    public static interface ChangeListener {
-        public void changed(ChangeEvent event);
+    public interface ChangeListener {
+        void changed(ChangeEvent event);
     }
 
     /**
      * Get the document's abbreviated ID
+     *
      * @exclude
      */
     @InterfaceAudience.Private
@@ -368,16 +376,15 @@ public class Document {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ List<SavedRevision> getLeafRevisions(boolean includeDeleted) throws CouchbaseLiteException {
+    protected List<SavedRevision> getLeafRevisions(boolean includeDeleted) throws CouchbaseLiteException {
 
         List<SavedRevision> result = new ArrayList<SavedRevision>();
-        RevisionList revs = database.getAllRevisionsOfDocumentID(documentId, true);
+        RevisionList revs = database.getAllRevisions(documentId, true);
         for (RevisionInternal rev : revs) {
             // add it to result, unless we are not supposed to include deleted and it's deleted
             if (!includeDeleted && rev.isDeleted()) {
                 // don't add it
-            }
-            else {
+            } else {
                 result.add(getRevisionFromRev(rev));
             }
         }
@@ -388,7 +395,7 @@ public class Document {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ SavedRevision putProperties(Map<String, Object> properties, String prevID, boolean allowConflict) throws CouchbaseLiteException {
+    protected SavedRevision putProperties(Map<String, Object> properties, String prevID, boolean allowConflict) throws CouchbaseLiteException {
         String newId = null;
         if (properties != null && properties.containsKey("_id")) {
             newId = (String) properties.get("_id");
@@ -410,7 +417,7 @@ public class Document {
 
         boolean hasTrueDeletedProperty = false;
         if (properties != null) {
-            hasTrueDeletedProperty = properties.get("_deleted") != null && ((Boolean)properties.get("_deleted")).booleanValue();
+            hasTrueDeletedProperty = properties.get("_deleted") != null && ((Boolean) properties.get("_deleted")).booleanValue();
         }
         boolean deleted = (properties == null) || hasTrueDeletedProperty;
         RevisionInternal rev = new RevisionInternal(documentId, null, deleted);
@@ -422,46 +429,27 @@ public class Document {
             return null;
         }
         return new SavedRevision(this, newRev);
-
     }
 
     /**
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ SavedRevision getRevisionFromRev(RevisionInternal internalRevision) {
+    protected SavedRevision getRevisionFromRev(RevisionInternal internalRevision) {
         if (internalRevision == null) {
             return null;
-        }
-        else if (currentRevision != null && internalRevision.getRevId().equals(currentRevision.getId())) {
+        } else if (currentRevision != null && internalRevision.getRevID().equals(currentRevision.getId())) {
             return currentRevision;
-        }
-        else {
+        } else {
             return new SavedRevision(this, internalRevision);
         }
-
     }
 
     /**
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ SavedRevision getRevisionWithId(String revId) {
-        if (revId != null && currentRevision != null && revId.equals(currentRevision.getId())) {
-            return currentRevision;
-        }
-        return getRevisionFromRev(
-                database.getDocumentWithIDAndRev(getId(),
-                revId,
-                EnumSet.noneOf(Database.TDContentOptions.class))
-        );
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    /* package */ void loadCurrentRevisionFrom(QueryRow row) {
+    protected void loadCurrentRevisionFrom(QueryRow row) {
         if (row.getDocumentRevisionId() == null) {
             return;
         }
@@ -488,19 +476,20 @@ public class Document {
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ void revisionAdded(DocumentChange change, boolean notify) {
-
-        RevisionInternal rev = change.getWinningRevision();
-        if (rev == null) {
+    protected void revisionAdded(DocumentChange change, boolean notify) {
+        String revID = change.getWinningRevisionID();
+        if (revID == null) {
             return;  // current revision didn't change
         }
 
-        if (currentRevision != null && !rev.getRevId().equals(currentRevision.getId())) {
-            if (rev.isDeleted()) {
+        if (currentRevision != null && !revID.equals(currentRevision.getId())) {
+            RevisionInternal rev = change.getWinningRevisionIfKnown();
+            if (rev == null)
+                forgetCurrentRevision();
+            else if (rev.isDeleted())
                 currentRevision = null;
-            } else {
+            else
                 currentRevision = new SavedRevision(this, rev);
-            }
         }
 
         if (notify) {

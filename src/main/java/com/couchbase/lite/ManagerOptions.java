@@ -22,6 +22,8 @@ public class ManagerOptions {
      */
     private int executorThreadPoolSize = 0;
 
+    private String storeClassName = null;
+
     public ManagerOptions() {
     }
 
@@ -47,5 +49,13 @@ public class ManagerOptions {
 
     public void setExecutorThreadPoolSize(int executorThreadPoolSize) {
         this.executorThreadPoolSize = executorThreadPoolSize;
+    }
+
+    public String getStoreClassName() {
+        return storeClassName;
+    }
+
+    public void setStoreClassName(String storeClassName) {
+        this.storeClassName = storeClassName;
     }
 }

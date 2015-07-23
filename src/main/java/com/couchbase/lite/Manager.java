@@ -23,6 +23,7 @@ import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,36 +42,17 @@ import java.util.regex.Pattern;
  */
 public final class Manager {
 
-    /**
-     * @exclude
-     */
-    public static final String HTTP_ERROR_DOMAIN = "CBLHTTP";
+    protected static final String DATABASE_SUFFIX_OLD = ".touchdb"; // TouchDB
+    protected static final String kV1DBExtension = ".cblite"; // Couchbase Lite 1.0
+    protected static final String kDBExtension = ".cblite2";
+    protected static final String DEFAULT_STORE_CLASSNAME = "com.couchbase.lite.store.SQLiteStore";
 
-    /**
-     * @exclude
-     */
-    public static final String DATABASE_SUFFIX_OLD = ".touchdb";
-
-    /**
-     * @exclude
-     */
-    public static final String DATABASE_SUFFIX = ".cblite";
-
-    /**
-     * @exclude
-     */
     public static final ManagerOptions DEFAULT_OPTIONS = new ManagerOptions();
-
-    /**
-     * @exclude
-     */
     public static final String LEGAL_CHARACTERS = "[^a-z]{1,}[^a-z0-9_$()/+-]*$";
-
-    public static final String VERSION = Version.VERSION;
-
     public static final String USER_AGENT = "CouchbaseLite/" + Version.getVersionName();
 
     private static final ObjectMapper mapper = new ObjectMapper();
+
     private ManagerOptions options;
     private File directoryFile;
     private Map<String, Database> databases;
@@ -78,15 +60,16 @@ public final class Manager {
     private ScheduledExecutorService workExecutor;
     private HttpClientFactory defaultHttpClientFactory;
     private Context context;
+    private String storeClassName;
 
+    ///////////////////////////////////////////////////////////////////////////
+    // APIs
+    // https://github.com/couchbaselabs/couchbase-lite-api/blob/master/gen/md/Database.md
+    ///////////////////////////////////////////////////////////////////////////
 
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public static ObjectMapper getObjectMapper() {
-        return mapper;
-    }
+    ///////////////////////////////////////////////////////////////////////////
+    // Constructors
+    ///////////////////////////////////////////////////////////////////////////
 
     /**
      * Constructor
@@ -99,18 +82,6 @@ public final class Manager {
         final String detailMessage = "Parameterless constructor is not a valid API call on Android. " +
                 " Pure java version coming soon.";
         throw new UnsupportedOperationException(detailMessage);
-    }
-
-    /**
-     * Enable logging for a particular tag / loglevel combo
-     *
-     * @param tag      Used to identify the source of a log message.  It usually identifies
-     *                 the class or activity where the log call occurs.
-     * @param logLevel The loglevel to enable.  Anything matching this loglevel
-     *                 or having a more urgent loglevel will be emitted.  Eg, Log.VERBOSE.
-     */
-    public static void enableLogging(String tag, int logLevel) {
-        Log.enableLogging(tag, logLevel);
     }
 
     /**
@@ -128,6 +99,8 @@ public final class Manager {
         this.options = (options != null) ? options : DEFAULT_OPTIONS;
         this.databases = new HashMap<String, Database>();
         this.replications = new ArrayList<Replication>();
+        this.storeClassName = options.getStoreClassName() != null ?
+                options.getStoreClassName() : DEFAULT_STORE_CLASSNAME;
 
         if (!directoryFile.exists()) {
             directoryFile.mkdirs();
@@ -150,6 +123,16 @@ public final class Manager {
         });
     }
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Constants
+    ///////////////////////////////////////////////////////////////////////////
+
+    public static final String VERSION = Version.VERSION;
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Class Members - Properties
+    ///////////////////////////////////////////////////////////////////////////
+
     /**
      * Get shared instance
      *
@@ -161,6 +144,22 @@ public final class Manager {
         final String detailMessage = "getSharedInstance() is not a valid API call on Android. " +
                 " Pure java version coming soon";
         throw new UnsupportedOperationException(detailMessage);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Class Members - Methods
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Enable logging for a particular tag / loglevel combo
+     *
+     * @param tag      Used to identify the source of a log message.  It usually identifies
+     *                 the class or activity where the log call occurs.
+     * @param logLevel The loglevel to enable.  Anything matching this loglevel
+     *                 or having a more urgent loglevel will be emitted.  Eg, Log.VERBOSE.
+     */
+    public static void enableLogging(String tag, int logLevel) {
+        Log.enableLogging(tag, logLevel);
     }
 
     /**
@@ -177,13 +176,9 @@ public final class Manager {
         return databaseName.equals(Replication.REPLICATOR_DATABASE_NAME);
     }
 
-    /**
-     * The root directory of this manager (as specified at initialization time.)
-     */
-    @InterfaceAudience.Public
-    public File getDirectory() {
-        return directoryFile;
-    }
+    ///////////////////////////////////////////////////////////////////////////
+    // Instance Members - Properties
+    ///////////////////////////////////////////////////////////////////////////
 
     /**
      * An array of the names of all existing databases.
@@ -194,7 +189,7 @@ public final class Manager {
 
             @Override
             public boolean accept(File dir, String filename) {
-                if (filename.endsWith(Manager.DATABASE_SUFFIX)) {
+                if (filename.endsWith(Manager.kDBExtension)) {
                     return true;
                 }
                 return false;
@@ -202,13 +197,25 @@ public final class Manager {
         });
         List<String> result = new ArrayList<String>();
         for (String databaseFile : databaseFiles) {
-            String trimmed = databaseFile.substring(0, databaseFile.length() - Manager.DATABASE_SUFFIX.length());
+            String trimmed = databaseFile.substring(0, databaseFile.length() - Manager.kDBExtension.length());
             String replaced = trimmed.replace(':', '/');
             result.add(replaced);
         }
         Collections.sort(result);
         return Collections.unmodifiableList(result);
     }
+
+    /**
+     * The root directory of this manager (as specified at initialization time.)
+     */
+    @InterfaceAudience.Public
+    public File getDirectory() {
+        return directoryFile;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Instance Members - Methods
+    ///////////////////////////////////////////////////////////////////////////
 
     /**
      * Releases all resources used by the Manager instance and closes all its databases.
@@ -234,16 +241,16 @@ public final class Manager {
     /**
      * Returns the database with the given name, or creates it if it doesn't exist.
      * Multiple calls with the same name will return the same Database instance.
+     * <p/>
+     * in CBLManager.m
+     * - (CBLDatabase*) databaseNamed: (NSString*)name error: (NSError**)outError
      */
     @InterfaceAudience.Public
     public Database getDatabase(String name) throws CouchbaseLiteException {
-        boolean mustExist = false;
-        Database db = getDatabaseWithoutOpening(name, mustExist);
+        Database db = getDatabase(name, false);
         if (db != null) {
-            boolean opened = db.open();
-            if (!opened) {
-                return null;
-            }
+            if (!db.open())
+                db = null;
         }
         return db;
     }
@@ -251,13 +258,15 @@ public final class Manager {
     /**
      * Returns the database with the given name, or null if it doesn't exist.
      * Multiple calls with the same name will return the same Database instance.
+     * <p/>
+     * - (CBLDatabase*) existingDatabaseNamed: (NSString*)name error: (NSError**)outError
      */
     @InterfaceAudience.Public
     public Database getExistingDatabase(String name) throws CouchbaseLiteException {
-        boolean mustExist = true;
-        Database db = getDatabaseWithoutOpening(name, mustExist);
+        Database db = getDatabase(name, true);
         if (db != null) {
-            db.open();
+            if (!db.open())
+                db = null;
         }
         return db;
     }
@@ -278,35 +287,28 @@ public final class Manager {
      *                          will be honoured.
      */
     @InterfaceAudience.Public
-    public void replaceDatabase(String databaseName, InputStream databaseStream, Map<String, InputStream> attachmentStreams) throws CouchbaseLiteException {
-        replaceDatabase(databaseName, databaseStream, attachmentStreams == null ? null : attachmentStreams.entrySet().iterator());
+    public void replaceDatabase(String databaseName,
+                                InputStream databaseStream,
+                                Map<String, InputStream> attachmentStreams)
+            throws CouchbaseLiteException {
+        replaceDatabase(databaseName, databaseStream,
+                attachmentStreams == null ? null : attachmentStreams.entrySet().iterator());
     }
 
-    private void replaceDatabase(String databaseName, InputStream databaseStream, Iterator<Map.Entry<String, InputStream>> attachmentStreams) throws CouchbaseLiteException {
-        try {
-            //Database database = getDatabase(databaseName);
-            Database database = getDatabaseWithoutOpening(databaseName, false);
-            String dstAttachmentsPath = database.getAttachmentStorePath();
-            OutputStream destStream = new FileOutputStream(new File(database.getPath()));
-            StreamUtils.copyStream(databaseStream, destStream);
-            File attachmentsFile = new File(dstAttachmentsPath);
-            FileDirUtils.deleteRecursive(attachmentsFile);
-            if (!attachmentsFile.exists()) {
-                attachmentsFile.mkdirs();
-            }
-            if (attachmentStreams != null) {
-                StreamUtils.copyStreamsToFolder(attachmentStreams, attachmentsFile);
-            }
+    ///////////////////////////////////////////////////////////////////////////
+    // End of APIs
+    ///////////////////////////////////////////////////////////////////////////
 
-            database.open();
-            database.replaceUUIDs();
-        } catch (FileNotFoundException e) {
-            Log.e(Database.TAG, "", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
-        } catch (IOException e) {
-            Log.e(Database.TAG, "", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
-        }
+    ///////////////////////////////////////////////////////////////////////////
+    // Public but Not API
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public static ObjectMapper getObjectMapper() {
+        return mapper;
     }
 
     /**
@@ -321,56 +323,8 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    public void setDefaultHttpClientFactory(
-            HttpClientFactory defaultHttpClientFactory) {
+    public void setDefaultHttpClientFactory(HttpClientFactory defaultHttpClientFactory) {
         this.defaultHttpClientFactory = defaultHttpClientFactory;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    private static boolean containsOnlyLegalCharacters(String databaseName) {
-        Pattern p = Pattern.compile("^[abcdefghijklmnopqrstuvwxyz0123456789_$()+-/]+$");
-        Matcher matcher = p.matcher(databaseName);
-        return matcher.matches();
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    private void upgradeOldDatabaseFiles(File directory) {
-        File[] files = directory.listFiles(new FilenameFilter() {
-            @Override
-            public boolean accept(File file, String name) {
-                return name.endsWith(DATABASE_SUFFIX_OLD);
-            }
-        });
-
-        for (File file : files) {
-            String oldFilename = file.getName();
-            String newFilename = filenameWithNewExtension(oldFilename, DATABASE_SUFFIX_OLD, DATABASE_SUFFIX);
-            File newFile = new File(directory, newFilename);
-            if (newFile.exists()) {
-                Log.w(Database.TAG, "Cannot rename %s to %s, %s already exists", oldFilename, newFilename, newFilename);
-                continue;
-            }
-            boolean ok = file.renameTo(newFile);
-            if (!ok) {
-                String msg = String.format("Unable to rename %s to %s", oldFilename, newFilename);
-                throw new IllegalStateException(msg);
-            }
-        }
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    private String filenameWithNewExtension(String oldFilename, String oldExtension, String newExtension) {
-        String oldExtensionRegex = String.format("%s$", oldExtension);
-        return oldFilename.replaceAll(oldExtensionRegex, newExtension);
     }
 
     /**
@@ -400,105 +354,26 @@ public final class Manager {
     }
 
     /**
+     * Instantiates a database but doesn't open the file yet.
+     * in CBLManager.m
+     * - (CBLDatabase*) _databaseNamed: (NSString*)name
+     * mustExist: (BOOL)mustExist
+     * error: (NSError**)outError
+     *
      * @exclude
      */
     @InterfaceAudience.Private
-    Future runAsync(Runnable runnable) {
-        synchronized (workExecutor) {
-            if (!workExecutor.isShutdown()) {
-                return workExecutor.submit(runnable);
-            } else {
-                return null;
-            }
-        }
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    private String pathForName(String name) {
-        if ((name == null) || (name.length() == 0) || Pattern.matches(LEGAL_CHARACTERS, name)) {
-            return null;
-        }
-        // NOTE: CouchDB allows forward slash as part of database name.
-        //       However, ':' is illegal character on Windows platform.
-        //       For Windows, substitute with period '.'
-        if(isWindows()) {
-            name = name.replace('/', '.');
-        }else{
-            name = name.replace('/', ':');
-        }
-        String result = directoryFile.getPath() + File.separator + name + Manager.DATABASE_SUFFIX;
-        return result;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    private Map<String, Object> parseSourceOrTarget(Map<String, Object> properties, String key) {
-        Map<String, Object> result = new HashMap<String, Object>();
-
-        Object value = properties.get(key);
-
-        if (value instanceof String) {
-            result.put("url", (String) value);
-        } else if (value instanceof Map) {
-            result = (Map<String, Object>) value;
-        }
-        return result;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    Replication replicationWithDatabase(Database db, URL remote, boolean push, boolean create, boolean start) {
-        for (Replication replicator : replications) {
-            if (replicator.getLocalDatabase() == db && replicator.getRemoteUrl().equals(remote) && replicator.isPull() == !push) {
-                return replicator;
-            }
-        }
-        if (!create) {
-            return null;
-        }
-
-        Replication replicator = null;
-        final boolean continuous = false;
-
-        if (push) {
-            replicator = new Replication(db, remote, Replication.Direction.PUSH, null, getWorkExecutor());
-        } else {
-            replicator = new Replication(db, remote, Replication.Direction.PULL, null, getWorkExecutor());
-        }
-
-        replications.add(replicator);
-        if (start) {
-            replicator.start();
-        }
-
-        return replicator;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public synchronized Database getDatabaseWithoutOpening(String name, boolean mustExist) {
+    public synchronized Database getDatabase(String name, boolean mustExist) {
+        if (options.isReadOnly())
+            mustExist = true;
         Database db = databases.get(name);
         if (db == null) {
-            if (!isValidDatabaseName(name)) {
+            if (!isValidDatabaseName(name))
                 throw new IllegalArgumentException("Invalid database name: " + name);
-            }
-            if (options.isReadOnly()) {
-                mustExist = true;
-            }
-            String path = pathForName(name);
-            if (path == null) {
+            String path = pathForDatabaseNamed(name);
+            if (path == null)
                 return null;
-            }
-            db = new Database(path, this);
+            db = new Database(path, name, this, options.isReadOnly());
             if (mustExist && !db.exists()) {
                 Log.w(Database.TAG, "mustExist is true and db (%s) does not exist", name);
                 return null;
@@ -507,26 +382,6 @@ public final class Manager {
             databases.put(name, db);
         }
         return db;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    /* package */ void forgetDatabase(Database db) {
-
-        // remove from cached list of dbs
-        databases.remove(db.getName());
-
-        // remove from list of replications
-        // TODO: should there be something that actually stops the replication(s) first?
-        Iterator<Replication> replicationIterator = this.replications.iterator();
-        while (replicationIterator.hasNext()) {
-            Replication replication = replicationIterator.next();
-            if (replication.getLocalDatabase().getName().equals(db.getName())) {
-                replicationIterator.remove();
-            }
-        }
     }
 
     /**
@@ -577,7 +432,7 @@ public final class Manager {
             remoteStr = source;
             if (createTarget && !cancel) {
                 boolean mustExist = false;
-                db = getDatabaseWithoutOpening(target, mustExist);
+                db = getDatabase(target, mustExist);
                 if (!db.open()) {
                     throw new CouchbaseLiteException("cannot open database: " + db, new Status(Status.INTERNAL_SERVER_ERROR));
                 }
@@ -676,6 +531,221 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
+    public int getExecutorThreadPoolSize() {
+        return this.options.getExecutorThreadPoolSize();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Internal (protected or private) Methods
+    ///////////////////////////////////////////////////////////////////////////
+
+    private void replaceDatabase(String databaseName,
+                                 InputStream databaseStream,
+                                 Iterator<Map.Entry<String, InputStream>> attachmentStreams)
+            throws CouchbaseLiteException {
+        try {
+            Database db = getDatabase(databaseName, false);
+
+            String dstDbPath = FileDirUtils.getPathWithoutExt(db.getPath()) + kV1DBExtension;
+            String dstAttsPath = FileDirUtils.getPathWithoutExt(dstDbPath) + " attachments";
+
+            OutputStream destStream = new FileOutputStream(new File(dstDbPath));
+            StreamUtils.copyStream(databaseStream, destStream);
+            File attachmentsFile = new File(dstAttsPath);
+            FileDirUtils.deleteRecursive(attachmentsFile);
+            if (!attachmentsFile.exists()) {
+                attachmentsFile.mkdirs();
+            }
+            if (attachmentStreams != null) {
+                StreamUtils.copyStreamsToFolder(attachmentStreams, attachmentsFile);
+            }
+            if (!upgradeDatabase(databaseName, dstDbPath))
+                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+
+            db.open();
+            db.replaceUUIDs();
+        } catch (FileNotFoundException e) {
+            Log.e(Database.TAG, "", e);
+            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+        } catch (IOException e) {
+            Log.e(Database.TAG, "", e);
+            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private static boolean containsOnlyLegalCharacters(String databaseName) {
+        Pattern p = Pattern.compile("^[abcdefghijklmnopqrstuvwxyz0123456789_$()+-/]+$");
+        Matcher matcher = p.matcher(databaseName);
+        return matcher.matches();
+    }
+
+    /**
+     * Scan my dir for SQLite-based databases from Couchbase Lite 1.0 and upgrade them:
+     * <p/>
+     * in CBLManager.m
+     * - (void) upgradeOldDatabaseFiles
+     *
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private void upgradeOldDatabaseFiles(File directory) {
+        File[] files = directory.listFiles(new FilenameFilter() {
+            @Override
+            public boolean accept(File file, String name) {
+                return name.endsWith(kV1DBExtension);
+            }
+        });
+
+        for (File file : files) {
+            String filename = file.getName();
+            String name = nameOfDatabaseAtPath(filename);
+            String oldDbPath = new File(directory, filename).getAbsolutePath();
+            upgradeDatabase(name, oldDbPath);
+        }
+    }
+
+    /**
+     * in CBLManager.m
+     * - (BOOL) upgradeDatabaseNamed: (NSString*)name
+     * atPath: (NSString*)dbPath
+     * error: (NSError**)outError
+     */
+    private boolean upgradeDatabase(String name, String dbPath) {
+        if (!dbPath.endsWith(kV1DBExtension)) {
+            Log.w(Log.TAG_DATABASE, "Upgrade skipped: Database file extension is not %s", kV1DBExtension);
+            return true;
+        }
+        Log.v(Log.TAG_DATABASE, "CouchbaseLite: Upgrading v1 database at %s ...", dbPath);
+        if (!name.equals("_replicator")) {
+            // Create and open new CBLDatabase:
+            Database db = getDatabase(name, false);
+            if (db == null) {
+                Log.w(Log.TAG_DATABASE, "Upgrade failed: Creating new db failed");
+                return false;
+            }
+            if (!db.exists()) {
+                // Upgrade the old database into the new one:
+                DatabaseUpgrade upgrader = new DatabaseUpgrade(this, db, dbPath);
+                if (!upgrader.importData()) {
+                    upgrader.backOut();
+                    return false;
+                }
+            }
+            db.close();
+        }
+
+        // Remove old database file and its SQLite side files:
+        for (String suffix : Arrays.asList("", "-wal", "-shm", "-journal")) {
+            File file = new File(dbPath + suffix);
+            if (file.exists())
+                file.delete();
+        }
+        String oldAttachmentsName = FileDirUtils.getDatabaseNameFromPath(dbPath) + " attachments";
+        File oldAttachmentsDir = new File(directoryFile, oldAttachmentsName);
+        if (oldAttachmentsDir.exists())
+            FileDirUtils.deleteRecursive(oldAttachmentsDir);
+        Log.v(Log.TAG_DATABASE, "    ...success!");
+        return true;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private String filenameWithNewExtension(String oldFilename, String oldExtension, String newExtension) {
+        String oldExtensionRegex = String.format("%s$", oldExtension);
+        return oldFilename.replaceAll(oldExtensionRegex, newExtension);
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    protected Future runAsync(Runnable runnable) {
+        synchronized (workExecutor) {
+            if (!workExecutor.isShutdown()) {
+                return workExecutor.submit(runnable);
+            } else {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * in CBLManager.m
+     * - (NSString*) pathForDatabaseNamed: (NSString*)name
+     *
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private String nameOfDatabaseAtPath(String path) {
+        String name = FileDirUtils.getDatabaseNameFromPath(path);
+        return isWindows() ? name.replace('/', '.') : name.replace('/', ':');
+    }
+
+    /**
+     * in CBLManager.m
+     * - (NSString*) pathForDatabaseNamed: (NSString*)name
+     *
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private String pathForDatabaseNamed(String name) {
+        if ((name == null) || (name.length() == 0) || Pattern.matches(LEGAL_CHARACTERS, name))
+            return null;
+        // NOTE: CouchDB allows forward slash as part of database name.
+        //       However, ':' is illegal character on Windows platform.
+        //       For Windows, substitute with period '.'
+        name = isWindows() ? name.replace('/', '.') : name.replace('/', ':');
+        String result = directoryFile.getPath() + File.separator + name + Manager.kDBExtension;
+        return result;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    private Map<String, Object> parseSourceOrTarget(Map<String, Object> properties, String key) {
+        Map<String, Object> result = new HashMap<String, Object>();
+
+        Object value = properties.get(key);
+
+        if (value instanceof String) {
+            result.put("url", (String) value);
+        } else if (value instanceof Map) {
+            result = (Map<String, Object>) value;
+        }
+        return result;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    protected void forgetDatabase(Database db) {
+
+        // remove from cached list of dbs
+        databases.remove(db.getName());
+
+        // remove from list of replications
+        // TODO: should there be something that actually stops the replication(s) first?
+        Iterator<Replication> replicationIterator = this.replications.iterator();
+        while (replicationIterator.hasNext()) {
+            Replication replication = replicationIterator.next();
+            if (replication.getLocalDatabase().getName().equals(db.getName())) {
+                replicationIterator.remove();
+            }
+        }
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
     protected boolean isAutoMigrateBlobStoreFilename() {
         return this.options.isAutoMigrateBlobStoreFilename();
     }
@@ -689,13 +759,4 @@ public final class Manager {
     private static boolean isWindows() {
         return (OS.indexOf("win") >= 0);
     }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public int getExecutorThreadPoolSize() {
-        return this.options.getExecutorThreadPoolSize();
-    }
 }
-

@@ -21,10 +21,11 @@ public final class UnsavedRevision extends Revision {
 
     /**
      * Constructor
+     *
      * @exclude
      */
     @InterfaceAudience.Private
-    /* package */ protected UnsavedRevision(Document document, SavedRevision parentRevision) {
+    protected UnsavedRevision(Document document, SavedRevision parentRevision) {
 
         super(document);
 
@@ -50,22 +51,19 @@ public final class UnsavedRevision extends Revision {
             if (parentRevID != null) {
                 properties.put("_rev", parentRevID);
             }
-        }
-        else {
+        } else {
             properties = new HashMap<String, Object>(parentRevisionProperties);
         }
-
     }
 
     /**
      * Set whether this revision is a deletion or not (eg, marks doc as deleted)
      */
-     @InterfaceAudience.Public
-     public void setIsDeletion(boolean isDeletion) {
+    @InterfaceAudience.Public
+    public void setIsDeletion(boolean isDeletion) {
         if (isDeletion == true) {
             properties.put("_deleted", true);
-        }
-        else {
+        } else {
             properties.remove("_deleted");
         }
     }
@@ -78,7 +76,7 @@ public final class UnsavedRevision extends Revision {
 
     @Override
     @InterfaceAudience.Private
-    /* package */ long getSequence() {
+    protected long getSequence() {
         return 0L;
     }
 
@@ -86,16 +84,16 @@ public final class UnsavedRevision extends Revision {
      * Set the properties for this revision
      */
     @InterfaceAudience.Public
-    public void setProperties(Map<String,Object> properties) {
+    public void setProperties(Map<String, Object> properties) {
         this.properties = properties;
     }
 
     /**
      * Saves the new revision to the database.
-     *
+     * <p/>
      * This will throw an exception with a 412 error if its parent (the revision it was created from)
      * is not the current revision of the document.
-     *
+     * <p/>
      * Afterwards you should use the returned Revision instead of this object.
      *
      * @return A new Revision representing the saved form of the revision.
@@ -110,7 +108,7 @@ public final class UnsavedRevision extends Revision {
     /**
      * A special variant of -save: that always adds the revision, even if its parent is not the
      * current revision of the document.
-     *
+     * <p/>
      * This can be used to resolve conflicts, or to create them. If you're not certain that's what you
      * want to do, you should use the regular -save: method instead.
      */
@@ -122,6 +120,7 @@ public final class UnsavedRevision extends Revision {
     /**
      * Deletes any existing attachment with the given name.
      * The attachment will be deleted from the database when the revision is saved.
+     *
      * @param name The attachment name.
      */
     @InterfaceAudience.Public
@@ -134,7 +133,7 @@ public final class UnsavedRevision extends Revision {
      * Set replaces all properties except for those with keys prefixed with '_'.
      */
     @InterfaceAudience.Public
-    public void setUserProperties(Map<String,Object> userProperties) {
+    public void setUserProperties(Map<String, Object> userProperties) {
         Map<String, Object> newProps = new HashMap<String, Object>();
         newProps.putAll(userProperties);
         for (String key : properties.keySet()) {
@@ -146,11 +145,13 @@ public final class UnsavedRevision extends Revision {
     }
 
     /**
-     * Sets the attachment with the given name. The Attachment data will be written to the Database when the Revision is saved.
+     * Sets the attachment with the given name. The Attachment data will be written
+     * to the Database when the Revision is saved.
      *
-     * @param name The name of the Attachment to set.
-     * @param contentType The content-type of the Attachment.
-     * @param contentStream The Attachment content.  The InputStream will be closed after it is no longer needed.
+     * @param name          The name of the Attachment to set.
+     * @param contentType   The content-type of the Attachment.
+     * @param contentStream The Attachment content.  The InputStream will be closed
+     *                      after it is no longer needed.
      */
     @InterfaceAudience.Public
     public void setAttachment(String name, String contentType, InputStream contentStream) {
@@ -159,10 +160,11 @@ public final class UnsavedRevision extends Revision {
     }
 
     /**
-     * Sets the attachment with the given name. The Attachment data will be written to the Database when the Revision is saved.
+     * Sets the attachment with the given name. The Attachment data will be written
+     * to the Database when the Revision is saved.
      *
-     * @param name The name of the Attachment to set.
-     * @param contentType The content-type of the Attachment.
+     * @param name             The name of the Attachment to set.
+     * @param contentType      The content-type of the Attachment.
      * @param contentStreamURL The URL that contains the Attachment content.
      */
     @InterfaceAudience.Public
@@ -200,7 +202,7 @@ public final class UnsavedRevision extends Revision {
 
     @Override
     @InterfaceAudience.Private
-    /* package */ long getParentSequence() {
+    protected long getParentSequence() {
         return parentSequence;
     }
 
@@ -215,12 +217,13 @@ public final class UnsavedRevision extends Revision {
     /**
      * Creates or updates an attachment.
      * The attachment data will be written to the database when the revision is saved.
+     *
      * @param attachment A newly-created Attachment (not yet associated with any revision)
-     * @param name The attachment name.
+     * @param name       The attachment name.
      */
     @InterfaceAudience.Private
-    /* package */ void addAttachment(Attachment attachment, String name) {
-        Map<String, Object> attachments =  (Map<String, Object>) properties.get("_attachments");
+    protected void addAttachment(Attachment attachment, String name) {
+        Map<String, Object> attachments = (Map<String, Object>) properties.get("_attachments");
         if (attachments == null) {
             attachments = new HashMap<String, Object>();
         }
@@ -231,6 +234,4 @@ public final class UnsavedRevision extends Revision {
             attachment.setRevision(this);
         }
     }
-
-
 }

@@ -93,14 +93,14 @@ public class Query {
 
     /**
      * Changes the behavior of a query created by -queryAllDocuments.
-     *
+     * <p/>
      * - In mode kCBLAllDocs (the default), the query simply returns all non-deleted documents.
      * - In mode kCBLIncludeDeleted, it also returns deleted documents.
      * - In mode kCBLShowConflicts, the .conflictingRevisions property of each row will return the
-     *   conflicting revisions, if any, of that document.
+     * conflicting revisions, if any, of that document.
      * - In mode kCBLOnlyConflicts, _only_ documents in conflict will be returned.
-     *   (This mode is especially useful for use with a CBLLiveQuery, so you can be notified of
-     *   conflicts as they happen, i.e. when they're pulled in by a replication.)
+     * (This mode is especially useful for use with a CBLLiveQuery, so you can be notified of
+     * conflicts as they happen, i.e. when they're pulled in by a replication.)
      */
     private AllDocsMode allDocsMode;
 
@@ -110,10 +110,10 @@ public class Query {
     private boolean descending;
 
     /**
-     *  If set to YES, the results will include the entire document contents of the associated rows.
-     *  These can be accessed via QueryRow's -documentProperties property.
-     *  This slows down the query, but can be a good optimization if you know you'll need the entire
-     *  contents of each document. (This property is equivalent to "include_docs" in the CouchDB API.)
+     * If set to YES, the results will include the entire document contents of the associated rows.
+     * These can be accessed via QueryRow's -documentProperties property.
+     * This slows down the query, but can be a good optimization if you know you'll need the entire
+     * contents of each document. (This property is equivalent to "include_docs" in the CouchDB API.)
      */
     private boolean prefetch;
 
@@ -139,21 +139,21 @@ public class Query {
      */
     private int groupLevel;
 
-   /**
-    * If non-zero, enables prefix matching of string or array keys.
-    *
-    * A value of 1 treats the endKey itself as a prefix: if it's a string, keys in the index that
-    * come after the endKey, but begin with the same prefix, will be matched. (For example, if the
-    * endKey is "foo" then the key "foolish" in the index will be matched, but not "fong".)
-    * Or if the endKey is an array, any array beginning with those elements will be matched.
-    * (For example, if the endKey is [1], then [1, "x"] will match, but not [2].)
-    * If the key is any other type, there is no effect.
-    *
-    * A value of 2 assumes the endKey is an array and treats its final item as a prefix, using the
-    * rules above. (For example, an endKey of [1, "x"] will match [1, "xtc"] but not [1, "y"].)
-    *
-    * A value of 3 assumes the key is an array of arrays, etc.
-    */
+    /**
+     * If non-zero, enables prefix matching of string or array keys.
+     * <p/>
+     * A value of 1 treats the endKey itself as a prefix: if it's a string, keys in the index that
+     * come after the endKey, but begin with the same prefix, will be matched. (For example, if the
+     * endKey is "foo" then the key "foolish" in the index will be matched, but not "fong".)
+     * Or if the endKey is an array, any array beginning with those elements will be matched.
+     * (For example, if the endKey is [1], then [1, "x"] will match, but not [2].)
+     * If the key is any other type, there is no effect.
+     * <p/>
+     * A value of 2 assumes the endKey is an array and treats its final item as a prefix, using the
+     * rules above. (For example, an endKey of [1, "x"] will match [1, "xtc"] but not [1, "y"].)
+     * <p/>
+     * A value of 3 assumes the key is an array of arrays, etc.
+     */
     private int prefixMatchLevel;
 
     /**
@@ -360,8 +360,17 @@ public class Query {
     }
 
     @InterfaceAudience.Public
-    public void setPostFilter(Predicate<QueryRow> postFilter) {
-        this.postFilter = postFilter;
+    public void setPostFilter(final Predicate<QueryRow> pf) {
+
+        this.postFilter = new Predicate<QueryRow>() {
+            @Override
+            public boolean apply(QueryRow type) {
+                type.setDatabase(database);
+                return pf.apply(type);
+            }
+        };
+
+        //this.postFilter = pf;
     }
 
     @InterfaceAudience.Public
@@ -406,10 +415,10 @@ public class Query {
     }
 
     /**
-     *  Starts an asynchronous query. Returns immediately, then calls the onLiveQueryChanged block when the
-     *  query completes, passing it the row enumerator. If the query fails, the block will receive
-     *  a non-nil enumerator but its .error property will be set to a value reflecting the error.
-     *  The originating Query's .error property will NOT change.
+     * Starts an asynchronous query. Returns immediately, then calls the onLiveQueryChanged block when the
+     * query completes, passing it the row enumerator. If the query fails, the block will receive
+     * a non-nil enumerator but its .error property will be set to a value reflecting the error.
+     * The originating Query's .error property will NOT change.
      */
     @InterfaceAudience.Public
     public Future runAsync(final QueryCompleteListener onComplete) {
@@ -420,8 +429,8 @@ public class Query {
      * A delegate that can be called to signal the completion of a Query.
      */
     @InterfaceAudience.Public
-    public static interface QueryCompleteListener {
-        public void completed(QueryEnumerator rows, Throwable error);
+    public interface QueryCompleteListener {
+        void completed(QueryEnumerator rows, Throwable error);
     }
 
     /**
@@ -497,8 +506,4 @@ public class Query {
             view.delete();
         }
     }
-
-
-
-
 }

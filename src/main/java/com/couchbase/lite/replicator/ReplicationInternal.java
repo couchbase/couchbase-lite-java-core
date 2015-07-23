@@ -58,10 +58,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @exclude
  */
 @InterfaceAudience.Private
-abstract class ReplicationInternal implements BlockingQueueListener{
+abstract class ReplicationInternal implements BlockingQueueListener {
 
     // Change listeners can be called back synchronously or asynchronously.
-    protected enum ChangeListenerNotifyStyle { SYNC, ASYNC };
+    protected enum ChangeListenerNotifyStyle {
+        SYNC, ASYNC
+    }
+
+    ;
 
     public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
 
@@ -94,7 +98,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected Map<String, Object> remoteCheckpoint;
     protected AtomicInteger completedChangesCount;
     protected AtomicInteger changesCount;
-    protected CollectionUtils.Functor<RevisionInternal,RevisionInternal> revisionBodyTransformationBlock;
+    protected CollectionUtils.Functor<RevisionInternal, RevisionInternal> revisionBodyTransformationBlock;
     protected String sessionID;
     protected BlockingQueue<Future> pendingFutures;
     private boolean lastSequenceChanged = false;
@@ -117,7 +121,11 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     /**
      * Constructor
      */
-    ReplicationInternal(Database db, URL remote, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor, Replication.Lifecycle lifecycle, Replication parentReplication) {
+    ReplicationInternal(Database db, URL remote,
+                        HttpClientFactory clientFactory,
+                        ScheduledExecutorService workExecutor,
+                        Replication.Lifecycle lifecycle,
+                        Replication parentReplication) {
 
         Utils.assertNotNull(lifecycle, "Must pass in a non-null lifecycle");
 
@@ -303,7 +311,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     processInbox(new RevisionList(inbox));
                     Log.v(Log.TAG_SYNC, "*** %s: END processInbox (lastSequence=%s)", this, lastSequence);
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC,"ERROR: processInbox failed: ",e);
+                    Log.e(Log.TAG_SYNC, "ERROR: processInbox failed: ", e);
                     throw new RuntimeException(e);
                 }
             }
@@ -323,16 +331,17 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     protected void goOnlineInitialStartup() {
 
         int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
-                EXECUTOR_THREAD_POOL_SIZE: db.getManager().getExecutorThreadPoolSize();
-        Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" +  executorThreadPoolSize);
+                EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
+        Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
         remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
             private int counter = 0;
+
             @Override
             public Thread newThread(Runnable r) {
                 String threadName = "CBLRequestWorker";
                 try {
                     String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                    threadName = String.format( "CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                    threadName = String.format("CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "Error creating thread name", e);
                 }
@@ -347,7 +356,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     @InterfaceAudience.Private
     protected void checkSession() {
         // REVIEW : This is not in line with the iOS implementation
-        if (getAuthenticator() != null && ((AuthenticatorImpl)getAuthenticator()).usesCookieBasedLogin()) {
+        if (getAuthenticator() != null && ((AuthenticatorImpl) getAuthenticator()).usesCookieBasedLogin()) {
             checkSessionAtPath("/_session");
         } else {
             fetchRemoteCheckpointDoc();
@@ -401,14 +410,14 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     @InterfaceAudience.Private
     protected void login() {
-        Map<String, String> loginParameters = ((AuthenticatorImpl)getAuthenticator()).loginParametersForSite(remote);
+        Map<String, String> loginParameters = ((AuthenticatorImpl) getAuthenticator()).loginParametersForSite(remote);
         if (loginParameters == null) {
             Log.d(Log.TAG_SYNC, "%s: %s has no login parameters, so skipping login", this, getAuthenticator());
             fetchRemoteCheckpointDoc();
             return;
         }
 
-        final String loginPath = ((AuthenticatorImpl)getAuthenticator()).loginPathForSite(remote);
+        final String loginPath = ((AuthenticatorImpl) getAuthenticator()).loginPathForSite(remote);
 
         Log.d(Log.TAG_SYNC, "%s: Doing login with %s at %s", this, getAuthenticator().getClass(), loginPath);
 
@@ -426,8 +435,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                     // (before adding this, the replication would just end up in limbo and never finish)
                     triggerStop();
 
-                }
-                else {
+                } else {
                     Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);
                     fetchRemoteCheckpointDoc();
                 }
@@ -466,7 +474,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     @InterfaceAudience.Private
     /* package */ void addToCompletedChangesCount(int delta) {
         int previousVal = getCompletedChangesCount().getAndAdd(delta);
-        Log.v(Log.TAG_SYNC, "%s: Incrementing completedChangesCount count from %s by adding %d -> %d", this, previousVal, delta, completedChangesCount.get());
+        Log.v(Log.TAG_SYNC, "%s: Incrementing completedChangesCount count from %s by adding %d -> %d",
+                this, previousVal, delta, completedChangesCount.get());
         Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
         notifyChangeListeners(changeEvent);
     }
@@ -477,7 +486,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         if (getChangesCount().get() < 0) {
             Log.w(Log.TAG_SYNC, "Changes count is negative, this could indicate an error");
         }
-        Log.v(Log.TAG_SYNC, "%s: Incrementing changesCount count from %s by adding %d -> %d", this, previousVal, delta, changesCount.get());
+        Log.v(Log.TAG_SYNC, "%s: Incrementing changesCount count from %s by adding %d -> %d",
+                this, previousVal, delta, changesCount.get());
         Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
         notifyChangeListeners(changeEvent);
     }
@@ -500,7 +510,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, String relativePath, Object body, RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncRequest(String method, String relativePath, Object body,
+                                   RemoteRequestCompletionBlock onCompletion) {
         return sendAsyncRequest(method, relativePath, body, false, onCompletion);
     }
 
@@ -508,7 +519,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404, RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404,
+                                   RemoteRequestCompletionBlock onCompletion) {
         try {
             String urlStr = buildRelativeURLString(relativePath);
             URL url = new URL(urlStr);
@@ -523,7 +535,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, URL url, Object body, boolean dontLog404, final RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncRequest(String method, URL url, Object body, boolean dontLog404,
+                                   final RemoteRequestCompletionBlock onCompletion) {
         Log.d(Log.TAG_SYNC, "[sendAsyncRequest()] " + method + " => " + url);
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
@@ -564,7 +577,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncMultipartRequest(String method, String relativePath, MultipartEntity multiPartEntity, RemoteRequestCompletionBlock onCompletion) {
+    public Future sendAsyncMultipartRequest(String method, String relativePath,
+                                            MultipartEntity multiPartEntity,
+                                            RemoteRequestCompletionBlock onCompletion) {
         URL url = null;
         try {
             String urlStr = buildRelativeURLString(relativePath);
@@ -597,7 +612,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * @exclude
      */
     @InterfaceAudience.Private
-    public CustomFuture sendAsyncMultipartDownloaderRequest(String method, String relativePath, Object body, Database db, RemoteRequestCompletionBlock onCompletion) {
+    public CustomFuture sendAsyncMultipartDownloaderRequest(String method, String relativePath,
+                                                            Object body, Database db,
+                                                            RemoteRequestCompletionBlock onCompletion) {
         try {
 
             String urlStr = buildRelativeURLString(relativePath);
@@ -666,7 +683,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      */
     @InterfaceAudience.Private
     public void saveLastSequence() {
-        if(!lastSequenceChanged) {
+        if (!lastSequenceChanged) {
             return;
         }
 
@@ -680,7 +697,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         lastSequenceChanged = false;
         overdueForCheckpointSave = false;
 
-        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s remoteCheckpoint: %s", this, lastSequence, remoteCheckpoint);
+        Log.d(Log.TAG_SYNC, "%s: saveLastSequence() called. lastSequence: %s remoteCheckpoint: %s",
+                this, lastSequence, remoteCheckpoint);
         final Map<String, Object> body = new HashMap<String, Object>();
         if (remoteCheckpoint != null) {
             body.putAll(remoteCheckpoint);
@@ -695,13 +713,16 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         }
 
         final String checkpointID = remoteCheckpointDocID;
-        Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s", this, checkpointID, body);
+        Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s",
+                this, checkpointID, body);
         Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
 
-                Log.d(Log.TAG_SYNC, "%s: put remote _local document request finished.  checkpointID: %s body: %s", this, checkpointID, body);
+                Log.d(Log.TAG_SYNC,
+                        "%s: put remote _local document request finished.  checkpointID: %s body: %s",
+                        this, checkpointID, body);
 
                 try {
 
@@ -730,13 +751,14 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                         body.put("_rev", response.get("rev"));
                         remoteCheckpoint = body;
                         if (db != null && db.open()) {
-                            Log.d(Log.TAG_SYNC, "%s: saved remote checkpoint, updating local checkpoint.  remoteCheckpoint: %s", this, remoteCheckpoint);
-                            db.setLastSequence(lastSequence, checkpointID, !isPull());
+                            Log.d(Log.TAG_SYNC,
+                                    "%s: saved remote checkpoint, updating local checkpoint.  remoteCheckpoint: %s",
+                                    this, remoteCheckpoint);
+                            db.setLastSequence(lastSequence, checkpointID);
                         } else {
                             Log.w(Log.TAG_SYNC, "%s: Database is null or closed, not calling db.setLastSequence() ", this);
                         }
                     }
-
                 } finally {
 
                     savingCheckpoint = false;
@@ -746,9 +768,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                         overdueForCheckpointSave = false;
                         saveLastSequence();
                     }
-
                 }
-
             }
         });
         pendingFutures.add(future);
@@ -800,7 +820,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             try {
                 URL remoteUrl = new URL(remoteUrlString);
                 String relativePathWithLeadingSlash = String.format("/%s", relativePath);  // required on couchbase-lite-java
-                URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(), remoteUrl.getPort(), relativePathWithLeadingSlash);
+                URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(),
+                        remoteUrl.getPort(), relativePathWithLeadingSlash);
                 remoteUrlString = remoteUrlNoPath.toExternalForm();
                 return remoteUrlString;
             } catch (MalformedURLException e) {
@@ -824,43 +845,46 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-            if (e != null && !Utils.is404(e)) {
-                Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
-                setError(e);
+                if (e != null && !Utils.is404(e)) {
+                    Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
+                    setError(e);
 
-                // TODO: double check this behavior against iOS implementation, especially
-                // TODO: with regards to behavior of a continuous replication.
-                // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
-                // (before adding this, the replication would just end up in limbo and never finish)
-                fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); just to be more consistent
+                    // TODO: double check this behavior against iOS implementation, especially
+                    // TODO: with regards to behavior of a continuous replication.
+                    // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
+                    // (before adding this, the replication would just end up in limbo and never finish)
+                    fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); just to be more consistent
 
-            } else {
-                if (e != null && Utils.is404(e)) {
-                    Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s", this, remoteCheckpointDocID());
-                    maybeCreateRemoteDB();
-                }
-                Map<String, Object> response = (Map<String, Object>) result;
-                remoteCheckpoint = response;
-                String remoteLastSequence = null;
-                if (response != null) {
-                    remoteLastSequence = (String) response.get("lastSequence");
-                }
-                if (remoteLastSequence != null && remoteLastSequence.equals(localLastSequence)) {
-                    lastSequence = localLastSequence;
-                    Log.d(Log.TAG_SYNC, "%s: Replicating from lastSequence=%s", this, lastSequence);
                 } else {
-                    Log.d(Log.TAG_SYNC, "%s: lastSequence mismatch: I had: %s, remote had: %s", this, localLastSequence, remoteLastSequence);
+                    if (e != null && Utils.is404(e)) {
+                        Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s",
+                                this, remoteCheckpointDocID());
+                        maybeCreateRemoteDB();
+                    }
+                    Map<String, Object> response = (Map<String, Object>) result;
+                    remoteCheckpoint = response;
+                    String remoteLastSequence = null;
+                    if (response != null) {
+                        remoteLastSequence = (String) response.get("lastSequence");
+                    }
+                    if (remoteLastSequence != null && remoteLastSequence.equals(localLastSequence)) {
+                        lastSequence = localLastSequence;
+                        Log.d(Log.TAG_SYNC, "%s: Replicating from lastSequence=%s", this, lastSequence);
+                    } else {
+                        Log.d(Log.TAG_SYNC, "%s: lastSequence mismatch: I had: %s, remote had: %s",
+                                this, localLastSequence, remoteLastSequence);
+                    }
+                    beginReplicating();
                 }
-                beginReplicating();
-            }
             }
 
         });
         pendingFutures.add(future);
     }
 
-    
-    /* package */ abstract void maybeCreateRemoteDB();
+
+    /* package */
+    abstract void maybeCreateRemoteDB();
 
     /**
      * This is the _local document ID stored on the remote server to keep track of state.
@@ -869,7 +893,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      *
      * @exclude
      */
-    
+
     public String remoteCheckpointDocID() {
 
         if (remoteCheckpointDocID != null) {
@@ -918,7 +942,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            remoteCheckpointDocID = Misc.TDHexSHA1Digest(inputBytes);
+            remoteCheckpointDocID = Misc.HexSHA1Digest(inputBytes);
             return remoteCheckpointDocID;
 
         }
@@ -935,7 +959,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     /**
      * Set the filter to be used by this replication
      */
-    
+
     public void setFilter(String filterName) {
         this.filterName = filterName;
     }
@@ -987,11 +1011,11 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     /**
      * gzip
-     *
+     * <p/>
      * in CBL_Replicator.m
      * - (BOOL) canSendCompressedRequests
      */
-    public boolean canSendCompressedRequests(){
+    public boolean canSendCompressedRequests() {
         // https://github.com/couchbase/couchbase-lite-ios/issues/240#issuecomment-32506552
         // gzip upload is only enabled when the server is Sync Gateway 0.92 or later
         return serverIsSyncGatewayVersion("0.92");
@@ -1145,7 +1169,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 retryReplicationIfError();
-                if(transition.getSource() == transition.getDestination()) {
+                if (transition.getSource() == transition.getDestination()) {
                     // ignore IDLE to IDLE
                     return;
                 }
@@ -1155,7 +1179,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 // iOS version: stop replicator immediately when call setError() with permanent error.
                 // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
                 // state becomes IDLE.
-                if(Utils.isPermanentError(error) && isContinuous()){
+                if (Utils.isPermanentError(error) && isContinuous()) {
                     Log.d(Log.TAG_SYNC, "IDLE: triggerStop() " + error.toString());
                     triggerStop();
                 }
@@ -1165,7 +1189,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
-                if(transition.getSource() == transition.getDestination()) {
+                if (transition.getSource() == transition.getDestination()) {
                     // ignore IDLE to IDLE
                     return;
                 }
@@ -1196,7 +1220,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
                 //       We should revisit StateMachine configuration and also its Thread-safe-ability
-                if(transition.getSource() == transition.getDestination()) {
+                if (transition.getSource() == transition.getDestination()) {
                     // ignore STOPPING to STOPPING
                     return;
                 }
@@ -1284,11 +1308,11 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     /**
      * Called after a continuous replication has gone idle, but it failed to transfer some revisions
      * and so wants to try again in a minute. Can be overridden by subclasses.
-     *
+     * <p/>
      * in CBL_Replicator.m
      * - (void) retry
      */
-    protected void retry(){
+    protected void retry() {
         Log.v(Log.TAG_SYNC, "[retry()]");
         retryCount++;
         error = null;
@@ -1299,10 +1323,10 @@ abstract class ReplicationInternal implements BlockingQueueListener{
      * in CBL_Replicator.m
      * - (void) retryIfReady
      */
-    protected void retryIfReady(){
-        Log.v(Log.TAG_SYNC, "[retryIfReady()] stateMachine => "+stateMachine.getState().toString());
+    protected void retryIfReady() {
+        Log.v(Log.TAG_SYNC, "[retryIfReady()] stateMachine => " + stateMachine.getState().toString());
         // check if state is still IDLE (ONLINE), then retry now.
-        if(stateMachine.getState().equals(ReplicationState.IDLE)){
+        if (stateMachine.getState().equals(ReplicationState.IDLE)) {
             Log.v(Log.TAG_SYNC, "%s RETRYING, to transfer missed revisions...", this);
             cancelRetryFuture();
             retry();
@@ -1312,8 +1336,8 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     /**
      * helper function to schedule retry future. no in iOS code.
      */
-    private void scheduleRetryFuture(){
-        long delay = RETRY_DELAY_SECONDS * (long)Math.pow((double)2, (double)Math.min(retryCount, MAX_RETRIES));
+    private void scheduleRetryFuture() {
+        long delay = RETRY_DELAY_SECONDS * (long) Math.pow((double) 2, (double) Math.min(retryCount, MAX_RETRIES));
         Log.v(Log.TAG_SYNC, "%s: Failed to xfer; will retry in %d sec",
                 this, delay);
         this.retryFuture = workExecutor.schedule(new Runnable() {
@@ -1322,11 +1346,12 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             }
         }, delay, TimeUnit.SECONDS);
     }
+
     /**
      * helper function to cancel retry future. not in iOS code.
      */
-    private void cancelRetryFuture(){
-        if(retryFuture != null && !retryFuture.isDone()){
+    private void cancelRetryFuture() {
+        if (retryFuture != null && !retryFuture.isDone()) {
             retryFuture.cancel(true);
         }
         retryFuture = null;
@@ -1335,25 +1360,25 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     /**
      * Retry replication if previous attempt ends with error
      */
-    protected void retryReplicationIfError(){
+    protected void retryReplicationIfError() {
         // Make sure if state is IDLE, this method should be called when state becomes IDLE
-        if(!stateMachine.getState().equals(ReplicationState.IDLE)){
+        if (!stateMachine.getState().equals(ReplicationState.IDLE)) {
             return;
         }
 
         // IDLE_OK
-        if(error == null){
+        if (error == null) {
             retryCount = 0;
         }
         // IDLE_ERROR
-        else{
+        else {
             // not retry infinite times
-            if(retryCount < MAX_RETRIES) {
+            if (retryCount < MAX_RETRIES) {
                 // mode should be continuous
-                if(isContinuous()){
+                if (isContinuous()) {
                     // 12/16/2014 - only retry if error is transient error 50x http error
                     // It may need to retry for any kind of errors
-                    if(Utils.isTransientError(error)){
+                    if (Utils.isTransientError(error)) {
 
                         cancelRetryFuture();
                         scheduleRetryFuture();
@@ -1387,9 +1412,9 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     @InterfaceAudience.Private
     public void setLastSequence(String lastSequenceIn) {
         if (lastSequenceIn != null && !lastSequenceIn.equals(lastSequence)) {
-            Log.v(Log.TAG_SYNC, "%s: Setting lastSequence to %s from(%s)", this, lastSequenceIn, lastSequence );
+            Log.v(Log.TAG_SYNC, "%s: Setting lastSequence to %s from(%s)", this, lastSequenceIn, lastSequence);
             lastSequence = lastSequenceIn;
-            if(!lastSequenceChanged) {
+            if (!lastSequenceChanged) {
                 lastSequenceChanged = true;
                 workExecutor.schedule(new Runnable() {
                     public void run() {
@@ -1401,38 +1426,38 @@ abstract class ReplicationInternal implements BlockingQueueListener{
     }
 
     protected RevisionInternal transformRevision(RevisionInternal rev) {
-        if(revisionBodyTransformationBlock != null) {
+        if (revisionBodyTransformationBlock != null) {
             try {
                 final int generation = rev.getGeneration();
                 RevisionInternal xformed = revisionBodyTransformationBlock.invoke(rev);
                 if (xformed == null)
                     return null;
                 if (xformed != rev) {
-                    assert(xformed.getDocId().equals(rev.getDocId()));
-                    assert(xformed.getRevId().equals(rev.getRevId()));
-                    assert(xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
+                    assert (xformed.getDocID().equals(rev.getDocID()));
+                    assert (xformed.getRevID().equals(rev.getRevID()));
+                    assert (xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
                     if (xformed.getProperties().get("_attachments") != null) {
                         // Insert 'revpos' properties into any attachments added by the callback:
                         RevisionInternal mx = new RevisionInternal(xformed.getProperties());
                         xformed = mx;
-                        mx.mutateAttachments(new CollectionUtils.Functor<Map<String,Object>,Map<String,Object>>() {
+                        mx.mutateAttachments(new CollectionUtils.Functor<Map<String, Object>, Map<String, Object>>() {
                             public Map<String, Object> invoke(Map<String, Object> info) {
                                 if (info.get("revpos") != null) {
                                     return info;
                                 }
-                                if(info.get("data") == null) {
+                                if (info.get("data") == null) {
                                     throw new IllegalStateException("Transformer added attachment without adding data");
                                 }
-                                Map<String,Object> nuInfo = new HashMap<String, Object>(info);
-                                nuInfo.put("revpos",generation);
+                                Map<String, Object> nuInfo = new HashMap<String, Object>(info);
+                                nuInfo.put("revpos", generation);
                                 return nuInfo;
                             }
                         });
                     }
                     rev = xformed;
                 }
-            }catch (Exception e) {
-                Log.w(Log.TAG_SYNC,"%s: Exception transforming a revision of doc '%s", e, this, rev.getDocId());
+            } catch (Exception e) {
+                Log.w(Log.TAG_SYNC, "%s: Exception transforming a revision of doc '%s", e, this, rev.getDocID());
             }
         }
         return rev;
@@ -1452,7 +1477,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
             // 'status' property is nonstandard; Couchbase Lite returns it, others don't.
             Object objStatus = item.get("status");
-            if (objStatus instanceof  Integer) {
+            if (objStatus instanceof Integer) {
                 int status = ((Integer) objStatus).intValue();
                 if (status >= 400) {
                     return new Status(status);
@@ -1492,7 +1517,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
             if (!db.isOpen()) {
                 Log.w(Log.TAG_SYNC, "Not attempting to setLastSequence, db is closed");
             } else {
-                db.setLastSequence(lastSequence, remoteCheckpointDocID(), !isPull());
+                db.setLastSequence(lastSequence, remoteCheckpointDocID());
             }
             Log.v(Log.TAG_SYNC, "%s: clearDbRef() setting db to null", this);
             db = null;
@@ -1500,9 +1525,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "Exception in clearDbRef(): %s", e);
         }
-
     }
-
 
     /**
      * For java docs, see Replication.setCookie()
@@ -1531,7 +1554,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
         cookie.setExpiryDate(expirationDate);
         cookie.setSecure(secure);
-        List<Cookie> cookies = Arrays.asList((Cookie)cookie);
+        List<Cookie> cookies = Arrays.asList((Cookie) cookie);
         this.clientFactory.addCookies(cookies);
 
     }
@@ -1589,15 +1612,15 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     //@Override
     //public void changed(EventType type, Object o, BlockingQueue queue) {
-        // should be overide
+    // should be overide
     //}
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {
         // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
 
-        if(type == EventType.PUT || type == EventType.ADD) {
+        if (type == EventType.PUT || type == EventType.ADD) {
             // in case of one shot, not necessary to switch state and call waitForPendingFutures.
-            if(isContinuous()) {
+            if (isContinuous()) {
                 if (!queue.isEmpty()) {
                     // trigger to RUNNING if state is IDLE
                     fireTrigger(ReplicationTrigger.RESUME);
@@ -1616,7 +1639,7 @@ abstract class ReplicationInternal implements BlockingQueueListener{
 
     /**
      * Encodes the given document id for use in an URI.
-     * <p>
+     * <p/>
      * Avoids encoding the slash in _design documents since it may cause a 301 redirect.
      */
     /* package */ String encodeDocumentId(String docId) {
@@ -1629,5 +1652,3 @@ abstract class ReplicationInternal implements BlockingQueueListener{
         }
     }
 }
-
-

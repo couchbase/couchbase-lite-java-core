@@ -1,6 +1,5 @@
 package com.couchbase.lite.support;
 
-import com.couchbase.lite.Database;
 import com.couchbase.lite.internal.InterfaceAudience;
 
 import org.apache.http.auth.params.AuthPNames;
@@ -46,7 +45,6 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     public static final int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 60;
     public static final int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
 
-
     /**
      * Constructor
      */
@@ -55,8 +53,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     }
 
     /**
-     * @param sslSocketFactoryFromUser This is to open up the system for end user to inject the sslSocket factories with their
-     *                                 custom KeyStore
+     * @param sslSocketFactoryFromUser This is to open up the system for end user to inject
+     *                                 the sslSocket factories with their custom KeyStore
      */
     @InterfaceAudience.Private
     public void setSSLSocketFactory(SSLSocketFactory sslSocketFactoryFromUser) {
@@ -147,14 +145,17 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
         SSLContext sslContext = SSLContext.getInstance("TLS");
 
-        public SelfSignedSSLSocketFactory(KeyStore truststore) throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException, UnrecoverableKeyException {
+        public SelfSignedSSLSocketFactory(KeyStore truststore) throws NoSuchAlgorithmException,
+                KeyManagementException, KeyStoreException, UnrecoverableKeyException {
             super(truststore);
 
             TrustManager tm = new X509TrustManager() {
-                public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                public void checkClientTrusted(X509Certificate[] chain, String authType)
+                        throws CertificateException {
                 }
 
-                public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                public void checkServerTrusted(X509Certificate[] chain, String authType)
+                        throws CertificateException {
                 }
 
                 public X509Certificate[] getAcceptedIssuers() {
@@ -162,11 +163,12 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
                 }
             };
 
-            sslContext.init(null, new TrustManager[] { tm }, null);
+            sslContext.init(null, new TrustManager[]{tm}, null);
         }
 
         @Override
-        public Socket createSocket(Socket socket, String host, int port, boolean autoClose) throws IOException, UnknownHostException {
+        public Socket createSocket(Socket socket, String host, int port, boolean autoClose)
+                throws IOException, UnknownHostException {
             return sslContext.getSocketFactory().createSocket(socket, host, port, autoClose);
         }
 
@@ -174,25 +176,22 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         public Socket createSocket() throws IOException {
             return sslContext.getSocketFactory().createSocket();
         }
-
     }
 
     /**
      * This is a convenience method to allow couchbase lite to connect to servers
      * that use self-signed SSL certs.
-     *
+     * <p/>
      * *DO NOT USE THIS IN PRODUCTION*
-     *
+     * <p/>
      * For more information, see:
-     *
+     * <p/>
      * https://github.com/couchbase/couchbase-lite-java-core/pull/9
      * http://stackoverflow.com/questions/2642777/trusting-all-certificates-using-httpclient-over-https
      */
     @InterfaceAudience.Public
     public void allowSelfSignedSSLCertificates() {
-
         try {
-
             KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
             trustStore.load(null, null);
             SSLSocketFactory sf = new SelfSignedSSLSocketFactory(trustStore);
@@ -201,9 +200,5 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-
-
     }
-
-
 }

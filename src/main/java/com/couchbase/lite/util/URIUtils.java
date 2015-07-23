@@ -18,17 +18,20 @@ package com.couchbase.lite.util;
 
 import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 
 // COPY: Partially copied from android.net.Uri
 // COPY: Partially copied from libcore.net.UriCodec
 public class URIUtils {
-    /** Index of a component which was not found. */
+    /**
+     * Index of a component which was not found.
+     */
     private final static int NOT_FOUND = -1;
 
-    /** Default encoding. */
+    /**
+     * Default encoding.
+     */
     private static final String UTF_8_ENCODING = "UTF-8";
 
     /**
@@ -48,59 +51,6 @@ public class URIUtils {
         }
     }
 
-    /**
-     * Searches the query string for the first value with the given key.
-     *
-     * @param key which will be encoded
-     * @throws UnsupportedOperationException if this isn't a hierarchical URI
-     * @throws NullPointerException if key is null
-     * @return the decoded value or null if no parameter is found
-     */
-    public static String getQueryParameter(URI uri, String key) {
-        if (uri.isOpaque()) {
-            throw new UnsupportedOperationException(NOT_HIERARCHICAL);
-        }
-        if (key == null) {
-            throw new NullPointerException("key");
-        }
-
-        final String query = uri.getRawQuery();
-        if (query == null) {
-            return null;
-        }
-
-        final String encodedKey = encode(key, null);
-        final int length = query.length();
-        int start = 0;
-        do {
-            int nextAmpersand = query.indexOf('&', start);
-            int end = nextAmpersand != -1 ? nextAmpersand : length;
-
-            int separator = query.indexOf('=', start);
-            if (separator > end || separator == -1) {
-                separator = end;
-            }
-
-            if (separator - start == encodedKey.length()
-                    && query.regionMatches(start, encodedKey, 0, encodedKey.length())) {
-                if (separator == end) {
-                    return "";
-                } else {
-                    String encodedValue = query.substring(separator + 1, end);
-                    return decode(encodedValue, true, Charset.forName(UTF_8_ENCODING));
-                }
-            }
-
-            // Move start to end of name.
-            if (nextAmpersand != -1) {
-                start = nextAmpersand + 1;
-            } else {
-                break;
-            }
-        } while (true);
-        return null;
-    }
-
     private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
 
     /**
@@ -111,7 +61,7 @@ public class URIUtils {
      *
      * @param s string to encode
      * @return an encoded version of s suitable for use as a URI component,
-     *  or null if s is null
+     * or null if s is null
      */
     public static String encode(String s) {
         return encode(s, null);
@@ -124,11 +74,11 @@ public class URIUtils {
      * all other characters with the exception of those specified in the
      * allow argument.
      *
-     * @param s string to encode
+     * @param s     string to encode
      * @param allow set of additional characters to allow in the encoded form,
-     *  null if no characters should be skipped
+     *              null if no characters should be skipped
      * @return an encoded version of s suitable for use as a URI component,
-     *  or null if s is null
+     * or null if s is null
      */
     public static String encode(String s, String allow) {
         if (s == null) {
@@ -212,10 +162,10 @@ public class URIUtils {
     /**
      * Returns true if the given character is allowed.
      *
-     * @param c character to check
+     * @param c     character to check
      * @param allow characters to allow
      * @return true if the character is allowed or false if it should be
-     *  encoded
+     * encoded
      */
     private static boolean isAllowed(char c, String allow) {
         return (c >= 'A' && c <= 'Z')
@@ -226,6 +176,7 @@ public class URIUtils {
     }
 
     // COPY: Copied from libcore.net.UriCodec
+
     /**
      * @param convertPlus true to convert '+' to ' '.
      */
@@ -236,7 +187,7 @@ public class URIUtils {
 
         StringBuilder result = new StringBuilder(s.length());
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        for (int i = 0; i < s.length();) {
+        for (int i = 0; i < s.length(); ) {
             char c = s.charAt(i);
             if (c == '%') {
                 do {
@@ -266,6 +217,7 @@ public class URIUtils {
     }
 
     // COPY: Copied from libcore.net.UriCodec
+
     /**
      * Like {@link Character#digit}, but without support for non-ASCII
      * characters.

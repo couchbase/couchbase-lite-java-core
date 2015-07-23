@@ -1,14 +1,14 @@
 /**
  * Original iOS version by  Jens Alfke
  * Ported to Android by Marty Schoch
- *
+ * <p/>
  * Copyright (c) 2012 Couchbase, Inc. All rights reserved.
- *
+ * <p/>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
- *
+ * <p/>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p/>
  * Unless required by applicable law or agreed to in writing, software distributed under the
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions
@@ -37,7 +37,7 @@ import java.util.zip.GZIPInputStream;
 
 /**
  * A persistent content-addressable store for arbitrary-size data blobs.
- * Each blob is stored as a file named by its SHA-1 digest.
+ * Each blob is stored as a file named by its SHA-1 getDigest.
  * @exclude
  */
 public class BlobStore {
@@ -57,19 +57,22 @@ public class BlobStore {
         File directory = new File(path);
 
         if (!directory.exists()) {
-            directory.mkdirs();
+            if (!directory.mkdirs())
+                Log.w(Log.TAG_DATABASE, "Unable to make directory: %s", directory);
         }
         if (!directory.isDirectory()) {
-            throw new IllegalStateException(String.format("Unable to create directory for: %s", directory));
+            throw new IllegalStateException(String.format("Unable to create directory for: %s",
+                    directory));
         }
 
         // migrate blobstore filenames.
-        if(autoMigrate) {
+        if (autoMigrate) {
             migrateBlobstoreFilenames(directory);
         }
     }
-    protected void migrateBlobstoreFilenames(File directory){
-        if(directory == null || !directory.isDirectory())
+
+    protected void migrateBlobstoreFilenames(File directory) {
+        if (directory == null || !directory.isDirectory())
             return;
 
         File[] files = directory.listFiles(new FilenameFilter() {
@@ -79,7 +82,7 @@ public class BlobStore {
             }
         });
 
-        for(File file : files){
+        for (File file : files) {
             String name = file.getName().substring(0);
             name = name.substring(0, name.indexOf(FILE_EXTENSION));
             File dest = new File(directory, name.toUpperCase() + FILE_EXTENSION);
@@ -92,7 +95,7 @@ public class BlobStore {
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 digest is unavailable.");
+            Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 getDigest is unavailable.");
             return null;
         }
         byte[] sha1hash = new byte[40];
@@ -107,7 +110,7 @@ public class BlobStore {
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 digest is unavailable.");
+            Log.e(Log.TAG_BLOB_STORE, "Error, SHA-1 getDigest is unavailable.");
             return null;
         }
         byte[] sha1hash = new byte[40];
@@ -116,7 +119,7 @@ public class BlobStore {
             FileInputStream fis = new FileInputStream(file);
             byte[] buffer = new byte[65536];
             int lenRead = fis.read(buffer);
-            while(lenRead > 0) {
+            while (lenRead > 0) {
                 md.update(buffer, 0, lenRead);
                 lenRead = fis.read(buffer);
             }
@@ -130,26 +133,32 @@ public class BlobStore {
         return result;
     }
 
-    public String pathForKey(BlobKey key) {
+    public String getBlobPathForKey(BlobKey key) {
+        return getRawPathForKey(key);
+    }
+
+    public String getRawPathForKey(BlobKey key) {
         String hexKey = BlobKey.convertToHex(key.getBytes());
 
         String filename = path + File.separator + hexKey + FILE_EXTENSION;
 
         // CBL Android/Java used to use lowercase hex string. But it was inconsistent with CBL iOS.
         // We fixed it in BlobKey.covertToHex().
-        // In case user will migrate from older version of CBL to newer version, it causes filename mismatch by upper or lower case.
-        // As pathForKey() method is called from many other functions, file mismatch check is added here.
+        // In case user will migrate from older version of CBL to newer version, it causes filename
+        // mismatch by upper or lower case.
+        // As getRawPathForKey() method is called from many other functions, file mismatch check is
+        // added here.
         File file = new File(filename);
-        if(!file.exists()){
+        if (!file.exists()) {
             String lowercaseFilename = path + File.separator + hexKey.toLowerCase() + FILE_EXTENSION;
             File lowercaseFile = new File(lowercaseFilename);
-            if(lowercaseFile.exists()){
+            if (lowercaseFile.exists()) {
                 filename = lowercaseFilename;
                 Log.w(Log.TAG_BLOB_STORE,
                         "Found the older attachment blobstore file. Recommend to set auto migration:\n" +
-                        "\tManagerOptions options = new ManagerOptions();\n" +
-                        "\toptions.setAutoMigrateBlobStoreFilename(true);\n" +
-                        "\tManager manager = new Manager(..., options);\n"
+                                "\tManagerOptions options = new ManagerOptions();\n" +
+                                "\toptions.setAutoMigrateBlobStoreFilename(true);\n" +
+                                "\tManager manager = new Manager(..., options);\n"
                 );
             }
         }
@@ -158,13 +167,13 @@ public class BlobStore {
     }
 
     public long getSizeOfBlob(BlobKey key) {
-        String path = pathForKey(key);
+        String path = getRawPathForKey(key);
         File file = new File(path);
         return file.length();
     }
 
     public boolean getKeyForFilename(BlobKey outKey, String filename) {
-        if(!filename.endsWith(FILE_EXTENSION)) {
+        if (!filename.endsWith(FILE_EXTENSION)) {
             return false;
         }
         //trim off extension
@@ -175,14 +184,14 @@ public class BlobStore {
         return true;
     }
 
-    public boolean hasBlobForKey(BlobKey key){
-        String path = pathForKey(key);
+    public boolean hasBlobForKey(BlobKey key) {
+        String path = getRawPathForKey(key);
         File file = new File(path);
         return file.isFile() && file.exists();
     }
 
     public byte[] blobForKey(BlobKey key) {
-        String path = pathForKey(key);
+        String path = getRawPathForKey(key);
         File file = new File(path);
         byte[] result = null;
         try {
@@ -194,9 +203,9 @@ public class BlobStore {
     }
 
     public InputStream blobStreamForKey(BlobKey key) {
-        String path = pathForKey(key);
+        String path = getRawPathForKey(key);
         File file = new File(path);
-        if(file.canRead()) {
+        if (file.canRead()) {
             try {
                 return new FileInputStream(file);
             } catch (FileNotFoundException e) {
@@ -215,7 +224,7 @@ public class BlobStore {
             FileOutputStream fos = new FileOutputStream(tmp);
             byte[] buffer = new byte[65536];
             int lenRead = inputStream.read(buffer);
-            while(lenRead > 0) {
+            while (lenRead > 0) {
                 fos.write(buffer, 0, lenRead);
                 lenRead = inputStream.read(buffer);
             }
@@ -228,10 +237,10 @@ public class BlobStore {
 
         BlobKey newKey = keyForBlobFromFile(tmp);
         outKey.setBytes(newKey.getBytes());
-        String path = pathForKey(outKey);
+        String path = getRawPathForKey(outKey);
         File file = new File(path);
 
-        if(file.canRead()) {
+        if (file.canRead()) {
             // object with this hash already exists, we should delete tmp file and return true
             tmp.delete();
             return true;
@@ -245,9 +254,9 @@ public class BlobStore {
     public boolean storeBlob(byte[] data, BlobKey outKey) {
         BlobKey newKey = keyForBlob(data);
         outKey.setBytes(newKey.getBytes());
-        String path = pathForKey(outKey);
+        String path = getRawPathForKey(outKey);
         File file = new File(path);
-        if(file.canRead()) {
+        if (file.canRead()) {
             return true;
         }
 
@@ -258,11 +267,11 @@ public class BlobStore {
         } catch (FileNotFoundException e) {
             Log.e(Log.TAG_BLOB_STORE, "Error opening file for output", e);
             return false;
-        } catch(IOException ioe) {
+        } catch (IOException ioe) {
             Log.e(Log.TAG_BLOB_STORE, "Error writing to file", ioe);
             return false;
         } finally {
-            if(fos != null) {
+            if (fos != null) {
                 try {
                     fos.close();
                 } catch (IOException e) {
@@ -270,7 +279,6 @@ public class BlobStore {
                 }
             }
         }
-
         return true;
     }
 
@@ -281,19 +289,19 @@ public class BlobStore {
         long length = file.length();
 
         // Create the byte array to hold the data
-        byte[] bytes = new byte[(int)length];
+        byte[] bytes = new byte[(int) length];
 
         // Read in the bytes
         int offset = 0;
         int numRead = 0;
         while (offset < bytes.length
-               && (numRead=is.read(bytes, offset, bytes.length-offset)) >= 0) {
+                && (numRead = is.read(bytes, offset, bytes.length - offset)) >= 0) {
             offset += numRead;
         }
 
         // Ensure all the bytes have been read in
         if (offset < bytes.length) {
-            throw new IOException("Could not completely read file "+file.getName());
+            throw new IOException("Could not completely read file " + file.getName());
         }
 
         // Close the input stream and return bytes
@@ -339,12 +347,11 @@ public class BlobStore {
         for (File attachment : contents) {
             BlobKey attachmentKey = new BlobKey();
             getKeyForFilename(attachmentKey, attachment.getPath());
-            if(!keysToKeep.contains(attachmentKey)) {
+            if (!keysToKeep.contains(attachmentKey)) {
                 boolean result = attachment.delete();
-                if(result) {
+                if (result) {
                     ++numDeleted;
-                }
-                else {
+                } else {
                     Log.e(Log.TAG_BLOB_STORE, "Error deleting attachment: %s", attachment);
                 }
             }
@@ -355,10 +362,10 @@ public class BlobStore {
     public int deleteBlobs() {
         return deleteBlobsExceptWithKeys(new ArrayList<BlobKey>());
     }
-    
+
     public boolean isGZipped(BlobKey key) {
         int magic = 0;
-        String path = pathForKey(key);
+        String path = getRawPathForKey(key);
         File file = new File(path);
         if (file.canRead()) {
             try {
@@ -373,7 +380,6 @@ public class BlobStore {
     }
 
     public File tempDir() {
-
         File directory = new File(path);
         File tempDirectory = new File(directory, "temp_attachments");
 
@@ -386,5 +392,4 @@ public class BlobStore {
 
         return tempDirectory;
     }
-
 }

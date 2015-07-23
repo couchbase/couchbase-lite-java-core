@@ -1,13 +1,11 @@
 package com.couchbase.lite.router;
 
-
 import com.couchbase.lite.AsyncTask;
-import com.couchbase.lite.Attachment;
 import com.couchbase.lite.BlobStoreWriter;
 import com.couchbase.lite.ChangesOptions;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
-import com.couchbase.lite.Database.TDContentOptions;
+import com.couchbase.lite.Document;
 import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Mapper;
@@ -18,8 +16,8 @@ import com.couchbase.lite.Reducer;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
+import com.couchbase.lite.TransactionalTask;
 import com.couchbase.lite.View;
-import com.couchbase.lite.View.TDViewCollation;
 import com.couchbase.lite.auth.FacebookAuthorizer;
 import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.AttachmentInternal;
@@ -31,6 +29,8 @@ import com.couchbase.lite.replicator.Replication.ChangeListener;
 import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.store.Store;
+import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
@@ -60,8 +60,21 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-
 public class Router implements Database.ChangeListener, Database.DatabaseListener {
+
+    /**
+     * Options for what metadata to include in document bodies
+     */
+    private enum TDContentOptions {
+        TDIncludeAttachments,
+        TDIncludeConflicts,
+        TDIncludeRevs,
+        TDIncludeRevsInfo,
+        TDIncludeLocalSeq,
+        TDNoBody,
+        TDBigAttachmentsFollow,
+        TDNoAttachments
+    }
 
     private Manager manager;
     private Database db;
@@ -88,7 +101,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         this.callbackBlock = callbackBlock;
     }
 
-    public Map<String, String> getQueries() {
+    private Map<String, String> getQueries() {
         if (queries == null) {
             String queryString = connection.getURL().getQuery();
             if (queryString != null && queryString.length() > 0) {
@@ -101,13 +114,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         queries.put(key, value);
                     }
                 }
-
             }
         }
         return queries;
     }
 
-    public boolean getBooleanValueFromBody(String paramName, Map<String, Object> bodyDict, boolean defaultVal) {
+    private boolean getBooleanValueFromBody(String paramName, Map<String, Object> bodyDict,
+                                            boolean defaultVal) {
         boolean value = defaultVal;
         if (bodyDict.containsKey(paramName)) {
             value = Boolean.TRUE.equals(bodyDict.get(paramName));
@@ -115,7 +128,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return value;
     }
 
-    public String getQuery(String param) {
+    private String getQuery(String param) {
         Map<String, String> queries = getQueries();
         if (queries != null) {
             String value = queries.get(param);
@@ -126,12 +139,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return null;
     }
 
-    public boolean getBooleanQuery(String param) {
+    private boolean getBooleanQuery(String param) {
         String value = getQuery(param);
         return (value != null) && !"false".equals(value) && !"0".equals(value);
     }
 
-    public int getIntQuery(String param, int defaultValue) {
+    private int getIntQuery(String param, int defaultValue) {
         int result = defaultValue;
         String value = getQuery(param);
         if (value != null) {
@@ -145,7 +158,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public Object getJSONQuery(String param) {
+    private Object getJSONQuery(String param) {
         String value = getQuery(param);
         if (value == null) {
             return null;
@@ -159,14 +172,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public boolean cacheWithEtag(String etag) {
+    private boolean cacheWithEtag(String etag) {
         String eTag = String.format("\"%s\"", etag);
         connection.getResHeader().add("Etag", eTag);
         String requestIfNoneMatch = connection.getRequestProperty("If-None-Match");
         return eTag.equals(requestIfNoneMatch);
     }
 
-    public Map<String, Object> getBodyAsDictionary() {
+    private Map<String, Object> getBodyAsDictionary() {
         try {
             InputStream contentStream = connection.getRequestInputStream();
             Map<String, Object> bodyMap = Manager.getObjectMapper().readValue(contentStream, Map.class);
@@ -177,7 +190,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
-    public EnumSet<TDContentOptions> getContentOptions() {
+    private EnumSet<TDContentOptions> getContentOptions() {
         EnumSet<TDContentOptions> result = EnumSet.noneOf(TDContentOptions.class);
         if (getBooleanQuery("attachments")) {
             result.add(TDContentOptions.TDIncludeAttachments);
@@ -197,7 +210,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public boolean getQueryOptions(QueryOptions options) {
+    private boolean getQueryOptions(QueryOptions options) {
         // http://wiki.apache.org/couchdb/HTTP_view_API#Querying_Options
         options.setSkip(getIntQuery("skip", options.getSkip()));
         options.setLimit(getIntQuery("limit", options.getLimit()));
@@ -212,7 +225,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             options.setReduce(getBooleanQuery("reduce"));
         }
         options.setGroup(getBooleanQuery("group"));
-        options.setContentOptions(getContentOptions());
+        //options.setContentOptions(getContentOptions());
 
 
         List<Object> keys;
@@ -247,7 +260,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return true;
     }
 
-    public String getMultipartRequestType() {
+    private String getMultipartRequestType() {
         String accept = connection.getRequestProperty("Accept");
         if (accept.startsWith("multipart/")) {
             return accept;
@@ -255,7 +268,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return null;
     }
 
-    public Status openDB() {
+    private Status openDB() {
         if (db == null) {
             return new Status(Status.INTERNAL_SERVER_ERROR);
         }
@@ -268,7 +281,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.OK);
     }
 
-    public static List<String> splitPath(URL url) {
+    private static List<String> splitPath(URL url) {
         String pathString = url.getPath();
         if (pathString.startsWith("/")) {
             pathString = pathString.substring(1);
@@ -284,7 +297,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public void sendResponse() {
+    private void sendResponse() {
         if (!responseSent) {
             responseSent = true;
             if (callbackBlock != null) {
@@ -346,7 +359,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     return;
                 } else {
                     boolean mustExist = false;
-                    db = manager.getDatabaseWithoutOpening(dbName, mustExist);
+                    db = manager.getDatabase(dbName, mustExist);
                     if (db == null) {
                         connection.setResponseCode(Status.BAD_REQUEST);
                         try {
@@ -382,7 +395,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             String name = path.get(1);
             if (!name.startsWith("_")) {
                 // Regular document
-                if (!Database.isValidDocumentId(name)) {
+                if (!Document.isValidDocumentId(name)) {
                     connection.setResponseCode(Status.BAD_REQUEST);
                     try {
                         connection.getResponseOutputStream().close();
@@ -612,13 +625,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return status;
     }
 
-    /*************************************************************************************************/
-    /*** Router+Handlers                                                                         ***/
     /**
-     * *********************************************************************************************
+     * Router+Handlers
      */
 
-    public void setResponseLocation(URL url) {
+    private void setResponseLocation(URL url) {
         String location = url.getPath();
         String query = url.getQuery();
         if (query != null) {
@@ -748,7 +759,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         int count = Math.min(1000, getIntQuery("count", 1));
         List<String> uuids = new ArrayList<String>(count);
         for (int i = 0; i < count; i++) {
-            uuids.add(Database.generateDocumentId());
+            uuids.add(Misc.CreateUUID());
         }
         Map<String, Object> result = new HashMap<String, Object>();
         result.put("uuids", uuids);
@@ -783,7 +794,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     activity.put("transition_source", event.getTransition().getSource());
                     activity.put("transition_destination", event.getTransition().getDestination());
                     activity.put("trigger", event.getTransition().getTrigger());
-                    Log.d(Log.TAG_ROUTER, "do_GET_active_tasks Transition [" + event.getTransition().getTrigger() + "] Source:" + event.getTransition().getSource() + ", Destination:" + event.getTransition().getDestination());
+                    Log.d(Log.TAG_ROUTER,
+                            "do_GET_active_tasks Transition [" + event.getTransition().getTrigger() +
+                                    "] Source:" + event.getTransition().getSource() +
+                                    ", Destination:" + event.getTransition().getDestination());
                 }
 
                 if (longpoll) {
@@ -929,7 +943,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * TODO: CBL iOS supports EventSourceFeed in addition to longpoll and continuous.
      * TODO: Need to catch up CBL iOS: - (void) sendContinuousLine: (NSDictionary*)changeDict in CBL_Router+Handlers.m
      */
-    public void sendContinuousReplicationChanges(Map<String, Object> activity) {
+    private void sendContinuousReplicationChanges(Map<String, Object> activity) {
         try {
             String jsonString = Manager.getObjectMapper().writeValueAsString(activity);
             if (callbackBlock != null) {
@@ -974,7 +988,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public Status do_PUT_Database(Database _db, String _docID, String _attachmentName) {
         if (db.exists()) {
-            return new Status(Status.PRECONDITION_FAILED);
+            return new Status(Status.DUPLICATE);
         }
         if (!db.open()) {
             return new Status(Status.INTERNAL_SERVER_ERROR);
@@ -1011,11 +1025,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (!status.isSuccessful()) {
             return status;
         }
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
+        Map<String, Object> bodyDict = getBodyAsDictionary();
+        if (bodyDict == null) {
             return new Status(Status.BAD_REQUEST);
         }
-        return update(db, null, body, false);
+        return update(db, null, new Body(bodyDict), false);
     }
 
     public Status do_GET_Document_all_docs(Database _db, String _docID, String _attachmentName) throws CouchbaseLiteException {
@@ -1090,16 +1104,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             result.put("ok", "registered");
             connection.setResponseBody(new Body(result));
             return new Status(Status.OK);
-
-
         } else {
             Map<String, Object> result = new HashMap<String, Object>();
             result.put("error", "required fields: access_token, email, remote_url");
             connection.setResponseBody(new Body(result));
             return new Status(Status.BAD_REQUEST);
         }
-
-
     }
 
     public Status do_POST_persona_assertion(Database _db, String _docID, String _attachmentName) {
@@ -1139,71 +1149,86 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_POST_Document_bulk_docs(Database _db, String _docID, String _attachmentName) {
+        // http://wiki.apache.org/couchdb/HTTP_Bulk_Document_API
         Map<String, Object> bodyDict = getBodyAsDictionary();
         if (bodyDict == null) {
             return new Status(Status.BAD_REQUEST);
         }
-        List<Map<String, Object>> docs = (List<Map<String, Object>>) bodyDict.get("docs");
+        final List<Map<String, Object>> docs = (List<Map<String, Object>>) bodyDict.get("docs");
 
-        boolean noNewEdits = getBooleanValueFromBody("new_edits", bodyDict, true) == false;
-        boolean allOrNothing = getBooleanValueFromBody("all_or_nothing", bodyDict, false);
+        final boolean noNewEdits = getBooleanValueFromBody("new_edits", bodyDict, true) == false;
+        final boolean allOrNothing = getBooleanValueFromBody("all_or_nothing", bodyDict, false);
 
-        boolean ok = false;
-        db.beginTransaction();
-        List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
-        try {
-            for (Map<String, Object> doc : docs) {
-                String docID = (String) doc.get("_id");
-                RevisionInternal rev = null;
-                Status status = new Status(Status.OK);
-                Body docBody = new Body(doc);
-                if (noNewEdits) {
-                    rev = new RevisionInternal(docBody);
-                    if (rev.getRevId() == null || rev.getDocId() == null || !rev.getDocId().equals(docID)) {
-                        status = new Status(Status.BAD_REQUEST);
-                    } else {
-                        List<String> history = Database.parseCouchDBRevisionHistory(doc);
-                        db.forceInsert(rev, history, null);
+        final Status status = new Status(Status.OK);
+        final List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
+        boolean ret = db.getStore().runInTransaction(new TransactionalTask() {
+            @Override
+            public boolean run() {
+                boolean ok = false;
+
+                try {
+                    for (Map<String, Object> doc : docs) {
+                        String docID = (String) doc.get("_id");
+                        RevisionInternal rev = null;
+
+                        Body docBody = new Body(doc);
+                        if (noNewEdits) {
+                            rev = new RevisionInternal(docBody);
+                            if (rev.getRevID() == null || rev.getDocID() == null || !rev.getDocID().equals(docID)) {
+                                //status = new Status(Status.BAD_REQUEST);
+                                status.setCode(Status.BAD_REQUEST);
+                            } else {
+                                List<String> history = Database.parseCouchDBRevisionHistory(doc);
+                                db.forceInsert(rev, history, null);
+                            }
+                        } else {
+                            Status outStatus = new Status();
+                            rev = update(db, docID, docBody, false, allOrNothing, outStatus);
+                            status.setCode(outStatus.getCode());
+                        }
+                        Map<String, Object> result = null;
+                        if (status.isSuccessful()) {
+                            result = new HashMap<String, Object>();
+                            result.put("ok", true);
+                            result.put("id", docID);
+                            if (rev != null) {
+                                result.put("rev", rev.getRevID());
+                            }
+                        } else if (allOrNothing) {
+                            //return status;  // all_or_nothing backs out if there's any error
+                            return false;
+                        } else if (status.getCode() == Status.FORBIDDEN) {
+                            result = new HashMap<String, Object>();
+                            result.put("error", "validation failed");
+                            result.put("id", docID);
+                        } else if (status.getCode() == Status.CONFLICT) {
+                            result = new HashMap<String, Object>();
+                            result.put("error", "conflict");
+                            result.put("id", docID);
+                        } else {
+                            //return status;  // abort the whole thing if something goes badly wrong
+                            return false;
+                        }
+                        if (result != null) {
+                            results.add(result);
+                        }
                     }
-                } else {
-                    Status outStatus = new Status();
-                    rev = update(db, docID, docBody, false, allOrNothing, outStatus);
-                    status.setCode(outStatus.getCode());
-                }
-                Map<String, Object> result = null;
-                if (status.isSuccessful()) {
-                    result = new HashMap<String, Object>();
-                    result.put("ok", true);
-                    result.put("id", docID);
-                    if (rev != null) {
-                        result.put("rev", rev.getRevId());
-                    }
-                } else if (allOrNothing) {
-                    return status;  // all_or_nothing backs out if there's any error
-                } else if (status.getCode() == Status.FORBIDDEN) {
-                    result = new HashMap<String, Object>();
-                    result.put("error", "validation failed");
-                    result.put("id", docID);
-                } else if (status.getCode() == Status.CONFLICT) {
-                    result = new HashMap<String, Object>();
-                    result.put("error", "conflict");
-                    result.put("id", docID);
-                } else {
-                    return status;  // abort the whole thing if something goes badly wrong
-                }
-                if (result != null) {
-                    results.add(result);
+                    Log.w(Log.TAG_ROUTER, "%s finished inserting %d revisions in bulk", this, docs.size());
+                    ok = true;
+                } catch (Exception e) {
+                    Log.e(Log.TAG_ROUTER, "%s: Exception inserting revisions in bulk", e, this);
+                } finally {
+                    return ok;
                 }
             }
-            Log.w(Log.TAG_ROUTER, "%s finished inserting %d revisions in bulk", this, docs.size());
-            ok = true;
-        } catch (Exception e) {
-            Log.e(Log.TAG_ROUTER, "%s: Exception inserting revisions in bulk", e, this);
-        } finally {
-            db.endTransaction(ok);
+        });
+
+        if (ret) {
+            connection.setResponseBody(new Body(results));
+            return new Status(Status.CREATED);
+        } else {
+            return status;
         }
-        connection.setResponseBody(new Body(results));
-        return new Status(Status.CREATED);
     }
 
     public Status do_POST_Document_revs_diff(Database _db, String _docID, String _attachmentName) {
@@ -1233,7 +1258,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Return the missing revs in a somewhat different format:
         Map<String, Object> diffs = new HashMap<String, Object>();
         for (RevisionInternal rev : revs) {
-            String docID = rev.getDocId();
+            String docID = rev.getDocID();
 
             List<String> missingRevs = null;
             Map<String, Object> idObj = (Map<String, Object>) diffs.get(docID);
@@ -1248,7 +1273,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 idObj.put("missing", missingRevs);
                 diffs.put(docID, idObj);
             }
-            missingRevs.add(rev.getRevId());
+            missingRevs.add(rev.getRevID());
         }
 
         // FIXME add support for possible_ancestors
@@ -1333,16 +1358,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * CHANGES: *
      */
 
-    public Map<String, Object> changesDictForRevision(RevisionInternal rev) {
+    private Map<String, Object> changesDictForRevision(RevisionInternal rev) {
         Map<String, Object> changesDict = new HashMap<String, Object>();
-        changesDict.put("rev", rev.getRevId());
+        changesDict.put("rev", rev.getRevID());
 
         List<Map<String, Object>> changes = new ArrayList<Map<String, Object>>();
         changes.add(changesDict);
 
         Map<String, Object> result = new HashMap<String, Object>();
         result.put("seq", rev.getSequence());
-        result.put("id", rev.getDocId());
+        result.put("id", rev.getDocID());
         result.put("changes", changes);
         if (rev.isDeleted()) {
             result.put("deleted", true);
@@ -1353,7 +1378,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public Map<String, Object> responseBodyForChanges(List<RevisionInternal> changes, long since) {
+    private Map<String, Object> responseBodyForChanges(List<RevisionInternal> changes, long since) {
         List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
         for (RevisionInternal rev : changes) {
             Map<String, Object> changeDict = changesDictForRevision(rev);
@@ -1368,16 +1393,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public Map<String, Object> responseBodyForChangesWithConflicts(List<RevisionInternal> changes, long since) {
+    private Map<String, Object> responseBodyForChangesWithConflicts(List<RevisionInternal> changes, long since) {
         // Assumes the changes are grouped by docID so that conflicts will be adjacent.
         List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
         String lastDocID = null;
         Map<String, Object> lastEntry = null;
         for (RevisionInternal rev : changes) {
-            String docID = rev.getDocId();
+            String docID = rev.getDocID();
             if (docID.equals(lastDocID)) {
                 Map<String, Object> changesDict = new HashMap<String, Object>();
-                changesDict.put("rev", rev.getRevId());
+                changesDict.put("rev", rev.getRevID());
                 List<Map<String, Object>> inchanges = (List<Map<String, Object>>) lastEntry.get("changes");
                 inchanges.add(changesDict);
             } else {
@@ -1389,7 +1414,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // After collecting revisions, sort by sequence:
         Collections.sort(entries, new Comparator<Map<String, Object>>() {
             public int compare(Map<String, Object> e1, Map<String, Object> e2) {
-                return Misc.TDSequenceCompare((Long) e1.get("seq"), (Long) e2.get("seq"));
+                return Misc.SequenceCompare((Long) e1.get("seq"), (Long) e2.get("seq"));
             }
         });
 
@@ -1409,7 +1434,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public void sendContinuousChange(RevisionInternal rev) {
+    private void sendContinuousChange(RevisionInternal rev) {
         Map<String, Object> changeDict = changesDictForRevision(rev);
         try {
             String jsonString = Manager.getObjectMapper().writeValueAsString(changeDict);
@@ -1428,6 +1453,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
+    /**
+     * Implementation of ChangeListener
+     */
     @Override
     public void changed(Database.ChangeEvent event) {
 
@@ -1478,7 +1506,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (style != null && style.equals("all_docs")) {
             options.setIncludeConflicts(true);
         }
-        options.setContentOptions(getContentOptions());
+        //options.setContentOptions(getContentOptions());
         options.setSortBySequence(!options.isIncludeConflicts());
         options.setLimit(getIntQuery("limit", options.getLimit()));
 
@@ -1530,7 +1558,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * DOCUMENT REQUESTS: *
      */
 
-    public String getRevIDFromIfMatchHeader() {
+    private String getRevIDFromIfMatchHeader() {
         String ifMatch = connection.getRequestProperty("If-Match");
         if (ifMatch == null) {
             return null;
@@ -1541,12 +1569,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         } else {
             return null;
         }
-    }
-
-    public String setResponseEtag(RevisionInternal rev) {
-        String eTag = String.format("\"%s\"", rev.getRevId());
-        connection.getResHeader().add("Etag", eTag);
-        return eTag;
     }
 
     public Status do_GET_Document(Database _db, String docID, String _attachmentName) {
@@ -1562,7 +1584,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 if (isLocalDoc) {
                     rev = db.getLocalDocument(docID, revID);
                 } else {
-                    rev = db.getDocumentWithIDAndRev(docID, revID, options);
+                    /*
+                    rev = db.getDocument(docID, revID, options);
                     // Handle ?atts_since query by stubbing out older attachments:
                     //?atts_since parameter - value is a (URL-encoded) JSON array of one or more revision IDs.
                     // The response will include the content of only those attachments that changed since the given revision(s).
@@ -1575,29 +1598,42 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                             db.stubOutAttachmentsIn(rev, generation + 1);
                         }
                     }
+                    */
+                    boolean includeAttachments = options.contains(TDContentOptions.TDIncludeAttachments);
+                    if (includeAttachments) {
+                        options.remove(TDContentOptions.TDIncludeAttachments);
+                    }
+                    rev = db.getDocument(docID, revID, true);
+                    if (rev != null) {
+                        rev = applyOptionsToRevision(options, rev);
+                    }
+                    if (rev == null) {
+
+                    }
                 }
-                if (rev == null) {
+
+                if (rev == null)
                     return new Status(Status.NOT_FOUND);
-                }
-                if (cacheWithEtag(rev.getRevId())) {
+                if (cacheWithEtag(rev.getRevID()))
                     return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
-                }
+
+                // TODO
 
                 connection.setResponseBody(rev.getBody());
             } else {
                 List<Map<String, Object>> result = null;
                 if (openRevsParam.equals("all")) {
                     // Get all conflicting revisions:
-                    RevisionList allRevs = db.getAllRevisionsOfDocumentID(docID, true);
+                    RevisionList allRevs = db.getAllRevisions(docID, true);
                     result = new ArrayList<Map<String, Object>>(allRevs.size());
                     for (RevisionInternal rev : allRevs) {
 
                         try {
-                            db.loadRevisionBody(rev, options);
+                            db.loadRevisionBody(rev);
                         } catch (CouchbaseLiteException e) {
                             if (e.getCBLStatus().getCode() != Status.INTERNAL_SERVER_ERROR) {
                                 Map<String, Object> dict = new HashMap<String, Object>();
-                                dict.put("missing", rev.getRevId());
+                                dict.put("missing", rev.getRevID());
                                 result.add(dict);
                             } else {
                                 throw e;
@@ -1607,7 +1643,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         Map<String, Object> dict = new HashMap<String, Object>();
                         dict.put("ok", rev.getProperties());
                         result.add(dict);
-
                     }
                 } else {
                     // ?open_revs=[...] returns an array of revisions of the document:
@@ -1617,7 +1652,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     }
                     result = new ArrayList<Map<String, Object>>(openRevs.size());
                     for (String revID : openRevs) {
-                        RevisionInternal rev = db.getDocumentWithIDAndRev(docID, revID, options);
+                        RevisionInternal rev = db.getDocument(docID, revID, true);
                         if (rev != null) {
                             Map<String, Object> dict = new HashMap<String, Object>();
                             dict.put("ok", rev.getProperties());
@@ -1643,36 +1678,111 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
+    /**
+     * in CBL_Router+Handlers.m
+     * - (CBL_Revision*) applyOptions: (CBLContentOptions)options
+     * toRevision: (CBL_Revision*)rev
+     * status: (CBLStatus*)outStatus
+     * 1.1 or earlier => Database.extraPropertiesForRevision()
+     */
+    private RevisionInternal applyOptionsToRevision(EnumSet<TDContentOptions> options, RevisionInternal rev) {
+        if (options != null && (
+                options.contains(TDContentOptions.TDIncludeLocalSeq) ||
+                        options.contains(TDContentOptions.TDIncludeRevs) ||
+                        options.contains(TDContentOptions.TDIncludeRevsInfo) ||
+                        options.contains(TDContentOptions.TDIncludeConflicts) ||
+                        options.contains(TDContentOptions.TDBigAttachmentsFollow))) {
+
+            Map<String, Object> dst = new HashMap<String, Object>();
+            dst.putAll(rev.getProperties());
+            Store store = db.getStore();
+
+            if (options.contains(TDContentOptions.TDIncludeLocalSeq)) {
+                dst.put("_local_seq", rev.getSequence());
+                rev.setProperties(dst);
+            }
+            if (options.contains(TDContentOptions.TDIncludeRevs)) {
+                List<RevisionInternal> revs = db.getRevisionHistory(rev);
+                Map<String, Object> historyDict = RevisionUtils.makeRevisionHistoryDict(revs);
+                dst.put("_revisions", historyDict);
+                rev.setProperties(dst);
+            }
+            if (options.contains(TDContentOptions.TDIncludeRevsInfo)) {
+                List<Object> revsInfo = new ArrayList<Object>();
+                List<RevisionInternal> revs = db.getRevisionHistory(rev);
+                for (RevisionInternal historicalRev : revs) {
+                    Map<String, Object> revHistoryItem = new HashMap<String, Object>();
+                    String status = "available";
+                    if (historicalRev.isDeleted()) {
+                        status = "deleted";
+                    }
+                    if (historicalRev.isMissing()) {
+                        status = "missing";
+                    }
+                    revHistoryItem.put("rev", historicalRev.getRevID());
+                    revHistoryItem.put("status", status);
+                    revsInfo.add(revHistoryItem);
+                }
+                dst.put("_revs_info", revsInfo);
+                rev.setProperties(dst);
+            }
+            if (options.contains(TDContentOptions.TDIncludeConflicts)) {
+                RevisionList revs = store.getAllRevisions(rev.getDocID(), true);
+                if (revs.size() > 1) {
+                    List<String> conflicts = new ArrayList<String>();
+                    for (RevisionInternal aRev : revs) {
+                        if (aRev.equals(rev) || aRev.isDeleted()) {
+                            // don't add in this case
+                        } else {
+                            conflicts.add(aRev.getRevID());
+                        }
+                    }
+                    dst.put("_conflicts", conflicts);
+                }
+                rev.setProperties(dst);
+            }
+            if (options.contains(TDContentOptions.TDBigAttachmentsFollow)) {
+                RevisionInternal nuRev = new RevisionInternal(dst);
+                Status outStatus = new Status(Status.OK);
+                if (!db.expandAttachments(nuRev, 0, false, getBooleanQuery("att_encoding_info"), outStatus))
+                    return null;
+                rev = nuRev;
+            }
+        }
+        return rev;
+    }
+
     public Status do_GET_Attachment(Database _db, String docID, String _attachmentName) {
         try {
             // http://wiki.apache.org/couchdb/HTTP_Document_API#GET
             EnumSet<TDContentOptions> options = getContentOptions();
             options.add(TDContentOptions.TDNoBody);
             String revID = getQuery("rev");  // often null
-            RevisionInternal rev = db.getDocumentWithIDAndRev(docID, revID, options);
+            RevisionInternal rev = db.getDocument(docID, revID, false);
             if (rev == null) {
                 return new Status(Status.NOT_FOUND);
             }
-            if (cacheWithEtag(rev.getRevId())) {
+            if (cacheWithEtag(rev.getRevID())) {
                 return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
             }
 
             String type = null;
             String acceptEncoding = connection.getRequestProperty("accept-encoding");
-            Attachment contents = db.getAttachmentForSequence(rev.getSequence(), _attachmentName);
-
-            if (contents == null) {
+            AttachmentInternal attachment = db.getAttachment(rev, _attachmentName);
+            if (attachment == null) {
                 return new Status(Status.NOT_FOUND);
             }
-            type = contents.getContentType();
+
+            type = attachment.getContentType();
             if (type != null) {
                 connection.getResHeader().add("Content-Type", type);
             }
-            if (acceptEncoding != null && acceptEncoding.contains("gzip") && contents.getGZipped()) {
+            if (acceptEncoding != null && acceptEncoding.contains("gzip") &&
+                    attachment.getEncoding() == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) {
                 connection.getResHeader().add("Content-Encoding", "gzip");
             }
 
-            connection.setResponseInputStream(contents.getContent());
+            connection.setResponseInputStream(attachment.getContentInputStream());
             return new Status(Status.OK);
 
         } catch (CouchbaseLiteException e) {
@@ -1683,7 +1793,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     /**
      * NOTE this departs from the iOS version, returning revision, passing status back by reference
      */
-    public RevisionInternal update(Database _db, String docID, Body body, boolean deleting, boolean allowConflict, Status outStatus) {
+    private RevisionInternal update(Database _db, String docID, Body body, boolean deleting, boolean allowConflict, Status outStatus) {
 
         assert body != null;
 
@@ -1705,7 +1815,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         outStatus.setCode(Status.BAD_REQUEST);
                         return null;
                     }
-                    docID = Database.generateDocumentId();
+                    docID = Misc.CreateUUID();
                 }
             }
             // PUT's revision ID comes from the JSON body.
@@ -1745,19 +1855,29 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    public Status update(Database _db, String docID, Map<String, Object> bodyDict, boolean deleting) {
-        Body body = new Body(bodyDict);
+    /**
+     * in CBL_Router+Handlers.m
+     * - (CBLStatus) update: (CBLDatabase*)db
+     * docID: (NSString*)docID
+     * body: (CBL_Body*)body
+     * deleting: (BOOL)deleting
+     * error: (NSError**)outError
+     */
+    private Status update(Database _db, String docID, Body body, boolean deleting) {
         Status status = new Status();
 
         if (docID != null && docID.isEmpty() == false) {
             // On PUT/DELETE, get revision ID from either ?rev= query or doc body:
             String revParam = getQuery("rev");
-            if (revParam != null && bodyDict != null && bodyDict.size() > 0) {
-                String revProp = (String) bodyDict.get("_rev");
+
+            // TODO: If-Match
+
+            if (revParam != null && body != null) {
+                String revProp = (String) body.getProperties().get("_rev");
                 if (revProp == null) {
                     // No _rev property in body, so use ?rev= query param instead:
-                    bodyDict.put("_rev", revParam);
-                    body = new Body(bodyDict);
+                    body.getProperties().put("_rev", revParam);
+                    //body = new Body(bodyDict);
                 } else if (!revParam.equals(revProp)) {
                     throw new IllegalArgumentException("Mismatch between _rev and rev");
                 }
@@ -1766,12 +1886,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         RevisionInternal rev = update(_db, docID, body, deleting, false, status);
         if (status.isSuccessful()) {
-            cacheWithEtag(rev.getRevId());  // set ETag
+            cacheWithEtag(rev.getRevID());  // set ETag
             if (!deleting) {
                 URL url = connection.getURL();
                 String urlString = url.toExternalForm();
                 if (docID != null) {
-                    urlString += "/" + rev.getDocId();
+                    urlString += "/" + rev.getDocID();
                     try {
                         url = new URL(urlString);
                     } catch (MalformedURLException e) {
@@ -1782,8 +1902,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
             Map<String, Object> result = new HashMap<String, Object>();
             result.put("ok", true);
-            result.put("id", rev.getDocId());
-            result.put("rev", rev.getRevId());
+            result.put("id", rev.getDocID());
+            result.put("rev", rev.getRevID());
             connection.setResponseBody(new Body(result));
         }
         return status;
@@ -1799,12 +1919,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         if (getQuery("new_edits") == null || (getQuery("new_edits") != null && (new Boolean(getQuery("new_edits"))))) {
             // Regular PUT
-            status = update(_db, docID, bodyDict, false);
+            status = update(_db, docID, new Body(bodyDict), false);
         } else {
             // PUT with new_edits=false -- forcible insertion of existing revision:
             Body body = new Body(bodyDict);
             RevisionInternal rev = new RevisionInternal(body);
-            if (rev.getRevId() == null || rev.getDocId() == null || !rev.getDocId().equals(docID)) {
+            if (rev.getRevID() == null || rev.getDocID() == null || !rev.getDocID().equals(docID)) {
                 throw new CouchbaseLiteException(Status.BAD_REQUEST);
             }
             List<String> history = Database.parseCouchDBRevisionHistory(body.getProperties());
@@ -1817,14 +1937,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return update(_db, docID, null, true);
     }
 
-    public Status updateAttachment(String attachment, String docID, InputStream contentStream) throws CouchbaseLiteException {
+    private Status updateAttachment(String attachment, String docID, InputStream contentStream) throws CouchbaseLiteException {
         Status status = new Status(Status.OK);
         String revID = getQuery("rev");
         if (revID == null) {
             revID = getRevIDFromIfMatchHeader();
         }
 
-        BlobStoreWriter body = new BlobStoreWriter(db.getAttachments());
+        BlobStoreWriter body = new BlobStoreWriter(db.getAttachmentStore());
         ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
 
         try {
@@ -1836,13 +1956,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         RevisionInternal rev = db.updateAttachment(attachment, body, connection.getRequestProperty("content-type"), AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
-                docID, revID);
+                docID, revID, null);
         Map<String, Object> resultDict = new HashMap<String, Object>();
         resultDict.put("ok", true);
-        resultDict.put("id", rev.getDocId());
-        resultDict.put("rev", rev.getRevId());
+        resultDict.put("id", rev.getDocID());
+        resultDict.put("rev", rev.getRevID());
         connection.setResponseBody(new Body(resultDict));
-        cacheWithEtag(rev.getRevId());
+        cacheWithEtag(rev.getRevID());
         if (contentStream != null) {
             setResponseLocation(connection.getURL());
         }
@@ -1860,8 +1980,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     /**
      * VIEW QUERIES: *
      */
-
-    public View compileView(String viewName, Map<String, Object> viewProps) {
+    private View compileView(String viewName, Map<String, Object> viewProps) {
         String language = (String) viewProps.get("language");
         if (language == null) {
             language = "javascript";
@@ -1889,18 +2008,18 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         view.setMapReduce(mapBlock, reduceBlock, "1");
         String collation = (String) viewProps.get("collation");
         if ("raw".equals(collation)) {
-            view.setCollation(TDViewCollation.TDViewCollationRaw);
+            view.setCollation(View.TDViewCollation.TDViewCollationRaw);
         }
         return view;
     }
 
-    public Status queryDesignDoc(String designDoc, String viewName, List<Object> keys) throws CouchbaseLiteException {
+    private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys) throws CouchbaseLiteException {
         String tdViewName = String.format("%s/%s", designDoc, viewName);
         View view = db.getExistingView(tdViewName);
         if (view == null || view.getMap() == null) {
             // No TouchDB view is defined, or it hasn't had a map block assigned;
             // see if there's a CouchDB view definition we can compile:
-            RevisionInternal rev = db.getDocumentWithIDAndRev(String.format("_design/%s", designDoc), null, EnumSet.noneOf(TDContentOptions.class));
+            RevisionInternal rev = db.getDocument(String.format("_design/%s", designDoc), null, true);
             if (rev == null) {
                 return new Status(Status.NOT_FOUND);
             }
@@ -1943,7 +2062,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         // convert from QueryRow -> Map
-        List<QueryRow> queryRows = view.queryWithOptions(options);
+        List<QueryRow> queryRows = view.query(options);
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
         for (QueryRow queryRow : queryRows) {
             rows.add(queryRow.asJSONDictionary());
