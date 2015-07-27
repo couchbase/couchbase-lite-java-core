@@ -17,6 +17,7 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.RevisionUtils;
+import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
@@ -444,7 +445,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
                         List<Object> docsToSend = new ArrayList<Object>();
                         RevisionList revsToSend = new RevisionList();
-                        //long bufferedSize = 0;
+                        long bufferedSize = 0;
                         for (RevisionInternal rev : changes) {
                             // Is this revision in the server's 'missing' list?
                             Map<String, Object> properties = null;
@@ -506,15 +507,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             revsToSend.add(rev);
                             docsToSend.add(properties);
 
-                            /* TODO
-                            bufferedSize += JSONUtils.estimateMemorySize(properties);
+                            bufferedSize += JSONUtils.estimate(properties);
                             if (bufferedSize > kMaxBulkDocsObjectSize) {
                                 uploadBulkDocs(docsToSend, revsToSend);
                                 docsToSend = new ArrayList<Object>();
                                 revsToSend = new RevisionList();
                                 bufferedSize = 0;
                             }
-                            */
                         }
 
                         // Post the revisions to the destination:
