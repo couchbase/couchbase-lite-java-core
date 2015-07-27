@@ -1792,10 +1792,21 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     /**
      * NOTE this departs from the iOS version, returning revision, passing status back by reference
+     *
+     * - (CBLStatus) update: (CBLDatabase*)db
+     *                docID: (NSString*)docID
+     *                 body: (CBL_Body*)body
+     *             deleting: (BOOL)deleting
+     *        allowConflict: (BOOL)allowConflict
+     *           createdRev: (CBL_Revision**)outRev
+     *                error: (NSError**)outError
      */
     private RevisionInternal update(Database _db, String docID, Body body, boolean deleting, boolean allowConflict, Status outStatus) {
 
-        assert body != null;
+        if(body != null && !body.isValidJSON()){
+            outStatus.setCode(Status.BAD_JSON);
+            return null;
+        }
 
         boolean isLocalDoc = docID != null && docID.startsWith(("_local"));
         String prevRevID = null;
