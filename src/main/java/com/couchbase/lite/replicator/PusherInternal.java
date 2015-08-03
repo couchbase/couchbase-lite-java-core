@@ -395,11 +395,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
             RevisionInternal rev = change.getAddedRevision();
             if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
-
                 pauseOrResume();
                 waitIfPaused();
-
-                addToInbox(rev);
+                RevisionInternal nuRev = rev.copy();
+                nuRev.setBody(null); //save memory
+                addToInbox(nuRev);
             }
         }
     }
