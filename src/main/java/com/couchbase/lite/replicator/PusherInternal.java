@@ -12,10 +12,12 @@ import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequest;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.RevisionUtils;
+import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
@@ -48,6 +50,11 @@ import java.util.concurrent.ScheduledExecutorService;
 @InterfaceAudience.Private
 public class PusherInternal extends ReplicationInternal implements Database.ChangeListener {
 
+    // Max in-memory size of buffered bulk_docs dictionary
+    private static long kMaxBulkDocsObjectSize = 5*1000*1000;
+
+    public static final int MAX_PENDING_DOCS = 200;
+
     private boolean createTarget;
     private boolean creatingTarget;
     private boolean observing;
@@ -55,6 +62,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private boolean dontSendMultipart = false;
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
+
+    private boolean paused = false;
+    private Object  pausedObj = new Object();
 
     /**
      * Constructor
@@ -181,50 +191,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     /**
-     * Adds a local revision to the "pending" set that are awaiting upload:
+     * - (void) maybeCreateRemoteDB in CBL_Replicator.m
      */
-    @InterfaceAudience.Private
-    private void addPending(RevisionInternal revisionInternal) {
-        long seq = revisionInternal.getSequence();
-        pendingSequences.add(seq);
-        if (seq > maxPendingSequence) {
-            maxPendingSequence = seq;
-        }
-    }
-
-    /**
-     * Removes a revision from the "pending" set after it's been uploaded. Advances checkpoint.
-     */
-    @InterfaceAudience.Private
-    private void removePending(RevisionInternal revisionInternal) {
-        long seq = revisionInternal.getSequence();
-        if (pendingSequences == null || pendingSequences.isEmpty()) {
-            Log.w(Log.TAG_SYNC, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
-                    this, revisionInternal);
-            return;
-        }
-        boolean wasFirst = (seq == pendingSequences.first());
-        if (!pendingSequences.contains(seq)) {
-            Log.w(Log.TAG_SYNC, "%s: removePending: sequence %s not in set, for rev %s",
-                    this, seq, revisionInternal);
-        }
-        pendingSequences.remove(seq);
-        if (wasFirst) {
-            // If I removed the first pending sequence, can advance the checkpoint:
-            long maxCompleted;
-            if (pendingSequences.size() == 0) {
-                maxCompleted = maxPendingSequence;
-            } else {
-                maxCompleted = pendingSequences.first();
-                --maxCompleted;
-            }
-            setLastSequence(Long.toString(maxCompleted));
-        }
-    }
-
     @Override
     @InterfaceAudience.Private
-    void maybeCreateRemoteDB() {
+    protected void maybeCreateRemoteDB() {
         if (!createTarget) {
             return;
         }
@@ -252,9 +223,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         pendingFutures.add(future);
     }
 
+    /**
+     * - (void) beginReplicating in CBL_Replicator.m
+     */
     @Override
     @InterfaceAudience.Private
     public void beginReplicating() {
+        // If we're still waiting to create the remote db, do nothing now. (This method will be
+        // re-invoked after that request finishes; see -maybeCreateRemoteDB above.)
 
         Log.d(Log.TAG_SYNC, "%s: beginReplicating() called", this);
 
@@ -279,7 +255,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if (filterName != null && filter == null) {
             Log.w(Log.TAG_SYNC, "%s: No ReplicationFilter registered for filter '%s'; ignoring",
                     this, filterName);
-            ;
         }
 
         // Process existing changes since the last push:
@@ -293,8 +268,19 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         RevisionList changes = db.changesSince(lastSequenceLong, options, filter, filterParams);
         if (changes.size() > 0) {
             Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %s", this, changes.size(), lastSequence);
-            batcher.queueObjects(changes);
-            batcher.flush();
+            int remaining = changes.size();
+            int size = batcher.getCapacity();
+            int start = 0;
+            while(remaining > 0){
+                if(size > remaining)
+                    size = remaining;
+                RevisionList subChanges = new RevisionList(changes.subList(start, start+size));
+                batcher.queueObjects(subChanges);
+                start += size;
+                remaining -= size;
+                pauseOrResume();
+                waitIfPaused();
+            }
         } else {
             Log.d(Log.TAG_SYNC, "%s: No changes since %s", this, lastSequence);
         }
@@ -310,7 +296,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
     }
 
-
+    /**
+     * - (void) stopObserving in CBL_Replicator.m
+     */
     @InterfaceAudience.Private
     private void stopObserving() {
         if (observing) {
@@ -341,6 +329,60 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         stopObserving();
     }
 
+
+    /**
+     * Adds a local revision to the "pending" set that are awaiting upload:
+     * - (void) addPending: (CBL_Revision*)rev in CBLRestPusher.m
+     */
+    @InterfaceAudience.Private
+    private void addPending(RevisionInternal revisionInternal) {
+        long seq = revisionInternal.getSequence();
+        pendingSequences.add(seq);
+        if (seq > maxPendingSequence) {
+            maxPendingSequence = seq;
+        }
+    }
+
+    /**
+     * Removes a revision from the "pending" set after it's been uploaded. Advances checkpoint.
+     * - (void) removePending: (CBL_Revision*)rev in CBLRestPusher.m
+     */
+    @InterfaceAudience.Private
+    private void removePending(RevisionInternal revisionInternal) {
+        long seq = revisionInternal.getSequence();
+        if (pendingSequences == null || pendingSequences.isEmpty()) {
+            Log.w(Log.TAG_SYNC, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
+                    this, revisionInternal);
+            if(revisionInternal.getBody()!=null)
+                revisionInternal.getBody().release();
+            pauseOrResume();
+            return;
+        }
+        boolean wasFirst = (seq == pendingSequences.first());
+        if (!pendingSequences.contains(seq)) {
+            Log.w(Log.TAG_SYNC, "%s: removePending: sequence %s not in set, for rev %s",
+                    this, seq, revisionInternal);
+        }
+        pendingSequences.remove(seq);
+        if (wasFirst) {
+            // If I removed the first pending sequence, can advance the checkpoint:
+            long maxCompleted;
+            if (pendingSequences.size() == 0) {
+                maxCompleted = maxPendingSequence;
+            } else {
+                maxCompleted = pendingSequences.first();
+                --maxCompleted;
+            }
+            setLastSequence(Long.toString(maxCompleted));
+        }
+        if(revisionInternal.getBody()!=null)
+            revisionInternal.getBody().release();
+        pauseOrResume();
+    }
+
+    /**
+     * - (void) dbChanged: (NSNotification*)n in CBLRestPusher.m
+     */
     @Override
     @InterfaceAudience.Private
     public void changed(Database.ChangeEvent event) {
@@ -353,14 +395,23 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
             RevisionInternal rev = change.getAddedRevision();
             if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
-                addToInbox(rev);
+                pauseOrResume();
+                waitIfPaused();
+                RevisionInternal nuRev = rev.copy();
+                nuRev.setBody(null); //save memory
+                addToInbox(nuRev);
             }
         }
     }
 
+    /**
+     * - (void) processInbox: (CBL_RevisionList*)changes in CBLRestPusher.m
+     */
     @Override
     @InterfaceAudience.Private
     protected void processInbox(final RevisionList changes) {
+
+        Log.e(Log.TAG_SYNC, "processInbox() changes="+changes.size());
 
         // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
         // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>
@@ -379,7 +430,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // Call _revs_diff on the target db:
         Log.v(Log.TAG_SYNC, "%s: posting to /_revs_diff", this);
 
-        Future future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object response, Throwable e) {
@@ -392,8 +443,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     if (results.size() != 0) {
                         // Go through the list of local changes again, selecting the ones the destination server
                         // said were missing and mapping them to a JSON dictionary in the form _bulk_docs wants:
-                        final List<Object> docsToSend = new ArrayList<Object>();
+                        List<Object> docsToSend = new ArrayList<Object>();
                         RevisionList revsToSend = new RevisionList();
+                        long bufferedSize = 0;
                         for (RevisionInternal rev : changes) {
                             // Is this revision in the server's 'missing' list?
                             Map<String, Object> properties = null;
@@ -422,6 +474,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             }
 
                             RevisionInternal populatedRev = transformRevision(loadedRev);
+                            loadedRev = null;
 
                             List<String> possibleAncestors = (List<String>) revResults.get("possible_ancestors");
 
@@ -453,6 +506,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
                             revsToSend.add(rev);
                             docsToSend.add(properties);
+
+                            bufferedSize += JSONUtils.estimate(properties);
+                            if (bufferedSize > kMaxBulkDocsObjectSize) {
+                                uploadBulkDocs(docsToSend, revsToSend);
+                                docsToSend = new ArrayList<Object>();
+                                revsToSend = new RevisionList();
+                                bufferedSize = 0;
+                            }
                         }
 
                         // Post the revisions to the destination:
@@ -468,12 +529,18 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
 
         });
+        future.setQueue(pendingFutures);
         pendingFutures.add(future);
+
+        pauseOrResume();
     }
 
     /**
      * Post the revisions to the destination. "new_edits":false means that the server should
      * use the given _rev IDs instead of making up new ones.
+     *
+     * - (void) uploadBulkDocs: (NSArray*)docsToSend changes: (CBL_RevisionList*)changes
+     * in CBLRestPusher.m
      */
     @InterfaceAudience.Private
     protected void uploadBulkDocs(List<Object> docsToSend, final RevisionList changes) {
@@ -490,7 +557,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         bulkDocsBody.put("docs", docsToSend);
         bulkDocsBody.put("new_edits", false);
 
-        Future future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
@@ -531,6 +598,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 addToCompletedChangesCount(numDocsToSend);
             }
         });
+        future.setQueue(pendingFutures);
         pendingFutures.add(future);
     }
 
@@ -624,7 +692,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         addToChangesCount(1);
 
-        Future future = sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 try {
@@ -649,17 +717,19 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     addToCompletedChangesCount(1);
 
                 }
-
             }
         });
+        future.setQueue(pendingFutures);
         pendingFutures.add(future);
 
         return true;
-
     }
 
-    // Fallback to upload a revision if uploadMultipartRevision failed due to the server's rejecting
-    // multipart format.
+    /**
+     * Fallback to upload a revision if uploadMultipartRevision failed due to the server's rejecting
+     * multipart format.
+     * - (void) uploadJSONRevision: (CBL_Revision*)originalRev in CBLRestPusher.m
+     */
     private void uploadJsonRevision(final RevisionInternal rev) {
         // Get the revision's properties:
         if (!db.inlineFollowingAttachmentsIn(rev)) {
@@ -668,7 +738,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
 
         final String path = String.format("/%s?new_edits=false", encodeDocumentId(rev.getDocID()));
-        Future future = sendAsyncRequest("PUT",
+        CustomFuture future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),
                 new RemoteRequestCompletionBlock() {
@@ -681,11 +751,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         }
                     }
                 });
+        future.setQueue(pendingFutures);
         pendingFutures.add(future);
     }
 
-    // Given a revision and an array of revIDs, finds the latest common ancestor revID
-    // and returns its generation #. If there is none, returns 0.
+    /**
+     * Given a revision and an array of revIDs, finds the latest common ancestor revID
+     * and returns its generation #. If there is none, returns 0.
+     *
+     * int CBLFindCommonAncestor(CBL_Revision* rev, NSArray* possibleRevIDs) in CBLRestPusher.m
+     */
     private static int findCommonAncestor(RevisionInternal rev, List<String> possibleRevIDs) {
         if (possibleRevIDs == null || possibleRevIDs.size() == 0) {
             return 0;
@@ -719,6 +794,34 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         @Override
         public String getContentEncoding() {
             return contentEncoding;
+        }
+    }
+
+
+    private void pauseOrResume() {
+        int pending = batcher.count() + pendingSequences.size();
+        setPaused(pending >= MAX_PENDING_DOCS);
+    }
+
+    private void setPaused(boolean paused) {
+        Log.v(Log.TAG, "setPaused: " + paused);
+        synchronized (pausedObj) {
+            if(this.paused != paused) {
+                this.paused = paused;
+                pausedObj.notifyAll();
+            }
+        }
+    }
+
+    private void waitIfPaused(){
+        while (paused) {
+            Log.v(Log.TAG, "Waiting: " + paused);
+            synchronized (pausedObj) {
+                try {
+                    pausedObj.wait();
+                } catch (InterruptedException e) {
+                }
+            }
         }
     }
 }

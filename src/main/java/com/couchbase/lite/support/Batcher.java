@@ -59,6 +59,11 @@ public class Batcher<T> {
     // Instance Methods - Public
     ///////////////////////////////////////////////////////////////////////////
 
+
+    public int getCapacity() {
+        return capacity;
+    }
+
     public int getDelay() {
         return delay;
     }
@@ -151,7 +156,7 @@ public class Batcher<T> {
             try {
                 pendingFuture.get();
             } catch (Exception e) {
-                Log.w(Log.TAG_BATCHER, e.getMessage());
+                Log.i(Log.TAG_BATCHER, "Exception from Future.get()");
             }
         }
 
@@ -170,7 +175,7 @@ public class Batcher<T> {
             try {
                 pendingFuture.get();
             } catch (Exception e) {
-                Log.w(Log.TAG_BATCHER, e.getMessage());
+                Log.i(Log.TAG_BATCHER, "Exception from Future.get()");
             }
         }
         Log.v(Log.TAG_BATCHER, "%s: /waitForPendingFutures", this);

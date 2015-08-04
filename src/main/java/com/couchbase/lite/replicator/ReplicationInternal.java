@@ -65,8 +65,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         SYNC, ASYNC
     }
 
-    ;
-
     public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
 
     public static final String CHANNELS_QUERY_PARAM = "channels";
@@ -472,7 +470,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
 
     @InterfaceAudience.Private
-    /* package */ void addToCompletedChangesCount(int delta) {
+    protected void addToCompletedChangesCount(int delta) {
         int previousVal = getCompletedChangesCount().getAndAdd(delta);
         Log.v(Log.TAG_SYNC, "%s: Incrementing completedChangesCount count from %s by adding %d -> %d",
                 this, previousVal, delta, completedChangesCount.get());
@@ -481,7 +479,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     @InterfaceAudience.Private
-    /* package */ void addToChangesCount(int delta) {
+    protected void addToChangesCount(int delta) {
         int previousVal = getChangesCount().getAndAdd(delta);
         if (getChangesCount().get() < 0) {
             Log.w(Log.TAG_SYNC, "Changes count is negative, this could indicate an error");
@@ -510,7 +508,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, String relativePath, Object body,
+    public CustomFuture sendAsyncRequest(String method, String relativePath, Object body,
                                    RemoteRequestCompletionBlock onCompletion) {
         return sendAsyncRequest(method, relativePath, body, false, onCompletion);
     }
@@ -519,7 +517,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404,
+    public CustomFuture sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404,
                                    RemoteRequestCompletionBlock onCompletion) {
         try {
             String urlStr = buildRelativeURLString(relativePath);
@@ -535,7 +533,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncRequest(String method, URL url, Object body, boolean dontLog404,
+    public CustomFuture sendAsyncRequest(String method, URL url, Object body, boolean dontLog404,
                                    final RemoteRequestCompletionBlock onCompletion) {
         Log.d(Log.TAG_SYNC, "[sendAsyncRequest()] " + method + " => " + url);
         RemoteRequestRetry request = new RemoteRequestRetry(
@@ -569,15 +567,14 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         });
 
 
-        Future future = request.submit(canSendCompressedRequests());
-        return future;
+        return request.submit(canSendCompressedRequests());
     }
 
     /**
      * @exclude
      */
     @InterfaceAudience.Private
-    public Future sendAsyncMultipartRequest(String method, String relativePath,
+    public CustomFuture sendAsyncMultipartRequest(String method, String relativePath,
                                             MultipartEntity multiPartEntity,
                                             RemoteRequestCompletionBlock onCompletion) {
         URL url = null;
@@ -603,9 +600,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
         request.setAuthenticator(getAuthenticator());
 
-        Future future = request.submit();
-        return future;
-
+        return request.submit();
     }
 
     /**
@@ -635,12 +630,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
             request.setAuthenticator(getAuthenticator());
 
-            CustomFuture future = request.submit();
-            return future;
+            return request.submit();
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
-
         return null;
     }
 
@@ -648,11 +641,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     /**
      * Get the local database which is the source or target of this replication
      */
-    /* package */ Database getLocalDatabase() {
+    protected Database getLocalDatabase() {
         return db;
     }
 
-    /* package */ void setLocalDatabase(Database db) {
+    protected void setLocalDatabase(Database db) {
         this.db = db;
     }
 
@@ -803,7 +796,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     @InterfaceAudience.Private
-    /* package */ String buildRelativeURLString(String relativePath) {
+    protected String buildRelativeURLString(String relativePath) {
 
         // the following code is a band-aid for a system problem in the codebase
         // where it is appending "relative paths" that start with a slash, eg:
@@ -883,8 +876,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
 
-    /* package */
-    abstract void maybeCreateRemoteDB();
+    protected abstract void maybeCreateRemoteDB();
 
     /**
      * This is the _local document ID stored on the remote server to keep track of state.
@@ -1283,7 +1275,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     @InterfaceAudience.Private
-    /* package */ boolean serverIsSyncGatewayVersion(String minVersion) {
+    protected boolean serverIsSyncGatewayVersion(String minVersion) {
         String prefix = "Couchbase Sync Gateway/";
         if (serverType == null) {
             return false;
@@ -1389,7 +1381,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     @InterfaceAudience.Private
-    /* package */ void setServerType(String serverType) {
+    protected void setServerType(String serverType) {
         this.serverType = serverType;
     }
 
@@ -1566,7 +1558,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.clientFactory.deleteCookie(name);
     }
 
-    /* package */ HttpClientFactory getClientFactory() {
+    protected HttpClientFactory getClientFactory() {
         return clientFactory;
     }
 
@@ -1642,7 +1634,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * <p/>
      * Avoids encoding the slash in _design documents since it may cause a 301 redirect.
      */
-    /* package */ String encodeDocumentId(String docId) {
+    protected String encodeDocumentId(String docId) {
         if (docId.startsWith("_design/")) {
             // http://docs.couchdb.org/en/1.6.1/http-api.html#cap-/{db}/_design/{ddoc}
             String designDocId = docId.substring("_design/".length());

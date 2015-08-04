@@ -119,7 +119,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         return true;
     }
 
-    /* package */ void maybeCreateRemoteDB() {
+    protected void maybeCreateRemoteDB() {
         // puller never needs to do this
     }
 
