@@ -105,6 +105,7 @@ public class AttachmentInternal {
                 if (revPos <= 0) {
                     throw new CouchbaseLiteException(Status.BAD_ATTACHMENT);
                 }
+                setRevpos(revPos);
             }
             // skip
         } else if (attachInfo.containsKey("follows") &&
