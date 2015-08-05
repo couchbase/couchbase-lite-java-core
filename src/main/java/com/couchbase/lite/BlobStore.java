@@ -185,6 +185,7 @@ public class BlobStore {
     }
 
     public boolean hasBlobForKey(BlobKey key) {
+        if(key == null) return false;
         String path = getRawPathForKey(key);
         File file = new File(path);
         return file.isFile() && file.exists();
