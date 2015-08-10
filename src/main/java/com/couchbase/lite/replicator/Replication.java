@@ -1,8 +1,11 @@
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Database;
+import com.couchbase.lite.Document;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.NetworkReachabilityListener;
+import com.couchbase.lite.ReplicationFilter;
+import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
@@ -13,8 +16,10 @@ import com.couchbase.lite.util.Log;
 import java.net.URL;
 import java.util.Date;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -32,15 +37,14 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      *
      * @exclude
      */
-    public enum Direction { PULL, PUSH };
-
+    public enum Direction { PULL, PUSH }
 
     /**
      * Enum to specify whether this replication is oneshot or continuous.
      *
      * @exclude
      */
-    public enum Lifecycle { ONESHOT, CONTINUOUS };
+    public enum Lifecycle { ONESHOT, CONTINUOUS }
 
     /**
      * @exclude
@@ -73,6 +77,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected Throwable lastError;
     protected Direction direction;
 
+    private Set<String> pendingDocIDs;
+
     public enum ReplicationField {
         FILTER_NAME,
         FILTER_PARAMS,
@@ -86,7 +92,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * Properties of the replicator that are saved across restarts
      */
     protected Map<ReplicationField, Object> properties;
-
 
     /**
      * Constructor
@@ -106,7 +111,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                     }
                 })
         );
-
     }
 
     /**
@@ -127,7 +131,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         setClientFactory(clientFactory);
 
         initReplicationInternal();
-
     }
 
     private void initReplicationInternal() {
@@ -159,9 +162,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         addProperties(replicationInternal);
 
         replicationInternal.addChangeListener(this);
-
     }
-
 
     /**
      * Starts the replication, asynchronously.
@@ -229,7 +230,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         start();
     }
 
-
     /**
      * Tell the replication to go offline, asynchronously.
      */
@@ -290,9 +290,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         } else {
             this.lifecycle = Lifecycle.ONESHOT;
             replicationInternal.setLifecycle(Lifecycle.ONESHOT);
-
         }
-
     }
 
     /**
@@ -406,20 +404,83 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     /**
      * Update the lastError
      */
-    /* package */ void setLastError(Throwable lastError) {
+    protected void setLastError(Throwable lastError) {
         this.lastError = lastError;
     }
 
-    /* package */ String remoteCheckpointDocID() {
+    /**
+     * Following two methods for temporary methods instead of CBL_ReplicatorSettings implementation.
+     */
+    protected String remoteCheckpointDocID() {
         return replicationInternal.remoteCheckpointDocID();
     }
+    protected String fallbackRemoteCheckopointDocID(){
+        Map<String, Object> doc = db.getLocalCheckpointDocument();
+        if(doc!=null) {
+            String importedUUID = (String)doc.get("localUUID");
+            if(importedUUID!=null) {
+                return replicationInternal.remoteCheckpointDocID(importedUUID);
+            }
+        }
+        return null;
+    }
+
+    public Set<String> getPendingDocumentIDs(){
+        if(isPull() || (isRunning() && pendingDocIDs != null))
+            return pendingDocIDs;
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        pendingDocIDs = new HashSet<String>();
+        this.workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String filterName = (String) properties.get("filter");
+                    Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
+                    ReplicationFilter filter = null;
+                    if (filterName != null) {
+                        filter = db.getFilter(filterName);
+                    }
+
+                    String lastSequence = replicationInternal.lastSequence;
+                    if (lastSequence == null)
+                        lastSequence = db.getLastSequenceForReplicator(
+                                remoteCheckpointDocID(),
+                                fallbackRemoteCheckopointDocID());
+                    RevisionList revs = db.unpushedRevisionsSince(lastSequence, filter, filterParams);
+                    Log.e(Log.TAG_SYNC, revs.toString());
+                    if (revs != null) {
+                        pendingDocIDs = new HashSet<String>();
+                        pendingDocIDs.addAll(revs.getAllDocIds());
+                    } else
+                        pendingDocIDs = null;
+                }
+                finally {
+                    latch.countDown();
+                }
+            }
+        });
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Log.e(Log.TAG_SYNC, "InterruptedException", e);
+        }
+
+        return pendingDocIDs;
+    }
+
+    public boolean isDocumentPending(Document doc){
+        return doc != null && getPendingDocumentIDs().contains(doc.getId());
+    }
+
 
     /**
      * A delegate that can be used to listen for Replication changes.
      */
     @InterfaceAudience.Public
-    public static interface ChangeListener {
-        public void changed(ChangeEvent event);
+    public interface ChangeListener {
+        void changed(ChangeEvent event);
     }
 
     /**
@@ -435,7 +496,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         private int completedChangeCount;
         private Throwable error;
 
-        /* package */ ChangeEvent(ReplicationInternal replInternal) {
+        protected ChangeEvent(ReplicationInternal replInternal) {
             this.source = replInternal.parentReplication;
             this.changeCount = replInternal.getChangesCount().get();
             this.completedChangeCount =replInternal.getCompletedChangesCount().get();
@@ -458,7 +519,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             return transition;
         }
 
-        /* package */ void setTransition(ReplicationStateTransition transition) {
+        protected void setTransition(ReplicationStateTransition transition) {
             this.transition = transition;
         }
 
@@ -489,7 +550,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             return error;
         }
 
-        /* package */ void setError(Throwable error) {
+        protected void setError(Throwable error) {
             this.error = error;
         }
 
@@ -510,7 +571,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             sb.append(getCompletedChangeCount());
             return sb.toString();
         }
-
     }
 
     /**
@@ -541,12 +601,12 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     }
 
     @InterfaceAudience.Private
-    /* package */ boolean serverIsSyncGatewayVersion(String minVersion) {
+    protected boolean serverIsSyncGatewayVersion(String minVersion) {
         return replicationInternal.serverIsSyncGatewayVersion(minVersion);
     }
 
     @InterfaceAudience.Private
-    /* package */ void setServerType(String serverType) {
+    protected void setServerType(String serverType) {
         replicationInternal.setServerType(serverType);
     }
 
@@ -611,7 +671,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public void setCookie(String name, String value, String path, Date expirationDate, boolean secure, boolean httpOnly) {
         replicationInternal.setCookie(name, value, path, expirationDate, secure, httpOnly);
-
     }
 
     /**
@@ -625,15 +684,13 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     }
 
     @InterfaceAudience.Private
-    /* package */ HttpClientFactory getClientFactory() {
+    protected HttpClientFactory getClientFactory() {
         return replicationInternal.getClientFactory();
     }
 
     @InterfaceAudience.Private
-    /* package */ String buildRelativeURLString(String relativePath) {
-
+    protected String buildRelativeURLString(String relativePath) {
         return replicationInternal.buildRelativeURLString(relativePath);
-
     }
 
     /**

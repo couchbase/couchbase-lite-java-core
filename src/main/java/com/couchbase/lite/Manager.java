@@ -42,7 +42,6 @@ import java.util.regex.Pattern;
  */
 public final class Manager {
 
-    protected static final String DATABASE_SUFFIX_OLD = ".touchdb"; // TouchDB
     protected static final String kV1DBExtension = ".cblite"; // Couchbase Lite 1.0
     protected static final String kDBExtension = ".cblite2";
     protected static final String DEFAULT_STORE_CLASSNAME = "com.couchbase.lite.store.SQLiteStore";

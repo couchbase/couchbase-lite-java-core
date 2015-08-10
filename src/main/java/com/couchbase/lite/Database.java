@@ -75,6 +75,8 @@ public class Database implements StoreDelegate {
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     public static int DEFAULT_MAX_REVS = 20;
 
+    private static String kLocalCheckpointDocId = "CBL_LocalCheckpoint";
+
 
     private Store store = null;
     private String path;
@@ -1215,6 +1217,33 @@ public class Database implements StoreDelegate {
                                      ReplicationFilter filter,
                                      Map<String, Object> filterParams) {
         return store.changesSince(lastSeq, options, filter, filterParams);
+    }
+
+    @InterfaceAudience.Private
+    public Map<String, Object> getLocalCheckpointDocument() {
+        return this.getExistingLocalDocument(kLocalCheckpointDocId);
+    }
+
+    @InterfaceAudience.Private
+    public String getLastSequenceForReplicator(String checkpointID, String fallbackCheckpointID) {
+        String lastSequence = lastSequenceWithCheckpointId(checkpointID);
+        if (lastSequence == null && fallbackCheckpointID != null) {
+            lastSequence = lastSequenceWithCheckpointId(fallbackCheckpointID);
+        }
+        return lastSequence;
+    }
+
+    @InterfaceAudience.Private
+    public RevisionList unpushedRevisionsSince(String sequence,
+                                               ReplicationFilter filter,
+                                               Map<String, Object> filterParams) {
+        long longSequence = 0;
+        if(sequence != null)
+            longSequence = Long.parseLong(sequence);
+        ChangesOptions options = new ChangesOptions();
+        options.setIncludeConflicts(true);
+
+        return changesSince(longSequence, options, filter, filterParams);
     }
 
     @InterfaceAudience.Private
