@@ -414,16 +414,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected String remoteCheckpointDocID() {
         return replicationInternal.remoteCheckpointDocID();
     }
-    protected String fallbackRemoteCheckopointDocID(){
-        Map<String, Object> doc = db.getLocalCheckpointDocument();
-        if(doc!=null) {
-            String importedUUID = (String)doc.get("localUUID");
-            if(importedUUID!=null) {
-                return replicationInternal.remoteCheckpointDocID(importedUUID);
-            }
-        }
-        return null;
-    }
 
     public Set<String> getPendingDocumentIDs(){
         if(isPull() || (isRunning() && pendingDocIDs != null))
@@ -444,9 +434,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
 
                     String lastSequence = replicationInternal.lastSequence;
                     if (lastSequence == null)
-                        lastSequence = db.getLastSequenceForReplicator(
-                                remoteCheckpointDocID(),
-                                fallbackRemoteCheckopointDocID());
+                        lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
                     RevisionList revs = db.unpushedRevisionsSince(lastSequence, filter, filterParams);
                     Log.e(Log.TAG_SYNC, revs.toString());
                     if (revs != null) {
@@ -471,9 +459,14 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     }
 
     public boolean isDocumentPending(Document doc){
-        return doc != null && getPendingDocumentIDs().contains(doc.getId());
-    }
+        if(doc == null) return false;
 
+        // getPendingDocumentIDs() is not simple getter. so not cheap.
+        Set<String> ids = getPendingDocumentIDs();
+        if(ids == null) return false;
+
+        return ids.contains(doc.getId());
+    }
 
     /**
      * A delegate that can be used to listen for Replication changes.

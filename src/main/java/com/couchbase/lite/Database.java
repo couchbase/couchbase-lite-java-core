@@ -1220,20 +1220,6 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    public Map<String, Object> getLocalCheckpointDocument() {
-        return this.getExistingLocalDocument(kLocalCheckpointDocId);
-    }
-
-    @InterfaceAudience.Private
-    public String getLastSequenceForReplicator(String checkpointID, String fallbackCheckpointID) {
-        String lastSequence = lastSequenceWithCheckpointId(checkpointID);
-        if (lastSequence == null && fallbackCheckpointID != null) {
-            lastSequence = lastSequenceWithCheckpointId(fallbackCheckpointID);
-        }
-        return lastSequence;
-    }
-
-    @InterfaceAudience.Private
     public RevisionList unpushedRevisionsSince(String sequence,
                                                ReplicationFilter filter,
                                                Map<String, Object> filterParams) {
