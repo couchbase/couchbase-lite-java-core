@@ -1258,8 +1258,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * A delegate that can be used to listen for Replication changes.
      */
     @InterfaceAudience.Public
-    public static interface ChangeListener {
-        public void changed(Replication.ChangeEvent event);
+    public interface ChangeListener {
+        void changed(Replication.ChangeEvent event);
     }
 
     public Authenticator getAuthenticator() {

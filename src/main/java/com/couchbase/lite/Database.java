@@ -75,8 +75,6 @@ public class Database implements StoreDelegate {
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     public static int DEFAULT_MAX_REVS = 20;
 
-    private static String kLocalCheckpointDocId = "CBL_LocalCheckpoint";
-
 
     private Store store = null;
     private String path;

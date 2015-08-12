@@ -1,5 +1,6 @@
 package com.couchbase.lite.replicator;
 
+import com.couchbase.lite.AsyncTask;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Document;
 import com.couchbase.lite.Manager;
@@ -185,6 +186,15 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             }
         }
 
+        // forget cached IDs (Should be executed in workExecutor)
+        db.runAsync(new AsyncTask() {
+            @Override
+            public void run(Database database) {
+                pendingDocIDs = null;
+            }
+        });
+
+
         replicationInternal.triggerStart();
     }
 
@@ -367,6 +377,15 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @Override
     public void changed(ChangeEvent event) {
+
+        // forget cached IDs (Should be executed in workExecutor)
+        db.runAsync(new AsyncTask() {
+            @Override
+            public void run(Database database) {
+                pendingDocIDs = null;
+            }
+        });
+
         for (ChangeListener changeListener : changeListeners) {
             try {
                 changeListener.changed(event);
@@ -436,7 +455,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                     if (lastSequence == null)
                         lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
                     RevisionList revs = db.unpushedRevisionsSince(lastSequence, filter, filterParams);
-                    Log.e(Log.TAG_SYNC, revs.toString());
                     if (revs != null) {
                         pendingDocIDs = new HashSet<String>();
                         pendingDocIDs.addAll(revs.getAllDocIds());
