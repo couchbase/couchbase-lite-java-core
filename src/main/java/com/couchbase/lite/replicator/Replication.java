@@ -444,12 +444,11 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     }
 
     public Set<String> getPendingDocumentIDs() {
-        if (isPull() || (isRunning() && pendingDocIDs != null))
-            return pendingDocIDs;
-
         synchronized (lockPendingDocIDs) {
+            if (isPull() || (isRunning() && pendingDocIDs != null))
+                return pendingDocIDs;
+
             final CountDownLatch latch = new CountDownLatch(1);
-            pendingDocIDs = new HashSet<String>();
             this.workExecutor.submit(new Runnable() {
                 @Override
                 public void run() {
