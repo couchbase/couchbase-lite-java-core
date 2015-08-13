@@ -78,6 +78,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected Throwable lastError;
     protected Direction direction;
 
+    private Object lockPendingDocIDs = new Object();
     private Set<String> pendingDocIDs;
 
     public enum ReplicationField {
@@ -187,12 +188,16 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         }
 
         // forget cached IDs (Should be executed in workExecutor)
-        db.runAsync(new AsyncTask() {
-            @Override
-            public void run(Database database) {
-                pendingDocIDs = null;
-            }
-        });
+        if (pendingDocIDs != null) {
+            db.runAsync(new AsyncTask() {
+                @Override
+                public void run(Database database) {
+                    synchronized (lockPendingDocIDs) {
+                        pendingDocIDs = null;
+                    }
+                }
+            });
+        }
 
 
         replicationInternal.triggerStart();
@@ -379,12 +384,16 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     public void changed(ChangeEvent event) {
 
         // forget cached IDs (Should be executed in workExecutor)
-        db.runAsync(new AsyncTask() {
-            @Override
-            public void run(Database database) {
-                pendingDocIDs = null;
-            }
-        });
+        if (pendingDocIDs != null) {
+            db.runAsync(new AsyncTask() {
+                @Override
+                public void run(Database database) {
+                    synchronized (lockPendingDocIDs) {
+                        pendingDocIDs = null;
+                    }
+                }
+            });
+        }
 
         for (ChangeListener changeListener : changeListeners) {
             try {
@@ -434,46 +443,47 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         return replicationInternal.remoteCheckpointDocID();
     }
 
-    public Set<String> getPendingDocumentIDs(){
-        if(isPull() || (isRunning() && pendingDocIDs != null))
+    public Set<String> getPendingDocumentIDs() {
+        if (isPull() || (isRunning() && pendingDocIDs != null))
             return pendingDocIDs;
 
-        final CountDownLatch latch = new CountDownLatch(1);
-        pendingDocIDs = new HashSet<String>();
-        this.workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    String filterName = (String) properties.get("filter");
-                    Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
-                    ReplicationFilter filter = null;
-                    if (filterName != null) {
-                        filter = db.getFilter(filterName);
+        synchronized (lockPendingDocIDs) {
+            final CountDownLatch latch = new CountDownLatch(1);
+            pendingDocIDs = new HashSet<String>();
+            this.workExecutor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        String filterName = (String) properties.get("filter");
+                        Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
+                        ReplicationFilter filter = null;
+                        if (filterName != null) {
+                            filter = db.getFilter(filterName);
+                        }
+
+                        String lastSequence = replicationInternal.lastSequence;
+                        if (lastSequence == null)
+                            lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
+                        RevisionList revs = db.unpushedRevisionsSince(lastSequence, filter, filterParams);
+                        if (revs != null) {
+                            pendingDocIDs = new HashSet<String>();
+                            pendingDocIDs.addAll(revs.getAllDocIds());
+                        } else
+                            pendingDocIDs = null;
+                    } finally {
+                        latch.countDown();
                     }
+                }
+            });
 
-                    String lastSequence = replicationInternal.lastSequence;
-                    if (lastSequence == null)
-                        lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
-                    RevisionList revs = db.unpushedRevisionsSince(lastSequence, filter, filterParams);
-                    if (revs != null) {
-                        pendingDocIDs = new HashSet<String>();
-                        pendingDocIDs.addAll(revs.getAllDocIds());
-                    } else
-                        pendingDocIDs = null;
-                }
-                finally {
-                    latch.countDown();
-                }
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                Log.e(Log.TAG_SYNC, "InterruptedException", e);
             }
-        });
 
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            Log.e(Log.TAG_SYNC, "InterruptedException", e);
+            return pendingDocIDs;
         }
-
-        return pendingDocIDs;
     }
 
     public boolean isDocumentPending(Document doc){
