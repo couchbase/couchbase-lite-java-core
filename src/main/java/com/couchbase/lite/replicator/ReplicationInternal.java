@@ -887,60 +887,56 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
 
     public String remoteCheckpointDocID() {
-
         if (remoteCheckpointDocID != null) {
             return remoteCheckpointDocID;
         } else {
-
-            // TODO: Needs to be consistent with -hasSameSettingsAs: --
-            // TODO: If a.remoteCheckpointID == b.remoteCheckpointID then [a hasSameSettingsAs: b]
-
-            if (db == null) {
+           if (db == null) {
                 return null;
             }
-
-            // canonicalization: make sure it produces the same checkpoint id regardless of
-            // ordering of filterparams / docids
-            Map<String, Object> filterParamsCanonical = null;
-            if (getFilterParams() != null) {
-                filterParamsCanonical = new TreeMap<String, Object>(getFilterParams());
-            }
-
-            List<String> docIdsSorted = null;
-            if (getDocIds() != null) {
-                docIdsSorted = new ArrayList<String>(getDocIds());
-                Collections.sort(docIdsSorted);
-            }
-
-            // use a treemap rather than a dictionary for purposes of canonicalization
-            Map<String, Object> spec = new TreeMap<String, Object>();
-            spec.put("localUUID", db.privateUUID());
-            spec.put("remoteURL", remote.toExternalForm());
-            spec.put("push", !isPull());
-            spec.put("continuous", isContinuous());
-            if (getFilter() != null) {
-                spec.put("filter", getFilter());
-            }
-            if (filterParamsCanonical != null) {
-                spec.put("filterParams", filterParamsCanonical);
-            }
-            if (docIdsSorted != null) {
-                spec.put("docids", docIdsSorted);
-            }
-
-            byte[] inputBytes = null;
-            try {
-                inputBytes = db.getManager().getObjectMapper().writeValueAsBytes(spec);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            remoteCheckpointDocID = Misc.HexSHA1Digest(inputBytes);
-            return remoteCheckpointDocID;
-
+            return remoteCheckpointDocID(db.privateUUID());
         }
-
     }
 
+    public String remoteCheckpointDocID(String localUUID) {
+
+        // canonicalization: make sure it produces the same checkpoint id regardless of
+        // ordering of filterparams / docids
+        Map<String, Object> filterParamsCanonical = null;
+        if (getFilterParams() != null) {
+            filterParamsCanonical = new TreeMap<String, Object>(getFilterParams());
+        }
+
+        List<String> docIdsSorted = null;
+        if (getDocIds() != null) {
+            docIdsSorted = new ArrayList<String>(getDocIds());
+            Collections.sort(docIdsSorted);
+        }
+
+        // use a treemap rather than a dictionary for purposes of canonicalization
+        Map<String, Object> spec = new TreeMap<String, Object>();
+        spec.put("localUUID", localUUID);
+        spec.put("remoteURL", remote.toExternalForm());
+        spec.put("push", !isPull());
+        spec.put("continuous", isContinuous());
+        if (getFilter() != null) {
+            spec.put("filter", getFilter());
+        }
+        if (filterParamsCanonical != null) {
+            spec.put("filterParams", filterParamsCanonical);
+        }
+        if (docIdsSorted != null) {
+            spec.put("docids", docIdsSorted);
+        }
+
+        byte[] inputBytes = null;
+        try {
+            inputBytes = db.getManager().getObjectMapper().writeValueAsBytes(spec);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        remoteCheckpointDocID = Misc.HexSHA1Digest(inputBytes);
+        return remoteCheckpointDocID;
+    }
     /**
      * For javadocs, see Replication
      */
@@ -1262,8 +1258,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * A delegate that can be used to listen for Replication changes.
      */
     @InterfaceAudience.Public
-    public static interface ChangeListener {
-        public void changed(Replication.ChangeEvent event);
+    public interface ChangeListener {
+        void changed(Replication.ChangeEvent event);
     }
 
     public Authenticator getAuthenticator() {

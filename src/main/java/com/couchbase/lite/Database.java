@@ -1218,6 +1218,19 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
+    public RevisionList unpushedRevisionsSince(String sequence,
+                                               ReplicationFilter filter,
+                                               Map<String, Object> filterParams) {
+        long longSequence = 0;
+        if(sequence != null)
+            longSequence = Long.parseLong(sequence);
+        ChangesOptions options = new ChangesOptions();
+        options.setIncludeConflicts(true);
+
+        return changesSince(longSequence, options, filter, filterParams);
+    }
+
+    @InterfaceAudience.Private
     public Map<String, Object> getAllDocs(QueryOptions options) throws CouchbaseLiteException {
         return store.getAllDocs(options);
     }
