@@ -24,6 +24,7 @@ import com.couchbase.lite.cbforest.RevIDBuffer;
 import com.couchbase.lite.cbforest.Revision;
 import com.couchbase.lite.cbforest.Slice;
 import com.couchbase.lite.cbforest.Transaction;
+import com.couchbase.lite.cbforest.VectorRevID;
 import com.couchbase.lite.cbforest.VectorRevision;
 import com.couchbase.lite.cbforest.VersionedDocument;
 import com.couchbase.lite.internal.RevisionInternal;
@@ -327,16 +328,19 @@ public class ForestDBStore implements Store {
         }
 
         if(revID == null){
-            com.couchbase.lite.cbforest.Revision rev = doc.currentRevision();
+            Revision rev = doc.currentRevision();
             if(rev == null || rev.isDeleted()) {
                 //throw new CouchbaseLiteException(Status.DELETED);
                 return null;
             }
             // TODO: add String getRevID()
             // TODO: revID is something wrong!!!!!
-            //revID = rev.getRevID().getBuf();
-            revID =  new String(rev.getRevID().getBuf());
-            Log.w(TAG, "[getDocumentWithIDAndRev()] revID => " + revID);
+            RevID tmpRevID = rev.getRevID();
+            byte [] buff = tmpRevID.getBuf();
+            long bufSize = tmpRevID.getBufSize();
+            long size = tmpRevID.getSize();
+            revID = rev.getRevID().toString();
+            Log.e(TAG, "[getDocument()] revID => " + revID + ", bufSize=" + bufSize + ", size=" + size);
         }
 
         try {
@@ -354,14 +358,49 @@ public class ForestDBStore implements Store {
 
     @Override
     public RevisionInternal loadRevisionBody(RevisionInternal rev) throws CouchbaseLiteException {
-        Log.e(TAG, "loadRevisionBody()");
-        return null;
+        Log.w(TAG, "loadRevisionBody()");
+
+        try {
+            VersionedDocument doc = new VersionedDocument(forest, new Slice(rev.getDocID().getBytes()));
+            if (doc == null || !doc.exists())
+                throw new CouchbaseLiteException(Status.NOT_FOUND);
+            if (!ForestBridge.loadBodyOfRevisionObject(rev, doc))
+                throw new CouchbaseLiteException(Status.NOT_FOUND);
+            return rev;
+        }catch(Exception e){
+            Log.e(TAG, "ERROR in loadRevisionBody()", e);
+            throw new CouchbaseLiteException(Status.UNKNOWN);
+        }
     }
 
     @Override
     public RevisionInternal getParentRevision(RevisionInternal rev) {
-        Log.e(TAG, "getParentRevision()");
-        return null;
+        Log.w(TAG, "getParentRevision()");
+
+        if(rev.getDocID() == null || rev.getRevID() == null)
+            return null;
+
+        RevisionInternal parent = null;
+        VersionedDocument doc = new VersionedDocument(forest, new Slice(rev.getDocID().getBytes()));
+        if(doc != null) {
+            Revision revNode = null;
+            try {
+                revNode = doc.get(new RevIDBuffer(new Slice(rev.getRevID().getBytes())));
+            } catch (Exception e) {
+                Log.e(TAG, "Error in getParentRevision()", e);
+                return null;
+            }
+            if (revNode != null) {
+                Revision parentRevision = revNode.getParent();
+                if(parentRevision!=null){
+                    String parentRevID = new String(parentRevision.getRevID().getBuf());
+                    parent = new RevisionInternal(rev.getDocID(), parentRevID, parentRevision.isDeleted());
+                }
+                revNode.delete();
+            }
+            doc.delete();
+        }
+        return parent;
     }
 
     @Override
@@ -697,9 +736,81 @@ public class ForestDBStore implements Store {
     }
 
     @Override
-    public void forceInsert(RevisionInternal inRev, List<String> history, StorageValidation validationBlock, URL source) throws CouchbaseLiteException {
+    public void forceInsert(RevisionInternal inRev,
+                            List<String> inHistory,
+                            final StorageValidation validationBlock,
+                            URL inSource)
+            throws CouchbaseLiteException {
+
         Log.e(TAG, "forceInsert()");
 
+        if (forest.isReadOnly())
+            throw new CouchbaseLiteException(Status.FORBIDDEN);
+
+        final byte[] json = inRev.getJson();
+        if(json == null)
+            throw new CouchbaseLiteException(Status.BAD_JSON);
+
+        final RevisionInternal rev = inRev;
+        final List<String> history = inHistory;
+        final URL source = inSource;
+
+        final DocumentChange[] change = new DocumentChange[1];
+        Status status = inTransaction(new Task() {
+            @Override
+            public Status run() {
+                // First get the CBForest doc:
+                VersionedDocument doc = new VersionedDocument(forest, new Slice(rev.getDocID().getBytes()));
+
+                // Add the revision & ancestry to the doc:
+                VectorRevID historyVector = new VectorRevID();
+                convertRevIDs(history, historyVector);
+                int common = doc.insertHistory(historyVector,
+                        new Slice(json),
+                        rev.isDeleted(),
+                        rev.getAttachments() != null);
+                if(common < 0)
+                    return new Status(Status.BAD_REQUEST); // generation numbers not in descending order
+                else if(common == 0)
+                    return new Status(Status.OK); // No-op: No new revisions were inserted.
+
+                // Validate against the common ancestor:
+                // Validate against the latest common ancestor:
+                if (validationBlock != null) {
+                    RevisionInternal prev = null;
+                    if(common < history.size()){
+                        RevID revID = historyVector.get(common);
+                        Revision r = null;
+                        try {
+                            r = doc.get(revID);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error in forceInsert()", e);
+                            return new Status(Status.UNKNOWN);
+                        }
+                        boolean deleted = r.isDeleted();
+                        prev = new RevisionInternal(rev.getDocID(), history.get(common), deleted);
+                    }
+                    String parentRevID = (history.size() > 1) ? history.get(1) : null;
+                    Status status = validationBlock.validate(rev, prev, parentRevID);
+                    if (status.isError()) {
+                        return status;
+                    }
+                }
+
+                // Save updated doc back to the database:
+                boolean isWinner = saveForest(doc, historyVector.get(0), rev.getProperties());
+                rev.setSequence(doc.getSequence().longValue());
+                change[0] = changeWithNewRevision(rev, isWinner, doc, source);
+
+                return new Status(Status.OK);
+            }
+        });
+
+        if (change[0] != null)
+            delegate.databaseStorageChanged(change[0]);
+
+        if(status.isError())
+            throw new CouchbaseLiteException(status.getCode());
     }
 
     @Override
@@ -942,6 +1053,24 @@ public class ForestDBStore implements Store {
             return new Status(Status.UNKNOWN);
         }
     }
+
+    /**
+     * CBLDatabase+Insertion.m
+     * static void convertRevIDs(NSArray* revIDs,
+     *                          std::vector<revidBuffer> &historyBuffers,
+     *                          std::vector<revid> &historyVector)
+     */
+    private static void convertRevIDs(List<String> history, VectorRevID historyVector){
+        for(String revID : history){
+            Log.w(TAG, "revID => " + revID);
+            //RevID revid = new RevID(revID.getBytes());
+            //historyVector.add(revid);
+            //TODO add RevIDBuffer(String or byte[])
+            RevIDBuffer revidbuffer = new RevIDBuffer(new Slice(revID.getBytes()));
+            historyVector.add(revidbuffer);
+        }
+    }
+
 
     private interface Task{
         Status run();

@@ -7,6 +7,7 @@ import com.couchbase.lite.cbforest.Slice;
 import com.couchbase.lite.cbforest.VectorRevision;
 import com.couchbase.lite.cbforest.VersionedDocument;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -148,14 +149,18 @@ public class ForestBridge {
     /**
      * in CBLForestBridge.m
      * + (NSArray*) getRevisionHistory: (const Revision*)revNode
-     * <p/>
+     *
      * Note: Unable to downcast from RevTree to VersionedDocument
      * Instead of downcast, add docID parameter
      */
     public static List<RevisionInternal> getRevisionHistory(String docID, Revision revNode) {
         List<RevisionInternal> history = new ArrayList<RevisionInternal>();
         for (; revNode != null; revNode = revNode.getParent()) {
-            RevisionInternal rev = new RevisionInternal(docID, new String(revNode.getRevID().getBuf()), revNode.isDeleted());
+
+            String revID = revNode.getRevID().toString();
+            boolean deleted = revNode.isDeleted();
+            Log.e(TAG, "[getRevisionHistory()] RevID => " + revID);
+            RevisionInternal rev = new RevisionInternal(docID, revID, deleted);
             rev.setMissing(!revNode.isBodyAvailable());
             history.add(rev);
         }
