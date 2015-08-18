@@ -206,6 +206,7 @@ public class RevisionInternal {
     }
 
     public static int generationFromRevID(String revID) {
+        if(revID == null) return 0;
         int generation = 0;
         int dashPos = revID.indexOf("-");
         if (dashPos > 0) {

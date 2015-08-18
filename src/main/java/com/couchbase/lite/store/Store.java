@@ -355,8 +355,6 @@ public interface Store {
      * @return The new revision, with revID filled in, or nil on error.
      * @throws CouchbaseLiteException
      */
-    //RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID, boolean obeyMVCC)
-    // throws CouchbaseLiteException;
-    RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID)
+    RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID, boolean obeyMVCC)
             throws CouchbaseLiteException;
 }

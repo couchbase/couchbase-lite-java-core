@@ -995,7 +995,9 @@ public class SQLiteStore implements Store {
     }
 
     @Override
-    public RevisionList changesSince(long lastSequence, ChangesOptions options, ReplicationFilter filter,
+    public RevisionList changesSince(long lastSequence,
+                                     ChangesOptions options,
+                                     ReplicationFilter filter,
                                      Map<String, Object> filterParams) {
         // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
         if (options == null) {
@@ -1630,7 +1632,8 @@ public class SQLiteStore implements Store {
     }
 
     @Override
-    public RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID) throws CouchbaseLiteException {
+    public RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID, boolean obeyMVCC)
+            throws CouchbaseLiteException {
         String docID = revision.getDocID();
         if (!docID.startsWith("_local/")) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
