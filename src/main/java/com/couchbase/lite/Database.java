@@ -238,8 +238,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void compact() throws CouchbaseLiteException {
-        if (store != null)
-            store.compact();
+        store.compact();
         garbageCollectAttachments();
     }
 
@@ -374,21 +373,16 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public View getExistingView(String name) {
-        View view = null;
-        if (views != null) {
-            view = views.get(name);
-        }
-        if (view != null) {
+        View view = views != null ? views.get(name) : null;
+        if (view != null)
             return view;
-        }
 
-        //view is not in cache but it maybe in DB
-        view = new View(this, name);
-        if (view.getViewId() > 0) {
-            return view;
+        try {
+            return registerView(new View(this, name, false));
+        } catch (CouchbaseLiteException e) {
+            // View is not exist.
+            return null;
         }
-
-        return null;
     }
 
     /**
@@ -451,7 +445,12 @@ public class Database implements StoreDelegate {
         if (view != null) {
             return view;
         }
-        return registerView(new View(this, name));
+        try {
+            return registerView(new View(this, name, true));
+        } catch (CouchbaseLiteException e) {
+            Log.e(TAG, "Error in registerView", e);
+            return null;
+        }
     }
 
     /**
@@ -1184,11 +1183,6 @@ public class Database implements StoreDelegate {
         return store.getPossibleAncestorRevisionIDs(rev, limit, hasAttachment);
     }
 
-    @InterfaceAudience.Private
-    public RevisionList getAllRevisions(String docID, boolean onlyCurrent) {
-        return store.getAllRevisions(docID, onlyCurrent);
-    }
-
     /**
      * Returns the revision history as a _revisions dictionary, as returned
      * by the REST API's ?revs=true option.
@@ -1775,12 +1769,10 @@ public class Database implements StoreDelegate {
     }
 
     private View registerView(View view) {
-        if (view == null) {
+        if (view == null)
             return null;
-        }
-        if (views == null) {
+        if (views == null)
             views = new HashMap<String, View>();
-        }
         views.put(view.getName(), view);
         return view;
     }
@@ -1855,7 +1847,9 @@ public class Database implements StoreDelegate {
             return null;
         List<View> views = new ArrayList<View>();
         for (String name : names) {
-            views.add(this.getExistingView(name));
+            View view = getExistingView(name);
+            if(view != null)
+                views.add(view);
         }
         return views;
     }
@@ -2061,12 +2055,14 @@ public class Database implements StoreDelegate {
     }
 
     private boolean garbageCollectAttachments() throws CouchbaseLiteException {
-        Log.v(TAG, "Scanning database revisions for attachments...");
+        Log.e(TAG, "Scanning database revisions for attachments...");
         Set<BlobKey> keys = store.findAllAttachmentKeys();
+        if(keys == null)
+            return false;
+        Log.e(TAG, "    ...found %d attachments", keys.size());
         List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
-        Log.v(TAG, "    ...found %d attachments", keys.size());
         int deleted = attachments.deleteBlobsExceptWithKeys(keysToKeep);
-        Log.v(TAG, "    ... deleted %d obsolete attachment files.", deleted);
+        Log.e(TAG, "    ... deleted %d obsolete attachment files.", deleted);
         return deleted >= 0;
     }
 }

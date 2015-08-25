@@ -99,7 +99,7 @@ public class SQLiteStore implements Store {
     //OPT: Would be nice to use partial indexes but that requires SQLite 3.8 and makes the
     // db file only readable by SQLite 3.8+, i.e. the file would not be portable to iOS 8
     // which only has SQLite 3.7 :(
-    // On the revs_parent index we could add "WHERE parent not null".
+    // On the revs_parent _index we could add "WHERE parent not null".
 
     // transactionLevel is per thread
     static class TransactionLevel extends ThreadLocal<Integer> {

@@ -1,6 +1,7 @@
 package com.couchbase.lite.store;
 
 
+import com.couchbase.lite.Manager;
 import com.couchbase.lite.cbforest.RevIDBuffer;
 import com.couchbase.lite.cbforest.Revision;
 import com.couchbase.lite.cbforest.Slice;
@@ -9,8 +10,10 @@ import com.couchbase.lite.cbforest.VersionedDocument;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.util.Log;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by hideki on 11/25/14.
@@ -91,41 +94,34 @@ public class ForestBridge {
 
     /**
      * in CBLForestBridge.m
-     * + (NSDictionary*) bodyOfNode: (const Revision*)rev
-     *                      options: (CBLContentOptions)options
+     * + (NSMutableDictionary*) bodyOfNode: (const Revision*)rev
      *
      * Note: Unable to downcast from RevTree to VersionedDocument
      *        Instead of downcast, add VersionedDocument parameter
      */
-    /*
-    public static Map<String, Object> bodyOfNode(com.couchbase.lite.cbforest.Revision rev,
-                                                 EnumSet<Database.TDContentOptions> options,
-                                                 VersionedDocument doc){
+    public static Map<String, Object> bodyOfNode(Revision rev, VersionedDocument doc){
 
-        // If caller wants no body and no metadata props, this is a no-op:
-        if(options.size() == 1 && options.contains(Database.TDContentOptions.TDNoBody)) {
-            return new HashMap();
-        }
-
-        byte[] json = null;
-        if(!options.contains(Database.TDContentOptions.TDNoBody)) {
-            json = dataOfNode(rev);
-            if(json == null)
-                return null;
-        }
+        byte[] json = dataOfNode(rev);
+        if(json == null)
+            return null;
 
         Map<String, Object> properties = null;
         try {
             properties = Manager.getObjectMapper().readValue(json, Map.class);
         } catch (IOException e) {
-            Log.w(TAG, e.getMessage());
+            Log.e(TAG, "Error in bodyOfNode()", e);
             return null;
         }
 
-        addContentProperties(options, properties, rev, doc);
+        String docID = new String(doc.getDocID().getBuf());
+        String revID = new String(rev.getRevID().getBuf());
+        properties.put("_id", docID);
+        properties.put("_rev", revID);
+        if(rev.isDeleted())
+            properties.put("_deleted", true);
         return properties;
     }
-    */
+
 
 
     /**
@@ -159,7 +155,6 @@ public class ForestBridge {
 
             String revID = revNode.getRevID().toString();
             boolean deleted = revNode.isDeleted();
-            Log.e(TAG, "[getRevisionHistory()] RevID => " + revID);
             RevisionInternal rev = new RevisionInternal(docID, revID, deleted);
             rev.setMissing(!revNode.isBodyAvailable());
             history.add(rev);

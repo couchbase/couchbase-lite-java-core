@@ -39,6 +39,7 @@ public class QueryOptions {
     private boolean includeDocs = false;
 
     private boolean updateSeq = false;
+    private boolean inclusiveStart = true;
     private boolean inclusiveEnd = true;
     private boolean reduce = false;
     private boolean reduceSpecified = false;
@@ -50,7 +51,6 @@ public class QueryOptions {
     private String endKeyDocId;
 
     private Predicate<QueryRow> postFilter;
-
 
     public Object getStartKey() {
         return startKey;
@@ -106,6 +106,14 @@ public class QueryOptions {
 
     public void setUpdateSeq(boolean updateSeq) {
         this.updateSeq = updateSeq;
+    }
+
+    public boolean isInclusiveStart() {
+        return inclusiveStart;
+    }
+
+    public void setInclusiveStart(boolean inclusiveStart) {
+        this.inclusiveStart = inclusiveStart;
     }
 
     public boolean isInclusiveEnd() {

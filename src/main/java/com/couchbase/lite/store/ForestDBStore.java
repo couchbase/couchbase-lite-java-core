@@ -6,11 +6,15 @@ import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Misc;
+import com.couchbase.lite.Predicate;
+import com.couchbase.lite.Query;
 import com.couchbase.lite.QueryOptions;
+import com.couchbase.lite.QueryRow;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
+import com.couchbase.lite.View;
 import com.couchbase.lite.cbforest.Config;
 import com.couchbase.lite.cbforest.ContentOptions;
 import com.couchbase.lite.cbforest.Database;
@@ -26,6 +30,7 @@ import com.couchbase.lite.cbforest.Slice;
 import com.couchbase.lite.cbforest.Transaction;
 import com.couchbase.lite.cbforest.VectorRevID;
 import com.couchbase.lite.cbforest.VectorRevision;
+import com.couchbase.lite.cbforest.VectorString;
 import com.couchbase.lite.cbforest.VersionedDocument;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.RevisionUtils;
@@ -36,6 +41,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -48,7 +54,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class ForestDBStore implements Store {
 
-    public static final String TAG = ForestDBStore.class.getSimpleName();
+    public static String TAG = Log.TAG_DATABASE;
 
     /** static constructor */
     static {
@@ -80,10 +86,10 @@ public class ForestDBStore implements Store {
         }
     }
 
-    private String directory;
+    protected String directory;
     private String path;
     private Manager manager;
-    private Database forest;
+    protected Database forest;
     private Transaction forestTransaction = null;
     private TransactionLevel transactionLevel;
     private StoreDelegate delegate;
@@ -96,7 +102,7 @@ public class ForestDBStore implements Store {
     ///////////////////////////////////////////////////////////////////////////
 
     public ForestDBStore(String directory, Manager manager, StoreDelegate delegate) {
-        Log.w(TAG, "ForestDBStore()");
+        //Log.w(TAG, "ForestDBStore()");
         assert (new File(directory).isAbsolute()); // path must be absolute
         this.directory = directory;
         File dir = new File(directory);
@@ -128,7 +134,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public boolean open() {
-        Log.w(TAG, "open()");
+        //Log.w(TAG, "open()");
         OpenFlags options = readOnly ? OpenFlags.FDB_OPEN_FLAG_RDONLY : OpenFlags.FDB_OPEN_FLAG_CREATE;
 
         Config config = Database.defaultConfig();
@@ -156,7 +162,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public void close() {
-        Log.w(TAG, "close()");
+        //Log.w(TAG, "close()");
         if (forest != null) {
             forest.delete();
             forest = null;
@@ -178,13 +184,13 @@ public class ForestDBStore implements Store {
 
     @Override
     public void setMaxRevTreeDepth(int maxRevTreeDepth) {
-        Log.w(TAG, "setMaxRevTreeDepth()");
+        //Log.w(TAG, "setMaxRevTreeDepth()");
         this.maxRevTreeDepth = maxRevTreeDepth;
     }
 
     @Override
     public int getMaxRevTreeDepth() {
-        Log.w(TAG, "getMaxRevTreeDepth()");
+        //Log.w(TAG, "getMaxRevTreeDepth()");
         return maxRevTreeDepth;
     }
 
@@ -196,7 +202,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public long setInfo(String key, String info) {
-        Log.w(TAG, "setInfo() key="+key + ", info="+info);
+        //Log.w(TAG, "setInfo() key="+key + ", info="+info);
         final String k = key;
         final String i = info;
         try {
@@ -208,7 +214,7 @@ public class ForestDBStore implements Store {
                     try {
                         infoWriter.set(new Slice(k.getBytes()), new Slice(i.getBytes()));
                     } catch (Exception e) {
-                        Log.e(TAG, "KeyStoreWriter.set() error="+e.getMessage());
+                        Log.e(TAG, "Error in KeyStoreWriter.set()", e);
                         return false;
                     }
                     infoWriter.delete();
@@ -226,7 +232,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public String getInfo(String key) {
-        Log.w(TAG, "getInfo() key="+key);
+        //Log.w(TAG, "getInfo() key="+key);
         try {
             KeyStore infoStore = new KeyStore(forest, "info");
             Document doc = infoStore.get(new Slice(key.getBytes()));
@@ -234,7 +240,7 @@ public class ForestDBStore implements Store {
             if(doc != null && doc.getBody() != null && doc.getBody().getBuf()!= null)
                 value = new String(doc.getBody().getBuf());
             infoStore.delete();
-            Log.w(TAG, "getInfo() value=" + value);
+            //Log.w(TAG, "getInfo() value=" + value);
             return value;
         }
         catch (Exception e){
@@ -279,7 +285,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public boolean inTransaction() {
-        Log.w(TAG, "inTransaction()");
+        //Log.w(TAG, "inTransaction()");
         return transactionLevel.get() > 0;
     }
 
@@ -298,7 +304,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public boolean runInTransaction(TransactionalTask task) {
-        Log.w(TAG, "runInTransaction()");
+        //Log.w(TAG, "runInTransaction()");
         beginTransaction();
         boolean commit = true;
         try {
@@ -315,7 +321,7 @@ public class ForestDBStore implements Store {
 
     @Override
     public RevisionInternal getDocument(String docID, String revID, boolean withBody) {
-        Log.w(TAG, "getDocument()");
+        //Log.w(TAG, "getDocument()");
 
         RevisionInternal result = null;
 
@@ -340,7 +346,7 @@ public class ForestDBStore implements Store {
             long bufSize = tmpRevID.getBufSize();
             long size = tmpRevID.getSize();
             revID = rev.getRevID().toString();
-            Log.e(TAG, "[getDocument()] revID => " + revID + ", bufSize=" + bufSize + ", size=" + size);
+            //Log.w(TAG, "[getDocument()] revID => " + revID + ", bufSize=" + bufSize + ", size=" + size);
         }
 
         try {
@@ -367,6 +373,8 @@ public class ForestDBStore implements Store {
             if (!ForestBridge.loadBodyOfRevisionObject(rev, doc))
                 throw new CouchbaseLiteException(Status.NOT_FOUND);
             return rev;
+        }catch(CouchbaseLiteException cle){
+            throw cle;
         }catch(Exception e){
             Log.e(TAG, "ERROR in loadRevisionBody()", e);
             throw new CouchbaseLiteException(Status.UNKNOWN);
@@ -469,7 +477,6 @@ public class ForestDBStore implements Store {
     @Override
     public Set<BlobKey> findAllAttachmentKeys() throws CouchbaseLiteException {
         Log.w(TAG, "findAllAttachmentKeys()");
-
         try {
             Set<BlobKey> keys = new HashSet<BlobKey>();
             DocEnumerator.Options options = new DocEnumerator.Options();
@@ -500,8 +507,6 @@ public class ForestDBStore implements Store {
                                     keys.add(key);
                                 }
                             }
-
-
                         }
                     }
                 }
@@ -518,8 +523,140 @@ public class ForestDBStore implements Store {
 
     @Override
     public Map<String, Object> getAllDocs(QueryOptions options) throws CouchbaseLiteException {
-        Log.e(TAG, "getAllDocs()");
-        return null;
+        Log.w(TAG, "getAllDocs()");
+
+        Map<String, Object> result = new HashMap<String, Object>();
+        List<QueryRow> rows = new ArrayList<QueryRow>();
+
+        if (options == null)
+            options = new QueryOptions();
+
+        DocEnumerator.Options forestOpts = new DocEnumerator.Options();
+        boolean includeDocs = (options.isIncludeDocs() || options.getPostFilter() != null);
+        forestOpts.setDescending(options.isDescending());
+        forestOpts.setInclusiveEnd(options.isInclusiveEnd());
+        if (!includeDocs
+                && !(options.getAllDocsMode() == Query.AllDocsMode.SHOW_CONFLICTS
+                || options.getAllDocsMode() == Query.AllDocsMode.ONLY_CONFLICTS))
+            forestOpts.setContentOption(ContentOptions.kMetaOnly);
+
+        int limit = options.getLimit();
+        int skip = options.getSkip();
+        Predicate<QueryRow> filter = options.getPostFilter();
+
+
+        DocEnumerator e = null;
+        try {
+            if (options.getKeys() != null) {
+                VectorString docIDs = new VectorString();
+                for (Object docID : options.getKeys())
+                    docIDs.add((String) docID);
+                e = new DocEnumerator(forest, docIDs, forestOpts);
+            } else {
+                String startKey;
+                String endKey;
+                if (options.isDescending()) {
+                    startKey = (String) View.keyForPrefixMatch(options.getStartKey(), options.getPrefixMatchLevel());
+                    endKey = (String) options.getEndKey();
+                } else {
+                    startKey = (String) options.getStartKey();
+                    endKey = (String) View.keyForPrefixMatch(options.getEndKey(), options.getPrefixMatchLevel());
+                }
+                e = new DocEnumerator(forest,
+                        startKey==null?new Slice():new Slice(startKey.getBytes()),
+                        endKey==null?new Slice():new Slice(endKey.getBytes()),
+                        forestOpts);
+            }
+
+            while (e.next()) {
+                Document d = e.doc();
+                String docID = new String(d.getKey().getBuf());
+                if (!d.exists()) {
+                    Log.v(TAG, "AllDocs: No such row with key=\"%s\"", docID);
+                    QueryRow row = new QueryRow(null, 0, docID, null, null, null);
+                    rows.add(row);
+                    continue;
+                }
+
+
+                VersionedDocument doc = new VersionedDocument(forest, d);
+
+                // Currently cbforest-java wrapper does not support VersionedDocument::readMeta()
+                // This is reason that creating VersionedDocument instance always.
+                boolean deleted = false;
+                {
+                    short flags = doc.getFlags();
+                    deleted = (flags & VersionedDocument.kDeleted) != 0;
+                    if(deleted &&
+                            options.getAllDocsMode() != Query.AllDocsMode.INCLUDE_DELETED &&
+                            options.getKeys() == null)
+                        continue;
+                    if((flags & VersionedDocument.kConflicted) == 0 &&
+                            options.getAllDocsMode() == Query.AllDocsMode.ONLY_CONFLICTS)
+                        continue;
+                    if (skip > 0) {
+                        --skip;
+                        continue;
+                    }
+                }
+
+                //VersionedDocument doc = new VersionedDocument(forest, d);
+                String revID = new String(doc.getRevID().getBuf());
+                BigInteger sequence = doc.getSequence();
+
+                RevisionInternal docRevision = null;
+                if (includeDocs) {
+                    docRevision = ForestBridge.revisionObjectFromForestDoc(doc, null, true);
+                    if (docRevision == null)
+                        Log.w(TAG, "AllDocs: Unable to read body of doc %s", docID);
+                }
+
+                List<String> conflicts = new ArrayList<String>();
+                if ((options.getAllDocsMode() == Query.AllDocsMode.SHOW_CONFLICTS
+                        || options.getAllDocsMode() == Query.AllDocsMode.ONLY_CONFLICTS)
+                        && doc.isConflicted()) {
+                    conflicts = ForestBridge.getCurrentRevisionIDs(doc);
+                    if (conflicts != null && conflicts.size() == 1)
+                        conflicts = null;
+                }
+
+                Map<String, Object> value = new HashMap<String, Object>();
+                value.put("rev", revID);
+                if(deleted)
+                    value.put("deleted", (deleted ? true : null));
+                value.put("_conflicts", conflicts);// (not found in CouchDB)
+
+                Log.v(TAG, "AllDocs: Found row with key=\"%s\", value=%s", docID, value);
+
+                QueryRow row = new QueryRow(docID,
+                        sequence.longValue(),
+                        docID,
+                        value,
+                        docRevision,
+                        null);
+
+                if (filter != null && !filter.apply(row)){
+                    Log.v(TAG, "   ... on 2nd thought, filter predicate skipped that row");
+                    continue;
+                }
+                rows.add(row);
+
+                if(limit > 0 && --limit == 0)
+                    break;
+            }
+
+        }
+        catch(Exception ex) {
+            Log.e(TAG, "Error in getAllDocs()", ex);
+        }
+        finally {
+            if(e!=null) e.delete();
+        }
+
+        result.put("rows", rows);
+        result.put("total_rows", rows.size());
+        result.put("offset", options.getSkip());
+        return result;
     }
 
     @Override
@@ -529,9 +666,8 @@ public class ForestDBStore implements Store {
         try {
             // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
             // Translate options to ForestDB:
-            if (options == null) {
+            if (options == null)
                 options = new ChangesOptions();
-            }
 
             DocEnumerator.Options forestOpts = new DocEnumerator.Options();
             forestOpts.setLimit(options.getLimit());
@@ -589,7 +725,7 @@ public class ForestDBStore implements Store {
                                 StorageValidation validationBlock,
                                 Status outStatus)
             throws CouchbaseLiteException {
-        Log.w(TAG, "add()");
+        //Log.w(TAG, "add()");
 
         if (outStatus != null)
             outStatus.setCode(Status.OK);
@@ -742,7 +878,7 @@ public class ForestDBStore implements Store {
                             URL inSource)
             throws CouchbaseLiteException {
 
-        Log.e(TAG, "forceInsert()");
+        Log.w(TAG, "forceInsert()");
 
         if (forest.isReadOnly())
             throw new CouchbaseLiteException(Status.FORBIDDEN);
@@ -814,26 +950,91 @@ public class ForestDBStore implements Store {
     }
 
     @Override
-    public Map<String, Object> purgeRevisions(Map<String, List<String>> docsToRevs) {
-        Log.e(TAG, "purgeRevisions()");
-        return null;
+    public Map<String, Object> purgeRevisions(Map<String, List<String>> inDocsToRevs) {
+        Log.w(TAG, "purgeRevisions()");
+        final Map<String, Object> result = new HashMap<String, Object>();
+        final Map<String, List<String>> docsToRevs = inDocsToRevs;
+        Status status = inTransaction(new Task() {
+            @Override
+            public Status run() {
+                for (String docID : docsToRevs.keySet()) {
+                    VersionedDocument doc = new VersionedDocument(forest, new Slice(docID.getBytes()));
+                    if(!doc.exists())
+                        return new Status(Status.NOT_FOUND);
+
+                    List<String> revsPurged = new ArrayList<String>();
+                    List<String> revIDs =  docsToRevs.get(docID);
+                    if (revIDs == null) {
+                        return new Status(Status.BAD_PARAM);
+                    } else if (revIDs.size() == 0) {
+                        ; // nothing to do.
+                    } else if (revIDs.contains("*")) {
+                        // Delete all revisions if magic "*" revision ID is given:
+                        try{
+                            forestTransaction.del(doc.getDocID());
+                        }catch (Exception ex){
+                            Log.e(TAG, "Error in purgeRevisions()", ex);
+                            return new Status(Status.UNKNOWN);
+                        }
+                        revsPurged.add("*");
+                    } else {
+                        List<String> purged = new ArrayList<String>();
+                        for(String revID : revIDs){
+                            if(doc.purge(new RevIDBuffer(new Slice(revID.getBytes()))) > 0 )
+                                purged.add(revID);
+                        }
+                        if(purged.size() > 0){
+                            if(doc.allRevisions().size() > 0){
+                                doc.save(forestTransaction);
+                                Log.v(TAG, "Purged doc '%s' revs %s", docID, revIDs);
+                            }else{
+                                try{
+                                    forestTransaction.del(doc.getDocID());
+                                }catch (Exception ex){
+                                    Log.e(TAG, "Error in purgeRevisions()", ex);
+                                    return new Status(Status.UNKNOWN);
+                                }
+                                Log.v(TAG, "Purged doc '%s'", docID);
+                            }
+                        }
+                        revsPurged = purged;
+                    }
+                    result.put(docID, revsPurged);
+                }
+                return new Status(Status.OK);
+            }
+        });
+        return result;
     }
 
     @Override
     public ViewStore getViewStorage(String name, boolean create) {
-        Log.e(TAG, "getViewStorage()");
-        return null;
+        Log.w(TAG, "getViewStorage()");
+        try {
+            return new ForestDBViewStore(this, name, create);
+        } catch (CouchbaseLiteException e) {
+            if(e.getCBLStatus().getCode() != Status.NOT_FOUND)
+                Log.e(TAG, "Error in getViewStorage()", e);
+            return null;
+        }
     }
 
     @Override
     public List<String> getAllViewNames() {
-        Log.e(TAG, "getAllViewNames()");
-        return null;
+        Log.w(TAG, "getAllViewNames()");
+        List<String> result = new ArrayList<String>();
+        String[] fileNames = new File(directory).list();
+        for(String filename : fileNames){
+            String viewName = ForestDBViewStore.fileNameToViewName(filename);
+            if(viewName != null)
+                result.add(viewName);
+        }
+        return result;
     }
 
     @Override
     public RevisionInternal getLocalDocument(String docID, String revID) {
-        Log.w(TAG, "getLocalDocument()");
+        //Log.w(TAG, "getLocalDocument()");
 
         if(docID == null|| !docID.startsWith("_local/"))
             return null;
@@ -1077,7 +1278,7 @@ public class ForestDBStore implements Store {
     }
 
     private Status inTransaction(Task task) {
-        Log.w(TAG, "inTransaction()");
+        //Log.w(TAG, "inTransaction()");
         Status status = new Status(Status.OK);
         boolean commit = false;
         beginTransaction();

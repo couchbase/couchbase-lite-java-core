@@ -25,7 +25,7 @@ public interface ViewStoreDelegate {
 
     /**
      * The current map version string. If this changes, the storage's -setVersion: method will be
-     * called to notify it, so it can invalidate the index.
+     * called to notify it, so it can invalidate the _index.
      */
     String getMapVersion();
 

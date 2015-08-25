@@ -4,6 +4,10 @@ import com.couchbase.lite.util.Log;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -53,4 +57,29 @@ public class Misc {
     public static String unquoteString(String param) {
         return param.replace("\"", "");
     }
+
+    /**
+     * in CBLMisc.m
+     * id CBLKeyForPrefixMatch(id key, unsigned depth)
+     */
+    public static Object keyForPrefixMatch(Object key, int depth) {
+        if (depth < 1)
+            return key;
+        if (key instanceof String) {
+            return (key + "\uFFFF");
+        } else if (key instanceof List) {
+            ArrayList<Map<String, Object>> nuKey = new ArrayList<Map<String, Object>>((List<Map<String, Object>>) key);
+            if (depth == 1) {
+                nuKey.add(new HashMap<String, Object>());
+            } else {
+                Object lastObject = nuKey.get(nuKey.size() - 1);
+                lastObject = keyForPrefixMatch(lastObject, depth - 1);
+                nuKey.set(nuKey.size() - 1, (Map<String, Object>) lastObject);
+            }
+            return nuKey;
+        } else {
+            return key;
+        }
+    }
 }
+

@@ -34,23 +34,23 @@ public interface ViewStore {
     void close();
 
     /**
-     * Erases the view's index.
+     * Erases the view's _index.
      */
     void deleteIndex();
 
     /**
-     * Deletes the view's storage (metadata and index), removing it from the database.
+     * Deletes the view's storage (metadata and _index), removing it from the database.
      */
     void deleteView();
 
     /**
      * Updates the version of the view. A change in version means the delegate's map block has
-     * changed its semantics, so the index should be deleted.
+     * changed its semantics, so the _index should be deleted.
      */
     boolean setVersion(String version);
 
     /**
-     * The total number of rows in the index.
+     * The total number of rows in the _index.
      */
     int getTotalRows();
 
@@ -60,7 +60,7 @@ public interface ViewStore {
     long getLastSequenceIndexed();
 
     /**
-     * The last sequence number that caused an actual change in the index.
+     * The last sequence number that caused an actual change in the _index.
      */
     long getLastSequenceChangedAt();
 
@@ -83,15 +83,10 @@ public interface ViewStore {
      */
     List<QueryRow> reducedQuery(QueryOptions options) throws CouchbaseLiteException;
 
-    QueryRowStore storageForQueryRow(QueryRow row);
-
     /**
      * Methods for debugging
      */
     List<Map<String, Object>> dump();
-
-    // TODO: Not sure if this is required, review later
-    int getViewID();
 
     void setCollation(View.TDViewCollation collation);
 }

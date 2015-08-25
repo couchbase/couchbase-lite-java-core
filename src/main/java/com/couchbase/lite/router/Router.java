@@ -1624,7 +1624,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 List<Map<String, Object>> result = null;
                 if (openRevsParam.equals("all")) {
                     // Get all conflicting revisions:
-                    RevisionList allRevs = db.getAllRevisions(docID, true);
+                    RevisionList allRevs = db.getStore().getAllRevisions(docID, true);
                     result = new ArrayList<Map<String, Object>>(allRevs.size());
                     for (RevisionInternal rev : allRevs) {
 
