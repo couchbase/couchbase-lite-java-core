@@ -202,7 +202,6 @@ public class ForestDBStore implements Store {
 
     @Override
     public long setInfo(String key, String info) {
-        //Log.w(TAG, "setInfo() key="+key + ", info="+info);
         final String k = key;
         final String i = info;
         try {
@@ -212,7 +211,10 @@ public class ForestDBStore implements Store {
                 public boolean run() {
                     KeyStoreWriter infoWriter = forestTransaction.toKeyStoreWriter(infoStore);
                     try {
-                        infoWriter.set(new Slice(k.getBytes()), new Slice(i.getBytes()));
+                        if(i == null)
+                            infoWriter.set(new Slice(k.getBytes()), new Slice());
+                        else
+                            infoWriter.set(new Slice(k.getBytes()), new Slice(i.getBytes()));
                     } catch (Exception e) {
                         Log.e(TAG, "Error in KeyStoreWriter.set()", e);
                         return false;
@@ -457,9 +459,47 @@ public class ForestDBStore implements Store {
     }
 
     @Override
-    public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev, int limit, AtomicBoolean onlyAttachments) {
-        Log.e(TAG, "getPossibleAncestorRevisionIDs()");
-        return null;
+    public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev, int limit,
+                                                       AtomicBoolean onlyAttachments) {
+        Log.w(TAG, "getPossibleAncestorRevisionIDs()");
+
+        int generation = RevisionInternal.generationFromRevID(rev.getRevID());
+        if(generation <= 1)
+            return null;
+
+        VersionedDocument doc = new VersionedDocument(forest, new Slice(rev.getDocID().getBytes()));
+        if(doc == null)
+            return null;
+        List<String> revIDs = new ArrayList<String>();
+        try {
+            VectorRevision allRevisions = doc.allRevisions();
+            for (int i = 0; i < allRevisions.size(); i++) {
+                Revision r = allRevisions.get(i);
+                if (r.getRevID().generation() < generation
+                        && !r.isDeleted()
+                        && r.isBodyAvailable()
+                        && !(onlyAttachments.get() && !r.hasAttachments())) {
+
+                    if (onlyAttachments != null && revIDs.size() == 0) {
+                        //onlyAttachments.set(sequenceHasAttachments(cursor.getLong(1)));
+                        onlyAttachments.set(r.hasAttachments());
+                    }
+
+                    revIDs.add(new String(r.getRevID().getBuf()));
+                    if (limit > 0 && revIDs.size() >= limit)
+                        break;
+                }
+
+            }
+        }
+        catch (Exception e){
+            Log.e(TAG, "Error in getPossibleAncestorRevisionIDs()", e);
+        }
+        finally {
+            doc.delete();
+        }
+
+        return revIDs;
     }
 
     @Override
@@ -469,9 +509,45 @@ public class ForestDBStore implements Store {
     }
 
     @Override
-    public int findMissingRevisions(RevisionList touchRevs) {
-        Log.e(TAG, "findMissingRevisions()");
-        return 0;
+    public int findMissingRevisions(RevisionList revs) {
+        Log.w(TAG, "findMissingRevisions()");
+
+        int numRevisionsRemoved = 0;
+
+        if (revs.size() == 0)
+            return numRevisionsRemoved;
+
+        RevisionList sortedRevs = (RevisionList)revs.clone();
+        sortedRevs.sortByDocID();
+
+        VersionedDocument doc = null;
+        String lastDocID = null;
+        for (int i = 0; i < sortedRevs.size(); i++) {
+            RevisionInternal rev = sortedRevs.get(i);
+            if (!rev.getDocID().equals(lastDocID)) {
+                lastDocID = rev.getDocID();
+                if (doc != null) {
+                    doc.delete();
+                }
+                doc = new VersionedDocument(forest, new Slice(lastDocID.getBytes()));
+                if (doc != null) {
+                    try {
+                        if (doc.get(new RevIDBuffer(new Slice(rev.getRevID().getBytes()))) != null) {
+                            revs.remove(rev);
+                            numRevisionsRemoved += 1;
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in findMissingRevisions(RevisionList)", e);
+                    }
+                }
+            }
+        }
+
+        if (doc != null)
+            doc.delete();
+
+
+        return numRevisionsRemoved;
     }
 
     @Override
@@ -682,7 +758,7 @@ public class ForestDBStore implements Store {
             BigInteger start = BigInteger.valueOf(lastSequence + 1);
             BigInteger end = BigInteger.valueOf(Long.MAX_VALUE);
             DocEnumerator e = new DocEnumerator(forest, start, end, forestOpts);
-            for (; e.next(); ) {
+            while (e.next()) {
                 VersionedDocument doc = new VersionedDocument(forest, e.doc());
                 List<String> revIDs;
                 if (options.isIncludeConflicts() && doc.isConflicted()) {
@@ -779,7 +855,7 @@ public class ForestDBStore implements Store {
                 // TODO -> add VersionDocument.get(String revID)
                 //      -> or Efficiently pass RevID to VersionDocument.get(RevID)
                 //revNode = doc.get(new RevID(inPrevRevID));
-                Log.w(TAG, "[putDoc()] prevRevID => " + prevRevID);
+                Log.v(TAG, "[putDoc()] prevRevID => " + prevRevID);
                 try {
                     revNode = doc.get(new RevIDBuffer(new Slice(inPrevRevID.getBytes())));
                 } catch (Exception e) {
@@ -1259,13 +1335,10 @@ public class ForestDBStore implements Store {
      * CBLDatabase+Insertion.m
      * static void convertRevIDs(NSArray* revIDs,
      *                          std::vector<revidBuffer> &historyBuffers,
-     *                          std::vector<revid> &historyVector)
      */
     private static void convertRevIDs(List<String> history, VectorRevID historyVector){
         for(String revID : history){
-            Log.w(TAG, "revID => " + revID);
-            //RevID revid = new RevID(revID.getBytes());
-            //historyVector.add(revid);
+            Log.w(TAG, "[ForestDBStore.convertRevIDs()] revID => " + revID);
             //TODO add RevIDBuffer(String or byte[])
             RevIDBuffer revidbuffer = new RevIDBuffer(new Slice(revID.getBytes()));
             historyVector.add(revidbuffer);

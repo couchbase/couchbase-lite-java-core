@@ -411,7 +411,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     protected void processInbox(final RevisionList changes) {
 
-        Log.e(Log.TAG_SYNC, "processInbox() changes="+changes.size());
+        Log.v(Log.TAG_SYNC, "processInbox() changes="+changes.size());
 
         // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
         // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>

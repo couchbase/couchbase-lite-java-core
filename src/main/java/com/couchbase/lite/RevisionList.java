@@ -81,13 +81,24 @@ public class RevisionList extends ArrayList<RevisionInternal> {
 
     public void sortBySequence() {
         Collections.sort(this, new Comparator<RevisionInternal>() {
-
             public int compare(RevisionInternal rev1, RevisionInternal rev2) {
                 return Misc.SequenceCompare(rev1.getSequence(), rev2.getSequence());
             }
-
         });
     }
+
+    /**
+     * in CBL_Revision.m
+     * - (void) sortByDocID
+     */
+    public void sortByDocID() {
+        Collections.sort(this, new Comparator<RevisionInternal>() {
+            public int compare(RevisionInternal rev1, RevisionInternal rev2) {
+                return rev1.getDocID().compareTo(rev2.getDocID());
+            }
+        });
+    }
+
 
     public void limit(int limit) {
         if (size() > limit) {
@@ -113,5 +124,10 @@ public class RevisionList extends ArrayList<RevisionInternal> {
         }
         RevisionInternal resultRev = this.remove(index);
         return resultRev;
+    }
+
+    @Override
+    public Object clone() {
+        return new RevisionList((ArrayList<RevisionInternal>) super.clone());
     }
 }
