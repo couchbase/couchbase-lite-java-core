@@ -42,8 +42,8 @@ import java.util.regex.Pattern;
  */
 public final class Manager {
 
-    protected static final String kV1DBExtension = ".cblite"; // Couchbase Lite 1.0
-    protected static final String kDBExtension = ".cblite2";
+    protected static final String kV1DBExtension = ".cblite";  // Couchbase Lite 1.0
+    protected static final String kDBExtension   = ".cblite2"; // Couchbase Lite 1.2 or later (for iOS 1.1 or later)
     protected static final String DEFAULT_STORE_CLASSNAME = "com.couchbase.lite.store.SQLiteStore";
 
     public static final ManagerOptions DEFAULT_OPTIONS = new ManagerOptions();
@@ -273,9 +273,12 @@ public final class Manager {
     /**
      * Replaces or installs a database from a file.
      * <p/>
-     * This is primarily used to install a canned database on first launch of an app, in which case
-     * you should first check .exists to avoid replacing the database if it exists already. The
-     * canned database would have been copied into your app bundle at build time.
+     * This is primarily used to install a canned database
+     * on first launch of an app, in which case you should first check .exists to avoid replacing the
+     * database if it exists already. The canned database would have been copied into your app bundle
+     * at build time. This property is deprecated for the new .cblite2 database file. If the database
+     * file is a directory and has the .cblite2 extension,
+     * use -replaceDatabaseNamed:withDatabaseDir:error: instead.
      *
      * @param databaseName      The name of the target Database to replace or create.
      * @param databaseStream    InputStream on the source Database file.
@@ -292,6 +295,71 @@ public final class Manager {
             throws CouchbaseLiteException {
         replaceDatabase(databaseName, databaseStream,
                 attachmentStreams == null ? null : attachmentStreams.entrySet().iterator());
+    }
+
+    /**
+     * Replaces or installs a database from a file.
+     *
+     * This is primarily used to install a canned database
+     * on first launch of an app, in which case you should first check .exists to avoid replacing the
+     * database if it exists already. The canned database would have been copied into your app bundle
+     * at build time. If the database file is not a directory and has the .cblite extension,
+     * use -replaceDatabaseNamed:withDatabaseFile:withAttachments:error: instead.
+     *
+     * @param databaseName The name of the database to replace.
+     * @param databaseDir Path of the database directory that should replace it.
+     * @return YES if the database was copied, NO if an error occurred.
+     */
+    @InterfaceAudience.Public
+    public boolean replaceDatabase(String databaseName, String databaseDir) {
+        Database db = getDatabase(databaseName, false);
+        if(db == null)
+            return false;
+
+        File dir = new File(databaseDir);
+        if(!dir.exists()){
+            Log.w(Database.TAG, "Database file doesn't exist at path : %s", databaseDir);
+            return false;
+        }
+        if (!dir.isDirectory()) {
+            Log.w(Database.TAG, "Database file is not a directory. " +
+                    "Use -replaceDatabaseNamed:withDatabaseFilewithAttachments:error: instead.");
+            return false;
+        }
+
+        File destDir = new File(db.getPath());
+        File srcDir = new File(databaseDir);
+        if(destDir.exists()) {
+            if (!FileDirUtils.deleteRecursive(destDir)) {
+                Log.w(Database.TAG, "Failed to delete file/directly: " + destDir);
+                return false;
+            }
+        }
+        try {
+            FileDirUtils.copyFolder(srcDir, destDir);
+        } catch (IOException e) {
+            Log.w(Database.TAG, "Failed to copy directly from " + srcDir + " to " + destDir, e);
+            return false;
+        }
+
+        if(!db.open()){
+            Log.w(Database.TAG, "Failed to open database");
+            return false;
+        }
+
+        /*
+        if(!db.saveLocalUUIDInLocalCheckpointDocument()){
+            Log.w(Database.TAG, "Failed to replace UUIDs");
+            return false;
+        }
+        */
+
+        if(!db.replaceUUIDs()){
+            Log.w(Database.TAG, "Failed to replace UUIDs");
+            return false;
+        }
+
+        return true;
     }
 
     ///////////////////////////////////////////////////////////////////////////

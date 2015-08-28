@@ -25,6 +25,7 @@ import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.store.ForestDBStore;
+import com.couchbase.lite.store.SQLiteStore;
 import com.couchbase.lite.store.StorageValidation;
 import com.couchbase.lite.store.Store;
 import com.couchbase.lite.store.StoreDelegate;
@@ -2036,10 +2037,14 @@ public class Database implements StoreDelegate {
     }
 
     protected boolean replaceUUIDs() {
-        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1)
+        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1) {
             return false;
-        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1)
+        }
+        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1) {
             return false;
+        }
+        System.out.println("aaa");
+
         return true;
     }
 
@@ -2064,5 +2069,71 @@ public class Database implements StoreDelegate {
         int deleted = attachments.deleteBlobsExceptWithKeys(keysToKeep);
         Log.e(TAG, "    ... deleted %d obsolete attachment files.", deleted);
         return deleted >= 0;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // CBLDatabase+Replication.h/CBLDatabase+Replication.m
+    ////////////////////////////////////////////////////////////////////////////
+
+    // Local checkpoint document keys:
+    public static String kCBLDatabaseLocalCheckpoint_LocalUUID = "localUUID";
+    public static String kLocalCheckpointDocId = "CBL_LocalCheckpoint";
+
+    /**
+     * Save current local uuid into the local checkpoint document.
+     *
+     * This method is called only
+     * when importing or replacing the database. The old localUUID is used by replicators
+     * to get the local checkpoint from the imported database in order to start replicating
+     * from from the current local checkpoint of the imported database after importing.
+     *
+     * in CBLDatabase+Replication.m
+     * - (BOOL) saveLocalUUIDInLocalCheckpointDocument: (NSError**)outError;
+     */
+    protected boolean saveLocalUUIDInLocalCheckpointDocument(){
+        return putLocalCheckpointDocumentWithKey(
+                kCBLDatabaseLocalCheckpoint_LocalUUID,
+                privateUUID());
+    }
+
+    /**
+     * Put a property with a given key and value into the local checkpoint document.
+     *
+     * in CBLDatabase+Replication.m
+     * - (BOOL) putLocalCheckpointDocumentWithKey: (NSString*)key value:(id)value outError: (NSError**)outError
+     */
+    protected boolean putLocalCheckpointDocumentWithKey(String key, Object value) {
+        if (key == null || value == null) return false;
+
+        Map<String, Object> localCheckpointDoc = getLocalCheckpointDocument();
+        Map<String, Object> document;
+        if (localCheckpointDoc != null)
+            document = new HashMap<String, Object>(localCheckpointDoc);
+        else
+            document = new HashMap<String, Object>();
+        document.put(key, value);
+        boolean result = false;
+        try {
+            result = putLocalDocument(kLocalCheckpointDocId, document);
+            if (!result)
+                Log.w(Log.TAG_DATABASE, "CBLDatabase: Could not create a local checkpoint document with an error");
+        } catch (CouchbaseLiteException e) {
+            Log.w(Log.TAG_DATABASE, "CBLDatabase: Could not create a local checkpoint document with an error", e);
+        }
+        return result;
+    }
+
+    /**
+     * Returns a property value specifiec by the key from the local checkpoint document.
+     */
+    protected Object getLocalCheckpointDocumentPropertyValueForKey(String key){
+        return getLocalCheckpointDocument().get(key);
+    }
+
+    /**
+     * Returns local checkpoint document if it exists. Otherwise returns nil.
+     */
+    protected Map<String, Object> getLocalCheckpointDocument(){
+        return getExistingLocalDocument(kLocalCheckpointDocId);
     }
 }
