@@ -24,7 +24,6 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
-import com.couchbase.lite.store.ForestDBStore;
 import com.couchbase.lite.store.SQLiteStore;
 import com.couchbase.lite.store.StorageValidation;
 import com.couchbase.lite.store.Store;
@@ -1014,8 +1013,8 @@ public class Database implements StoreDelegate {
                 return false;
 
         // Initialize & open store
-        //store = new SQLiteStore(path, manager, this);
-        store = new ForestDBStore(path, manager, this);
+        store = new SQLiteStore(path, manager, this);
+        //store = new ForestDBStore(path, manager, this);
         //store.setDelegate(this);
         if (!store.open())
             return false;
