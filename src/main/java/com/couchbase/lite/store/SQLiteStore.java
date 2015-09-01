@@ -99,7 +99,7 @@ public class SQLiteStore implements Store {
     //OPT: Would be nice to use partial indexes but that requires SQLite 3.8 and makes the
     // db file only readable by SQLite 3.8+, i.e. the file would not be portable to iOS 8
     // which only has SQLite 3.7 :(
-    // On the revs_parent index we could add "WHERE parent not null".
+    // On the revs_parent _index we could add "WHERE parent not null".
 
     // transactionLevel is per thread
     static class TransactionLevel extends ThreadLocal<Integer> {
@@ -995,7 +995,9 @@ public class SQLiteStore implements Store {
     }
 
     @Override
-    public RevisionList changesSince(long lastSequence, ChangesOptions options, ReplicationFilter filter,
+    public RevisionList changesSince(long lastSequence,
+                                     ChangesOptions options,
+                                     ReplicationFilter filter,
                                      Map<String, Object> filterParams) {
         // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
         if (options == null) {
@@ -1630,7 +1632,8 @@ public class SQLiteStore implements Store {
     }
 
     @Override
-    public RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID) throws CouchbaseLiteException {
+    public RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID, boolean obeyMVCC)
+            throws CouchbaseLiteException {
         String docID = revision.getDocID();
         if (!docID.startsWith("_local/")) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);

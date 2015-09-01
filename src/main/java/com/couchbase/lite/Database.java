@@ -42,6 +42,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -238,8 +239,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void compact() throws CouchbaseLiteException {
-        if (store != null)
-            store.compact();
+        store.compact();
         garbageCollectAttachments();
     }
 
@@ -374,21 +374,16 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public View getExistingView(String name) {
-        View view = null;
-        if (views != null) {
-            view = views.get(name);
-        }
-        if (view != null) {
+        View view = views != null ? views.get(name) : null;
+        if (view != null)
             return view;
-        }
 
-        //view is not in cache but it maybe in DB
-        view = new View(this, name);
-        if (view.getViewId() > 0) {
-            return view;
+        try {
+            return registerView(new View(this, name, false));
+        } catch (CouchbaseLiteException e) {
+            // View is not exist.
+            return null;
         }
-
-        return null;
     }
 
     /**
@@ -451,7 +446,12 @@ public class Database implements StoreDelegate {
         if (view != null) {
             return view;
         }
-        return registerView(new View(this, name));
+        try {
+            return registerView(new View(this, name, true));
+        } catch (CouchbaseLiteException e) {
+            Log.e(TAG, "Error in registerView", e);
+            return null;
+        }
     }
 
     /**
@@ -996,6 +996,19 @@ public class Database implements StoreDelegate {
         return new File(path).exists();
     }
 
+    private Store createStoreInstance() {
+        String className = manager.getStoreClassName();
+        try {
+            Class<?> clazz = Class.forName(className);
+            Constructor<?> ctor = clazz.getDeclaredConstructor(String.class, Manager.class, StoreDelegate.class);
+            Store store = (Store) ctor.newInstance(path, manager, this);
+            return store;
+        }catch(Exception ex){
+            Log.e(TAG, "Failed to create a Store instance: " + className, ex);
+            return null;
+        }
+    }
+
     @InterfaceAudience.Private
     public synchronized boolean open() {
 
@@ -1014,8 +1027,9 @@ public class Database implements StoreDelegate {
                 return false;
 
         // Initialize & open store
-        store = new SQLiteStore(path, manager, this);
-        //store.setDelegate(this);
+        store = createStoreInstance();
+        if(store == null)
+            store = new SQLiteStore(path, manager, this);
         if (!store.open())
             return false;
 
@@ -1181,11 +1195,6 @@ public class Database implements StoreDelegate {
     public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev, int limit,
                                                        AtomicBoolean hasAttachment) {
         return store.getPossibleAncestorRevisionIDs(rev, limit, hasAttachment);
-    }
-
-    @InterfaceAudience.Private
-    public RevisionList getAllRevisions(String docID, boolean onlyCurrent) {
-        return store.getAllRevisions(docID, onlyCurrent);
     }
 
     /**
@@ -1581,7 +1590,7 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID)
             throws CouchbaseLiteException {
-        return store.putLocalRevision(revision, prevRevID);
+        return store.putLocalRevision(revision, prevRevID, true);
     }
 
     /**
@@ -1774,12 +1783,10 @@ public class Database implements StoreDelegate {
     }
 
     private View registerView(View view) {
-        if (view == null) {
+        if (view == null)
             return null;
-        }
-        if (views == null) {
+        if (views == null)
             views = new HashMap<String, View>();
-        }
         views.put(view.getName(), view);
         return view;
     }
@@ -1854,7 +1861,9 @@ public class Database implements StoreDelegate {
             return null;
         List<View> views = new ArrayList<View>();
         for (String name : names) {
-            views.add(this.getExistingView(name));
+            View view = getExistingView(name);
+            if(view != null)
+                views.add(view);
         }
         return views;
     }
@@ -2041,10 +2050,12 @@ public class Database implements StoreDelegate {
     }
 
     protected boolean replaceUUIDs() {
-        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1)
+        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1) {
             return false;
-        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1)
+        }
+        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1) {
             return false;
+        }
         return true;
     }
 
@@ -2062,10 +2073,78 @@ public class Database implements StoreDelegate {
     private boolean garbageCollectAttachments() throws CouchbaseLiteException {
         Log.v(TAG, "Scanning database revisions for attachments...");
         Set<BlobKey> keys = store.findAllAttachmentKeys();
-        List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
+        if(keys == null)
+            return false;
         Log.v(TAG, "    ...found %d attachments", keys.size());
+        List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
         int deleted = attachments.deleteBlobsExceptWithKeys(keysToKeep);
         Log.v(TAG, "    ... deleted %d obsolete attachment files.", deleted);
         return deleted >= 0;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // CBLDatabase+Replication.h/CBLDatabase+Replication.m
+    ////////////////////////////////////////////////////////////////////////////
+
+    // Local checkpoint document keys:
+    public static String kCBLDatabaseLocalCheckpoint_LocalUUID = "localUUID";
+    public static String kLocalCheckpointDocId = "CBL_LocalCheckpoint";
+
+    /**
+     * Save current local uuid into the local checkpoint document.
+     *
+     * This method is called only
+     * when importing or replacing the database. The old localUUID is used by replicators
+     * to get the local checkpoint from the imported database in order to start replicating
+     * from from the current local checkpoint of the imported database after importing.
+     *
+     * in CBLDatabase+Replication.m
+     * - (BOOL) saveLocalUUIDInLocalCheckpointDocument: (NSError**)outError;
+     */
+    protected boolean saveLocalUUIDInLocalCheckpointDocument(){
+        return putLocalCheckpointDocumentWithKey(
+                kCBLDatabaseLocalCheckpoint_LocalUUID,
+                privateUUID());
+    }
+
+    /**
+     * Put a property with a given key and value into the local checkpoint document.
+     *
+     * in CBLDatabase+Replication.m
+     * - (BOOL) putLocalCheckpointDocumentWithKey: (NSString*)key value:(id)value outError: (NSError**)outError
+     */
+    protected boolean putLocalCheckpointDocumentWithKey(String key, Object value) {
+        if (key == null || value == null) return false;
+
+        Map<String, Object> localCheckpointDoc = getLocalCheckpointDocument();
+        Map<String, Object> document;
+        if (localCheckpointDoc != null)
+            document = new HashMap<String, Object>(localCheckpointDoc);
+        else
+            document = new HashMap<String, Object>();
+        document.put(key, value);
+        boolean result = false;
+        try {
+            result = putLocalDocument(kLocalCheckpointDocId, document);
+            if (!result)
+                Log.w(Log.TAG_DATABASE, "CBLDatabase: Could not create a local checkpoint document with an error");
+        } catch (CouchbaseLiteException e) {
+            Log.w(Log.TAG_DATABASE, "CBLDatabase: Could not create a local checkpoint document with an error", e);
+        }
+        return result;
+    }
+
+    /**
+     * Returns a property value specifiec by the key from the local checkpoint document.
+     */
+    protected Object getLocalCheckpointDocumentPropertyValueForKey(String key){
+        return getLocalCheckpointDocument().get(key);
+    }
+
+    /**
+     * Returns local checkpoint document if it exists. Otherwise returns nil.
+     */
+    protected Map<String, Object> getLocalCheckpointDocument(){
+        return getExistingLocalDocument(kLocalCheckpointDocId);
     }
 }

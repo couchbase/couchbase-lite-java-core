@@ -104,7 +104,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         String sql = "DROP TABLE IF EXISTS 'maps_#'; " +
                 "UPDATE views SET lastSequence=0, total_docs=0 WHERE view_id=#";
         if (!runStatements(sql))
-            Log.w(TAG, "Couldn't delete view index `%s`", name);
+            Log.w(TAG, "Couldn't delete view _index `%s`", name);
     }
 
     @Override
@@ -123,7 +123,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
     /**
      * Updates the version of the view. A change in version means the delegate's map block has
-     * changed its semantics, so the index should be deleted.
+     * changed its semantics, so the _index should be deleted.
      */
     @Override
     public boolean setVersion(String version) {
@@ -218,7 +218,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     }
 
     /**
-     * Updates the view's index (incrementally) if necessary.
+     * Updates the view's _index (incrementally) if necessary.
      *
      * @return 200 if updated, 304 if already up-to-date, else an error code
      */
@@ -303,7 +303,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
             // NOTE: Below is original Query. In case query result uses a lot of memory,
             //       Android SQLiteDatabase causes null value column. Then it causes the missing
-            //       index data because following logic skip result if column is null.
+            //       _index data because following logic skip result if column is null.
             //       To avoid the issue, retrieving json field is isolated from original query.
             //       Because json field could be large, maximum size is 2MB.
             // StringBuffer sql = new StringBuffer( "SELECT revs.doc_id, sequence, docid, revid,
@@ -505,26 +505,8 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                                 sequence, // sequence
                                 properties// properties
                         );
-                        /*
-                        String revID = cursor.getString(4);
-                        byte[] json = cursor.getBlob(5);
-                        docRevision = store.revision(
-                                docID,    // docID
-                                revID,    // revID
-                                false,    // deleted
-                                sequence, // sequence
-                                json      // json
-                        );
-                        */
                     }
                 }
-                /*
-                Log.v(TAG, "Query %s: Found row with key=%s, value=%s, id=%s",
-                        name,
-                        new String(keyData),
-                        new String(valueData),
-                        docID);
-                */
                 QueryRow row = new QueryRow(docID, sequence,
                         keyDoc.jsonObject(), valueDoc.jsonObject(),
                         docRevision, SQLiteViewStore.this);
@@ -645,34 +627,6 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     }
 
     @Override
-    public QueryRowStore storageForQueryRow(QueryRow row) {
-        // TODO: Implement
-        return null;
-    }
-
-    @Override
-    public int getViewID() {
-        if (viewID < 0) {
-            String sql = "SELECT view_id FROM views WHERE name=?";
-            String[] args = {name};
-            Cursor cursor = null;
-            try {
-                cursor = store.getStorageEngine().rawQuery(sql, args);
-                if (cursor.moveToNext()) {
-                    viewID = cursor.getInt(0);
-                }
-            } catch (SQLException e) {
-                Log.e(Log.TAG_VIEW, "Error getting view id", e);
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-        }
-        return viewID;
-    }
-
-    @Override
     public List<Map<String, Object>> dump() {
         if (getViewID() < 0)
             return null;
@@ -722,6 +676,27 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     ///////////////////////////////////////////////////////////////////////////
     // Internal (Private) Instance Methods
     ///////////////////////////////////////////////////////////////////////////
+
+    private int getViewID() {
+        if (viewID < 0) {
+            String sql = "SELECT view_id FROM views WHERE name=?";
+            String[] args = {name};
+            Cursor cursor = null;
+            try {
+                cursor = store.getStorageEngine().rawQuery(sql, args);
+                if (cursor.moveToNext()) {
+                    viewID = cursor.getInt(0);
+                }
+            } catch (SQLException e) {
+                Log.e(Log.TAG_VIEW, "Error getting view id", e);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+        }
+        return viewID;
+    }
 
     // pragma mark - QUERYING:
 
@@ -903,7 +878,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 "key TEXT NOT NULL COLLATE JSON," +
                 "value TEXT)";
         if (!runStatements(sql))
-            Log.w(TAG, "Couldn't create view index `%s`", name);
+            Log.w(TAG, "Couldn't create view _index `%s`", name);
     }
 
 

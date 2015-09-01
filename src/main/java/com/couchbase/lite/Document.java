@@ -379,7 +379,7 @@ public class Document {
     protected List<SavedRevision> getLeafRevisions(boolean includeDeleted) throws CouchbaseLiteException {
 
         List<SavedRevision> result = new ArrayList<SavedRevision>();
-        RevisionList revs = database.getAllRevisions(documentId, true);
+        RevisionList revs = database.getStore().getAllRevisions(documentId, true);
         for (RevisionInternal rev : revs) {
             // add it to result, unless we are not supposed to include deleted and it's deleted
             if (!includeDeleted && rev.isDeleted()) {

@@ -41,6 +41,7 @@ public final class View implements ViewStoreDelegate {
     private String name;
     private Mapper mapBlock;
     private Reducer reduceBlock;
+    private String version; // TODO: iOS version store version information in CBL_Shared.
     private static ViewCompiler compiler;
     private ViewStore viewStore;
 
@@ -48,14 +49,24 @@ public final class View implements ViewStoreDelegate {
     // Constructor
     ///////////////////////////////////////////////////////////////////////////
 
+    /*
     @InterfaceAudience.Private
     protected View(Database database, String name) {
         this.database = database;
         this.name = name;
-        this.viewStore = database.getStore().getViewStorage(name, false);
+        this.viewStore = database.getStore().getViewStorage(name, true);
         this.viewStore.setDelegate(this);
     }
-
+    */
+    @InterfaceAudience.Private
+    protected View(Database database, String name, boolean create) throws CouchbaseLiteException{
+        this.database = database;
+        this.name = name;
+        this.viewStore = database.getStore().getViewStorage(name, create);
+        if(this.viewStore == null)
+            throw new CouchbaseLiteException(Status.NOT_FOUND);
+        this.viewStore.setDelegate(this);
+    }
     ///////////////////////////////////////////////////////////////////////////
     // Implementation of ViewStorageDelegate
     ///////////////////////////////////////////////////////////////////////////
@@ -80,7 +91,8 @@ public final class View implements ViewStoreDelegate {
 
     @Override
     public String getMapVersion() {
-        return null;
+        // TODO: Should be from CBL_Shared
+        return version;
     }
 
     /**
@@ -139,9 +151,12 @@ public final class View implements ViewStoreDelegate {
     public boolean setMapReduce(Mapper mapBlock, Reducer reduceBlock, String version) {
         assert (mapBlock != null);
         assert (version != null);
+        boolean changed = (this.version == null || !this.version.equals(version));
         this.mapBlock = mapBlock;
         this.reduceBlock = reduceBlock;
-        return viewStore.setVersion(version);
+        this.version = version;
+        viewStore.setVersion(version); // for SQLite
+        return changed;
     }
 
     /**
@@ -246,11 +261,6 @@ public final class View implements ViewStoreDelegate {
             viewStore.close();
         viewStore = null;
         database = null;
-    }
-
-    @InterfaceAudience.Private
-    public int getViewId() {
-        return viewStore.getViewID();
     }
 
     @InterfaceAudience.Private
