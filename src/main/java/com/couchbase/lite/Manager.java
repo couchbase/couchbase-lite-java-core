@@ -347,7 +347,7 @@ public final class Manager {
             return false;
         }
 
-        /*
+        /* TODO: Currently Java implementation is different from iOS, needs to catch up.
         if(!db.saveLocalUUIDInLocalCheckpointDocument()){
             Log.w(Database.TAG, "Failed to replace UUIDs");
             return false;

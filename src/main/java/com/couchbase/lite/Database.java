@@ -1030,7 +1030,6 @@ public class Database implements StoreDelegate {
         store = createStoreInstance();
         if(store == null)
             store = new SQLiteStore(path, manager, this);
-            //store = new ForestDBStore(path, manager, this);
         if (!store.open())
             return false;
 
@@ -2057,8 +2056,6 @@ public class Database implements StoreDelegate {
         if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1) {
             return false;
         }
-        System.out.println("aaa");
-
         return true;
     }
 
@@ -2074,14 +2071,14 @@ public class Database implements StoreDelegate {
     }
 
     private boolean garbageCollectAttachments() throws CouchbaseLiteException {
-        Log.e(TAG, "Scanning database revisions for attachments...");
+        Log.v(TAG, "Scanning database revisions for attachments...");
         Set<BlobKey> keys = store.findAllAttachmentKeys();
         if(keys == null)
             return false;
-        Log.e(TAG, "    ...found %d attachments", keys.size());
+        Log.v(TAG, "    ...found %d attachments", keys.size());
         List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
         int deleted = attachments.deleteBlobsExceptWithKeys(keysToKeep);
-        Log.e(TAG, "    ... deleted %d obsolete attachment files.", deleted);
+        Log.v(TAG, "    ... deleted %d obsolete attachment files.", deleted);
         return deleted >= 0;
     }
 
