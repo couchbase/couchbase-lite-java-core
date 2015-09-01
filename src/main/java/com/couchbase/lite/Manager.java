@@ -826,4 +826,8 @@ public final class Manager {
     private static boolean isWindows() {
         return (OS.indexOf("win") >= 0);
     }
+
+    protected String getStoreClassName() {
+        return storeClassName;
+    }
 }

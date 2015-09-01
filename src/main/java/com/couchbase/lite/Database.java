@@ -42,6 +42,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -995,6 +996,19 @@ public class Database implements StoreDelegate {
         return new File(path).exists();
     }
 
+    private Store createStoreInstance() {
+        String className = manager.getStoreClassName();
+        try {
+            Class<?> clazz = Class.forName(className);
+            Constructor<?> ctor = clazz.getDeclaredConstructor(String.class, Manager.class, StoreDelegate.class);
+            Store store = (Store) ctor.newInstance(path, manager, this);
+            return store;
+        }catch(Exception ex){
+            Log.e(TAG, "Failed to create a Store instance: " + className, ex);
+            return null;
+        }
+    }
+
     @InterfaceAudience.Private
     public synchronized boolean open() {
 
@@ -1013,9 +1027,10 @@ public class Database implements StoreDelegate {
                 return false;
 
         // Initialize & open store
-        store = new SQLiteStore(path, manager, this);
-        //store = new ForestDBStore(path, manager, this);
-        //store.setDelegate(this);
+        store = createStoreInstance();
+        if(store == null)
+            store = new SQLiteStore(path, manager, this);
+            //store = new ForestDBStore(path, manager, this);
         if (!store.open())
             return false;
 
