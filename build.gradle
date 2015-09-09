@@ -25,6 +25,11 @@ dependencies {
     compile fileTree(dir: 'libs', include: '*.jar')
 }
 
+
+////////////////////////////////////////////
+// For Maven
+////////////////////////////////////////////
+
 task createMavenDirectory(type: Exec) {
 
     ext {
