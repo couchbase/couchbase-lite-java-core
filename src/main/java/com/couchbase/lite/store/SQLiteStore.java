@@ -1561,7 +1561,11 @@ public class SQLiteStore implements Store {
      * @return Storage for the view, or nil if create=NO and it doesn't exist.
      */
     public ViewStore getViewStorage(String name, boolean create) {
-        return new SQLiteViewStore(this, name, create);
+        try {
+            return new SQLiteViewStore(this, name, create);
+        }catch(CouchbaseLiteException ex){
+            return null;
+        }
     }
 
     @Override
