@@ -91,7 +91,7 @@ public final class Manager {
     @InterfaceAudience.Public
     public Manager(Context context, ManagerOptions options) throws IOException {
 
-        Log.i(Database.TAG, "Starting Manager version: %s", Manager.VERSION);
+        Log.d(Database.TAG, "Starting Manager version: %s", Manager.VERSION);
 
         this.context = context;
         this.directoryFile = context.getFilesDir();
@@ -221,7 +221,7 @@ public final class Manager {
      */
     @InterfaceAudience.Public
     public void close() {
-        Log.i(Database.TAG, "Closing " + this);
+        Log.d(Database.TAG, "Closing " + this);
         for (Database database : databases.values()) {
             // Database.close() closes all active replicators
             database.close();
@@ -234,7 +234,7 @@ public final class Manager {
             Utils.shutdownAndAwaitTermination(workExecutor);
         }
 
-        Log.i(Database.TAG, "Closed " + this);
+        Log.d(Database.TAG, "Closed " + this);
     }
 
     /**

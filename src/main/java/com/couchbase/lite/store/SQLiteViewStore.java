@@ -398,7 +398,6 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 byte[] json = SQLiteUtils.byteArrayResultForQuery(store.getStorageEngine(),
                         "SELECT json FROM revs WHERE sequence=?", selectArgs3);
 
-                Log.e("json", "<" + new String(json) + ">");
                 // Get the document properties, to pass to the map function:
                 Map<String, Object> properties = store.documentPropertiesFromJSON(
                         json,
