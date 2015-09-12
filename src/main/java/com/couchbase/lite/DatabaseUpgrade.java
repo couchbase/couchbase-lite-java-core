@@ -76,9 +76,8 @@ final public class DatabaseUpgrade {
                 return false;
             }
 
-            // Open source (SQLite) database:
             // TODO: We also need encryption key for database upgrade.
-            if (!storageEngine.open(path, null)) {
+            if (!storageEngine.open(path)) {
                 Log.e(TAG, "Upgrade failed: Couldn't open new db: %s", path);
                 return false;
             }

@@ -125,7 +125,7 @@ public class SymmetricKey {
      * @return hex string of the key data
      */
     public String getHexData() {
-        return Utils.bytesToHex(keyData);
+        return Utils.bytesToHex(keyData).toUpperCase();
     }
 
     /**

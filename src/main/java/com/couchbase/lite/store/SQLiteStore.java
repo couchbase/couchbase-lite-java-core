@@ -153,11 +153,9 @@ public class SQLiteStore implements Store {
     @Override
     public synchronized boolean open() throws CouchbaseLiteException {
         // Create the storage engine.
-        SQLiteStorageEngineFactory sqliteStorageEngineFactoryDefault =
+        SQLiteStorageEngineFactory factory =
                 manager.getContext().getSQLiteStorageEngineFactory();
-
-        storageEngine = sqliteStorageEngineFactoryDefault.createStorageEngine(
-                manager.isEnableStorageEncryption());
+        storageEngine = factory.createStorageEngine(manager.isEnableStorageEncryption());
 
         // Try to open the storage engine and stop if we fail.
         if (storageEngine == null) {
@@ -166,27 +164,22 @@ public class SQLiteStore implements Store {
             throw new IllegalStateException(msg);
         }
 
-        boolean isOpen = false;
-        Throwable error = null;
+        boolean isOpenSuccess = false;
         try {
+            // Open database:
+            storageEngine.open(path);
+            // Try to decrypt or access the database:
             SymmetricKey encryptionKey = delegate.getEncryptionKey();
-            if (encryptionKey != null && !storageEngine.supportEncryption()) {
-                throw new CouchbaseLiteException(
-                        "SQLiteStore: encryption not available (app not built with SQLCipher)",
-                        Status.NOT_IMPLEMENTED);
-            }
-            String rawKey = encryptionKey != null ? encryptionKey.getHexData() : null;
-            isOpen = storageEngine.open(path, rawKey);
+            decrypt(encryptionKey);
+            isOpenSuccess = true;
         } catch (SQLException e) {
-            error = e;
-        }
-
-        if (!isOpen) {
-            if (error != null && error.getCause().getMessage().startsWith("file is encrypted"))
-                throw new CouchbaseLiteException(Status.UNAUTHORIZED);
-            else {
-                String message = "Unable to create a storage engine, fatal error";
-                throw new CouchbaseLiteException(message, error, Status.DB_ERROR);
+            String message = "Unable to create a storage engine";
+            Log.e(TAG, message, e);
+            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
+        } finally {
+            if (!isOpenSuccess) {
+                // As an exception will be thrown, no return false is needed here:
+                storageEngine.close();
             }
         }
 
@@ -309,6 +302,51 @@ public class SQLiteStore implements Store {
     @Override
     public int getMaxRevTreeDepth() {
         return maxRevTreeDepth;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Database Encryption
+    ///////////////////////////////////////////////////////////////////////////
+
+    private void decrypt(SymmetricKey encryptionKey) throws CouchbaseLiteException {
+        if (encryptionKey != null) {
+            if (!storageEngine.supportEncryption()) {
+                Log.w(TAG, "SQLiteStore: encryption not available (app not built with SQLCipher)");
+                throw new CouchbaseLiteException("Encryption not available",
+                        Status.NOT_IMPLEMENTED);
+            } else {
+                try {
+                    storageEngine.execSQL("PRAGMA key = \"x'" + encryptionKey.getHexData() + "'\"");
+                } catch (SQLException e) {
+                    Log.w(TAG, "SQLiteStore: 'pragma key' failed", e);
+                    throw e;
+                }
+            }
+        }
+
+        // Verify that encryption key is correct (or db is unencrypted, if no key given)
+        Cursor cursor = null;
+        try {
+            cursor = storageEngine.rawQuery("SELECT count(*) FROM sqlite_master", null);
+            if (cursor == null || !cursor.moveToNext()) {
+                // Backup error:
+                Log.w(TAG, "SQLiteStore: database is unreadable, unknown error");
+                throw new CouchbaseLiteException("Cannot decrypt or access the database",
+                        Status.DB_ERROR);
+            }
+        } catch (SQLException e) {
+            Log.w(TAG, "SQLiteStore: database is unreadable", e);
+            if (e.getMessage() != null &&
+                e.getMessage().contains("file is encrypted or is not a database (code 26)")) {
+                throw new CouchbaseLiteException("Cannot decrypt or access the database",
+                        Status.UNAUTHORIZED);
+            }
+            throw  e;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1966,29 +2004,20 @@ public class SQLiteStore implements Store {
      * would require an expensive full tree traversal. Hopefully this way is good enough.
      */
     protected int pruneRevsToMaxDepth(int maxDepth) throws CouchbaseLiteException {
-
-        int outPruned = 0;
-        boolean shouldCommit = false;
-        Map<Long, Integer> toPrune = new HashMap<Long, Integer>();
-
         if (maxDepth == 0) {
             maxDepth = getMaxRevTreeDepth();
         }
 
         // First find which docs need pruning, and by how much:
-
-        Cursor cursor = null;
-        String[] args = {};
-
         long docNumericID = -1;
         int minGen = 0;
         int maxGen = 0;
-
+        Map<Long, Integer> toPrune = new HashMap<Long, Integer>();
+        Cursor cursor = null;
         try {
-
+            String[] args = {};
             cursor = storageEngine.rawQuery(
                     "SELECT doc_id, MIN(revid), MAX(revid) FROM revs GROUP BY doc_id", args);
-
             while (cursor.moveToNext()) {
                 docNumericID = cursor.getLong(0);
                 String minGenRevId = cursor.getString(1);
@@ -1999,13 +2028,21 @@ public class SQLiteStore implements Store {
                     toPrune.put(docNumericID, (maxGen - minGen));
                 }
             }
+        } catch (Exception e) {
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
 
+        int outPruned = 0;
+        boolean shouldCommit = false;
+        try {
             beginTransaction();
-
             if (toPrune.size() == 0) {
                 return 0;
             }
-
             for (Long docNumericIDLong : toPrune.keySet()) {
                 String minIDToKeep = String.format("%d-", toPrune.get(docNumericIDLong).intValue() + 1);
                 String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
@@ -2013,18 +2050,12 @@ public class SQLiteStore implements Store {
                         "revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
                 outPruned += rowsDeleted;
             }
-
             shouldCommit = true;
-
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } finally {
             endTransaction(shouldCommit);
-            if (cursor != null) {
-                cursor.close();
-            }
         }
-
         return outPruned;
     }
 
