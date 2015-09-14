@@ -475,7 +475,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         }
 
         final CountDown skip = new CountDown(tmpSkip);
-        final CountDown limit = new CountDown(tmpLimit);;
+        final CountDown limit = new CountDown(tmpLimit);
 
         final List<QueryRow> rows = new ArrayList<QueryRow>();
 
