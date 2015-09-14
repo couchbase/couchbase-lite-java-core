@@ -23,8 +23,10 @@ import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.support.JsonDocument;
+import com.couchbase.lite.util.CountDown;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.SQLiteUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -459,18 +461,21 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
         final Predicate<QueryRow> postFilter = options.getPostFilter();
 
-        // TODO
-        // int limit = QueryOptions.QUERY_OPTIONS_DEFAULT_LIMIT;
-        // int skip = 0;
+        int tmpLimit = QueryOptions.QUERY_OPTIONS_DEFAULT_LIMIT;
+        int tmpSkip = 0;
         if (postFilter != null) {
             // #574: Custom post-filter means skip/limit apply to the filtered rows, not to the
             // underlying query, so handle them specially:
-            // TODO
-            //limit = options.getLimit();
-            //skip = options.getSkip();
+            tmpLimit = options.getLimit();
+            tmpSkip = options.getSkip();
+            if(tmpLimit == 0)
+                return new ArrayList<QueryRow>(); // empty result set
             options.setLimit(QueryOptions.QUERY_OPTIONS_DEFAULT_LIMIT);
             options.setSkip(0);
         }
+
+        final CountDown skip = new CountDown(tmpSkip);
+        final CountDown limit = new CountDown(tmpLimit);
 
         final List<QueryRow> rows = new ArrayList<QueryRow>();
 
@@ -516,26 +521,50 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     if (!postFilter.apply(row)) {
                         return new Status(Status.OK);
                     }
-                    /* TODO
-                    if(skip > 0){
-                        skip--;
+                    if(skip.getCount() > 0){
+                        skip.countDown();
                         return new Status(Status.OK);
                     }
-                    */
 
                 }
                 rows.add(row);
 
-                /* TODO
-                if(limit-- == 0)
+                if(limit.countDown() == 0)
                     return new Status(0); /// stops the iteration
-                */
                 return new Status(Status.OK);
             }
         });
 
         // If given keys, sort the output into that order, and add entries for missing keys:
-        // TODO
+        if(options.getKeys() != null && options.getKeys().size() > 0){
+            // Group rows by key:
+            Map<Object, List<QueryRow>> rowsByKey = new HashMap<Object, List<QueryRow>>();
+            for(QueryRow row:rows){
+                List<QueryRow> rs = rowsByKey.get(row.getKey());
+                if(rs == null) {
+                    rs = new ArrayList<QueryRow>();
+                    rowsByKey.put(row.getKey(), rs);
+                }
+                rs.add(row);
+            }
+
+            // Now concatenate them in the order the keys are given in options:
+            final List<QueryRow> sortedRows = new ArrayList<QueryRow>();
+            for(Object key : options.getKeys()){
+                JsonDocument jsonDoc = null;
+                try {
+                    byte[] keyBytes = Manager.getObjectMapper().writeValueAsBytes(key);
+                    jsonDoc = new JsonDocument(keyBytes);
+                } catch (JsonProcessingException e) {
+                    throw new  CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                }
+                List<QueryRow> rs = rowsByKey.get(jsonDoc.jsonObject());
+                if(rs != null)
+                    sortedRows.addAll(rs);
+            }
+
+            return sortedRows;
+        }
 
         return rows;
     }
@@ -745,7 +774,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         String minKeyDocId = options.getStartKeyDocId();
         String maxKeyDocId = options.getEndKeyDocId();
 
-        boolean inclusiveMin = true;
+        boolean inclusiveMin = options.isInclusiveStart();
         boolean inclusiveMax = options.isInclusiveEnd();
         if (options.isDescending()) {
             Object min = minKey;
