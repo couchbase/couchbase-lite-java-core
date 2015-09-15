@@ -33,6 +33,7 @@ import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.support.RevisionUtils;
+import com.couchbase.lite.support.security.SymmetricKey;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.CollectionUtils.Functor;
 import com.couchbase.lite.util.Log;
@@ -631,6 +632,15 @@ public class Database implements StoreDelegate {
 
     /**
      * in CBLDatabase+Internal.m
+     * - (CBLSymmetricKey*) encryptionKey
+     */
+    @InterfaceAudience.Private
+    public SymmetricKey getEncryptionKey() {
+        return manager.getEncryptionKeys().get(name);
+    }
+
+    /**
+     * in CBLDatabase+Internal.m
      * - (void) storageExitedTransaction: (BOOL)committed
      */
     @InterfaceAudience.Private
@@ -1010,8 +1020,7 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    public synchronized boolean open() {
-
+    public synchronized boolean open() throws CouchbaseLiteException {
         if (open) {
             return true;
         }
@@ -1071,9 +1080,9 @@ public class Database implements StoreDelegate {
 
         try {
             if (isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()) {
-                attachments = new BlobStore(getAttachmentStorePath(), false);
+                attachments = new BlobStore(getAttachmentStorePath(), getEncryptionKey(), false);
             } else {
-                attachments = new BlobStore(getAttachmentStorePath(), true);
+                attachments = new BlobStore(getAttachmentStorePath(), getEncryptionKey(), true);
                 markBlobstoreMigrated();
             }
 

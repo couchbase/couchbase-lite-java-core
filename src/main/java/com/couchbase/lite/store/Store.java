@@ -55,7 +55,7 @@ public interface Store {
      * @return true on success, false on failure.
      */
     //boolean open(String directory, boolean readOnly, Manager manager);
-    boolean open();
+    boolean open() throws CouchbaseLiteException;
 
     /**
      * Closes storage before it's deallocated.

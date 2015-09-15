@@ -242,7 +242,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         } else {
             try {
                 curAttachment.appendData(data, off, len);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 throw new IllegalStateException("Failed to append data", e);
             }
         }
@@ -255,7 +255,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         } else {
             try {
                 curAttachment.finish();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 throw new IllegalStateException("Failed to finish attachment", e);
             }
             String md5String = curAttachment.mD5DigestString();

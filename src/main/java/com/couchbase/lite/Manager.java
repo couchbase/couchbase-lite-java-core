@@ -8,6 +8,8 @@ import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.Version;
+import com.couchbase.lite.support.security.SymmetricKey;
+import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 import com.couchbase.lite.util.Utils;
@@ -55,6 +57,7 @@ public final class Manager {
     private ManagerOptions options;
     private File directoryFile;
     private Map<String, Database> databases;
+    private Map<String, SymmetricKey> encryptionKeys;
     private List<Replication> replications;
     private ScheduledExecutorService workExecutor;
     private HttpClientFactory defaultHttpClientFactory;
@@ -97,6 +100,7 @@ public final class Manager {
         this.directoryFile = context.getFilesDir();
         this.options = (options != null) ? options : DEFAULT_OPTIONS;
         this.databases = new HashMap<String, Database>();
+        this.encryptionKeys = new HashMap<String, SymmetricKey>();
         this.replications = new ArrayList<Replication>();
         this.storeClassName = options.getStoreClassName() != null ?
                 options.getStoreClassName() : DEFAULT_STORE_CLASSNAME;
@@ -271,6 +275,60 @@ public final class Manager {
     }
 
     /**
+     * Registers an encryption key for a database. This must be called before opening an encrypted
+     * database, or before creating a database that's to be encrypted. If the key is incorrect
+     * (or no key is given for an encrypted database), the subsequent call
+     * to open the database will fail.
+     * @param key           The encryption key.
+     * @param databaseName  The name of the database.
+     * @return
+     */
+    @InterfaceAudience.Public
+    public boolean registerEncryptionKey(byte[] key, String databaseName) {
+        if (databaseName == null)
+            return false;
+
+        if (key != null) {
+            try {
+                SymmetricKey realKey = new SymmetricKey(key);
+                encryptionKeys.put(databaseName, realKey);
+            } catch (SymmetricKeyException e) {
+                Log.e(Database.TAG, "Cannot create a symmetric key", e);
+                return false;
+            }
+        } else
+            encryptionKeys.remove(databaseName);
+        return true;
+    }
+
+    /**
+     * Registers an encryption key with a password for a database. This must be called before
+     * opening an encrypted database, or before creating a database that's to be encrypted.
+     * If the key is incorrect (or no key is given for an encrypted database), the subsequent call
+     * to open the database will fail.
+     * @param password      The encryption password.
+     * @param databaseName  The name of the database.
+     * @return
+     */
+    @InterfaceAudience.Public
+    public boolean registerEncryptionKey(String password, String databaseName) {
+        if (databaseName == null)
+            return false;
+
+        if (password != null) {
+            try {
+                SymmetricKey realKey = new SymmetricKey(password);
+                encryptionKeys.put(databaseName, realKey);
+            } catch (SymmetricKeyException e) {
+                Log.e(Database.TAG, "Cannot create a symmetric key", e);
+                return false;
+            }
+        } else
+            encryptionKeys.remove(databaseName);
+        return true;
+    }
+
+    /**
      * Replaces or installs a database from a file.
      * <p/>
      * This is primarily used to install a canned database
@@ -342,8 +400,16 @@ public final class Manager {
             return false;
         }
 
-        if(!db.open()){
-            Log.w(Database.TAG, "Failed to open database");
+        boolean isOpen = false;
+        CouchbaseLiteException error = null;
+        try {
+            isOpen = db.open();
+        } catch (CouchbaseLiteException e) {
+            error = e;
+        }
+
+        if (!isOpen) {
+            Log.w(Database.TAG, "Failed to open database", error);
             return false;
         }
 
@@ -400,6 +466,22 @@ public final class Manager {
     @InterfaceAudience.Private
     public Collection<Database> allOpenDatabases() {
         return databases.values();
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public boolean isEnableStorageEncryption() {
+        return options.isEnableStorageEncryption();
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    public Map<String, SymmetricKey> getEncryptionKeys() {
+        return Collections.unmodifiableMap(encryptionKeys) ;
     }
 
     /**
@@ -794,7 +876,6 @@ public final class Manager {
      */
     @InterfaceAudience.Private
     protected void forgetDatabase(Database db) {
-
         // remove from cached list of dbs
         databases.remove(db.getName());
 
@@ -807,6 +888,9 @@ public final class Manager {
                 replicationIterator.remove();
             }
         }
+
+        // Remove registered encryption key if available:
+        encryptionKeys.remove(db.getName());
     }
 
     /**

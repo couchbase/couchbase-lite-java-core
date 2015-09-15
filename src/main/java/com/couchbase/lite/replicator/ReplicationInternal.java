@@ -1,5 +1,6 @@
 package com.couchbase.lite.replicator;
 
+import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Misc;
 import com.couchbase.lite.RevisionList;
@@ -743,9 +744,16 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         Map<String, Object> response = (Map<String, Object>) result;
                         body.put("_rev", response.get("rev"));
                         remoteCheckpoint = body;
-                        if (db != null && db.open()) {
+                        boolean isOpen = false;
+                        try {
+                            isOpen = (db != null && db.open());
+                        } catch (CouchbaseLiteException ex) {
+                            Log.w(Log.TAG_SYNC, "%s: Cannot open the database", this, ex);
+                        }
+
+                        if (isOpen) {
                             Log.d(Log.TAG_SYNC,
-                                    "%s: saved remote checkpoint, updating local checkpoint.  remoteCheckpoint: %s",
+                                    "%s: saved remote checkpoint, updating local checkpoint. RemoteCheckpoint: %s",
                                     this, remoteCheckpoint);
                             db.setLastSequence(lastSequence, checkpointID);
                         } else {

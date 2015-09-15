@@ -19,6 +19,7 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.Log;
 
 import java.io.ByteArrayInputStream;
@@ -188,7 +189,6 @@ public final class Attachment {
     protected static Map<String, Object> installAttachmentBodies(Map<String, Object> attachments,
                                                                  Database database)
             throws CouchbaseLiteException {
-
         Map<String, Object> updatedAttachments = new HashMap<String, Object>();
         for (String name : attachments.keySet()) {
             Object value = attachments.get(name);
@@ -202,7 +202,7 @@ public final class Attachment {
                     BlobStoreWriter writer;
                     try {
                         writer = blobStoreWriterForBody(body, database);
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         throw new CouchbaseLiteException(e.getMessage(), Status.ATTACHMENT_ERROR);
                     }
                     metadataMutable.put("length", writer.getLength());
@@ -222,12 +222,15 @@ public final class Attachment {
 
     @InterfaceAudience.Private
     protected static BlobStoreWriter blobStoreWriterForBody(InputStream body, Database database)
-            throws IOException {
+            throws IOException, SymmetricKeyException {
         BlobStoreWriter writer = database.getAttachmentWriter();
         try {
-            writer.read(body);
+            writer.appendInputStream(body);
             writer.finish();
         } catch (IOException e) {
+            writer.cancel();
+            throw e;
+        } catch (SymmetricKeyException e) {
             writer.cancel();
             throw e;
         }

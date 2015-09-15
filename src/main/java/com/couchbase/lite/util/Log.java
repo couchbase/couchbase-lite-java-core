@@ -43,6 +43,7 @@ public class Log {
     public static final String TAG_LISTENER = "Listener";
     public static final String TAG_MULTI_STREAM_WRITER = "MultistreamWriter";
     public static final String TAG_BLOB_STORE = "BlobStore";
+    public static final String TAG_SYMMETRIC_KEY = "SymmetricKey";
 
 
     /**
@@ -69,6 +70,7 @@ public class Log {
         enabledTags.put(Log.TAG_LISTENER, WARN);
         enabledTags.put(Log.TAG_MULTI_STREAM_WRITER, WARN);
         enabledTags.put(Log.TAG_BLOB_STORE, WARN);
+        enabledTags.put(Log.TAG_SYMMETRIC_KEY, WARN);
     }
 
     /**

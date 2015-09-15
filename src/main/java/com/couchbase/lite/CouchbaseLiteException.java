@@ -26,6 +26,11 @@ public class CouchbaseLiteException extends Exception {
         this.status = status;
     }
 
+    public CouchbaseLiteException(String detailMessage, Throwable throwable, int statusCode) {
+        super(detailMessage, throwable);
+        this.status = new Status(statusCode);
+    }
+
     public CouchbaseLiteException(Throwable throwable, Status status) {
         super(throwable);
         this.status = status;

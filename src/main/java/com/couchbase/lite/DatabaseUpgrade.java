@@ -64,20 +64,35 @@ final public class DatabaseUpgrade {
         try {
             // Create the storage engine for source database
             SQLiteStorageEngineFactory factory = manager.getContext().getSQLiteStorageEngineFactory();
-            if ((storageEngine = factory.createStorageEngine()) == null) {
+            try {
+                storageEngine = factory.createStorageEngine(manager.isEnableStorageEncryption());
+            } catch (CouchbaseLiteException e) {
+                Log.e(TAG, "Upgrade failed: Unable to create a storage engine", e);
+                return false;
+            }
+
+            if (storageEngine == null) {
                 Log.e(TAG, "Upgrade failed: Unable to create a storage engine");
                 return false;
             }
 
             // Open source (SQLite) database:
-            if (!storageEngine.open(path)) {
+            // TODO: We also need encryption key for database upgrade.
+            if (!storageEngine.open(path, null)) {
                 Log.e(TAG, "Upgrade failed: Couldn't open new db: %s", path);
                 return false;
             }
 
             // Open destination database:
-            if (!db.open()) {
-                Log.e(TAG, "Upgrade failed:  Couldn't open new db: %s", db.toString());
+            boolean isOpen = false;
+            Throwable error = null;
+            try {
+                isOpen = db.open();
+            } catch (CouchbaseLiteException e) {
+                error = e;
+            }
+            if (!isOpen) {
+                Log.e(TAG, "Upgrade failed:  Couldn't open new db: %s", db.toString(), error);
                 return false;
             }
 
