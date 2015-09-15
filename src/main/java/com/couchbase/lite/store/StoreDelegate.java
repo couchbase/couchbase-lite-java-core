@@ -9,6 +9,7 @@ package com.couchbase.lite.store;
 import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.support.security.SymmetricKey;
 
 import java.util.Map;
 
@@ -16,6 +17,12 @@ import java.util.Map;
  * Delegate of a CBL_Storage instance. CBLDatabase implements this.
  */
 public interface StoreDelegate {
+    /**
+     * Get encryption key registered with this database.
+     * @return encryption key
+     */
+    public SymmetricKey getEncryptionKey();
+
     /**
      * Called whenever the outermost transaction completes.
      *

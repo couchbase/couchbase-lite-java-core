@@ -1,6 +1,8 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.support.Base64;
+import com.couchbase.lite.support.security.SymmetricKey;
+import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.Log;
 
 import java.io.BufferedOutputStream;
@@ -47,6 +49,11 @@ public class BlobStoreWriter {
     private BufferedOutputStream outStream = null;
     private File tempFile = null;
 
+    /**
+     * An encryptor for encrypting the blob content.
+     */
+    private SymmetricKey.Encryptor encryptor = null;
+
     public BlobStoreWriter(BlobStore store) {
         this.store = store;
         try {
@@ -62,6 +69,15 @@ public class BlobStoreWriter {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
+
+        SymmetricKey encryptionKey = store.getEncryptionKey();
+        if (encryptionKey != null) {
+            try {
+                encryptor = encryptionKey.createEncryptor();
+            } catch (SymmetricKeyException e) {
+                throw new IllegalStateException(e);
+            }
+        }
     }
 
     private void openTempFile() throws IOException {
@@ -75,32 +91,39 @@ public class BlobStoreWriter {
     /**
      * Appends data to the blob. Call this when new data is available.
      */
-    public void appendData(byte[] data) throws IOException {
+    public void appendData(byte[] data) throws IOException, SymmetricKeyException {
+        if (data == null)
+            return;
         appendData(data, 0, data.length);
     }
 
-    public void appendData(byte[] data, int off, int len) throws IOException {
-        outStream.write(data, off, len);
+    public void appendData(byte[] data, int off, int len) throws IOException, SymmetricKeyException {
+        if (data == null)
+            return;
+        length += len;
         sha1Digest.update(data, off, len);
         md5Digest.update(data, off, len);
-        length += len;
+        if (encryptor != null) {
+            data = encryptor.encrypt(data, off, len);
+            if (data != null)
+                outStream.write(data, 0, data.length);
+        } else
+            outStream.write(data, off, len);
     }
 
-    void read(InputStream inputStream) throws IOException {
+    void appendInputStream(InputStream inputStream) throws IOException, SymmetricKeyException {
         byte[] buffer = new byte[1024];
         int len;
         length = 0;
         try {
             while ((len = inputStream.read(buffer)) != -1) {
-                outStream.write(buffer, 0, len);
-                sha1Digest.update(buffer, 0, len);
-                md5Digest.update(buffer, 0, len);
-                length += len;
+                appendData(buffer, 0, len);
             }
         } finally {
             try {
-                inputStream.close();
-                inputStream = null;
+                // Question: Should this method close the stream?
+                if (inputStream != null)
+                    inputStream.close();
             } catch (IOException e) {
                 Log.w(Log.TAG_BLOB_STORE, "Exception closing input stream", e);
             }
@@ -110,8 +133,11 @@ public class BlobStoreWriter {
     /**
      * Call this after all the data has been added.
      */
-    public void finish() throws IOException {
+    public void finish() throws IOException, SymmetricKeyException {
         if (outStream != null) {
+            if (encryptor != null)
+                outStream.write(encryptor.encrypt(null));
+
             // FileOutputStream is also closed cascadingly
             outStream.close();
             outStream = null;
@@ -132,6 +158,8 @@ public class BlobStoreWriter {
                 outStream.close();
                 outStream = null;
             }
+            // Clear encryptor:
+            encryptor = null;
         } catch (IOException e) {
             Log.w(Log.TAG_BLOB_STORE, "Exception closing buffered output stream", e);
         }

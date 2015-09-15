@@ -29,6 +29,7 @@ import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
 import com.couchbase.lite.support.RevisionUtils;
+import com.couchbase.lite.support.security.SymmetricKey;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.SQLiteUtils;
 import com.couchbase.lite.util.TextUtils;
@@ -150,18 +151,43 @@ public class SQLiteStore implements Store {
     }
 
     @Override
-    public synchronized boolean open() {
-
+    public synchronized boolean open() throws CouchbaseLiteException {
         // Create the storage engine.
         SQLiteStorageEngineFactory sqliteStorageEngineFactoryDefault =
                 manager.getContext().getSQLiteStorageEngineFactory();
-        storageEngine = sqliteStorageEngineFactoryDefault.createStorageEngine();
+
+        storageEngine = sqliteStorageEngineFactoryDefault.createStorageEngine(
+                manager.isEnableStorageEncryption());
 
         // Try to open the storage engine and stop if we fail.
-        if (storageEngine == null || !storageEngine.open(path)) {
+        if (storageEngine == null) {
             String msg = "Unable to create a storage engine, fatal error";
             Log.e(TAG, msg);
             throw new IllegalStateException(msg);
+        }
+
+        boolean isOpen = false;
+        Throwable error = null;
+        try {
+            SymmetricKey encryptionKey = delegate.getEncryptionKey();
+            if (encryptionKey != null && !storageEngine.supportEncryption()) {
+                throw new CouchbaseLiteException(
+                        "SQLiteStore: encryption not available (app not built with SQLCipher)",
+                        Status.NOT_IMPLEMENTED);
+            }
+            String rawKey = encryptionKey != null ? encryptionKey.getHexData() : null;
+            isOpen = storageEngine.open(path, rawKey);
+        } catch (SQLException e) {
+            error = e;
+        }
+
+        if (!isOpen) {
+            if (error != null && error.getCause().getMessage().startsWith("file is encrypted"))
+                throw new CouchbaseLiteException(Status.UNAUTHORIZED);
+            else {
+                String message = "Unable to create a storage engine, fatal error";
+                throw new CouchbaseLiteException(message, error, Status.DB_ERROR);
+            }
         }
 
         // Stuff we need to initialize every time the sqliteDb opens:
@@ -197,7 +223,7 @@ public class SQLiteStore implements Store {
                 // monotonically increasing, never reused. See <http://www.sqlite.org/autoinc.html>)
 
                 if (!isNew) {
-                    Log.w(TAG, "CBLDatabase: Database version (%d) is older than I know how to work with",
+                    Log.w(TAG, "Database version (%d) is older than I know how to work with",
                             dbVersion);
                     storageEngine.close();
                     return false;

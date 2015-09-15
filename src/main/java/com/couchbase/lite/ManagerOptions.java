@@ -24,6 +24,11 @@ public class ManagerOptions {
 
     private String storeClassName = null;
 
+    /**
+     * Enable data storage encryption.
+     */
+    private boolean enableStorageEncryption = false;
+
     public ManagerOptions() {
     }
 
@@ -57,5 +62,19 @@ public class ManagerOptions {
 
     public void setStoreClassName(String storeClassName) {
         this.storeClassName = storeClassName;
+    }
+
+    public boolean isEnableStorageEncryption() {
+        return enableStorageEncryption;
+    }
+
+    /**
+     * In addition to linking with the sqlcipher-andriod library, to enable storage encryption,
+     * set enableStorageEncryption to 'true'.
+     * Note: This is subject to change upon release. The couchbase-lite-ios doesn't have this.
+     * @param enableStorageEncryption
+     */
+    public void setEnableStorageEncryption(boolean enableStorageEncryption) {
+        this.enableStorageEncryption = enableStorageEncryption;
     }
 }

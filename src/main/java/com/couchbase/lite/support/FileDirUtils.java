@@ -42,6 +42,17 @@ public class FileDirUtils {
         return fileOrDirectory.delete() || !fileOrDirectory.exists();
     }
 
+    public static boolean cleanDirectory(File dir) {
+        if (!dir.isDirectory())
+            return false;
+
+        for (File file : dir.listFiles()) {
+            if (!deleteRecursive(file))
+                return false;
+        }
+        return true;
+    }
+
     public static String getDatabaseNameFromPath(String path) {
         String fileName = new File(path).getName();
         int extensionPos = fileName.lastIndexOf(".");

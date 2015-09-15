@@ -1,10 +1,12 @@
 package com.couchbase.lite.storage;
 
+import com.couchbase.lite.CouchbaseLiteException;
+
 /**
  * The interface that specifies shape of SQLiteStorageEngineFactory implementations.
  */
 public interface SQLiteStorageEngineFactory {
 
-    public SQLiteStorageEngine createStorageEngine();
+    SQLiteStorageEngine createStorageEngine(boolean enableEncryption) throws CouchbaseLiteException;
 
 }

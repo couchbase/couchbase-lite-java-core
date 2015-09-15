@@ -21,7 +21,7 @@ public interface SQLiteStorageEngine {
     int CONFLICT_IGNORE = 4;
     int CONFLICT_REPLACE = 5;
 
-    boolean open(String path);
+    boolean open(String path, String encryptionKey) throws SQLException;
 
     int getVersion();
 
@@ -50,4 +50,6 @@ public interface SQLiteStorageEngine {
     int delete(String table, String whereClause, String[] whereArgs);
 
     void close();
+
+    boolean supportEncryption();
 }

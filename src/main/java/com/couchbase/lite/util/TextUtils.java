@@ -20,6 +20,10 @@ import com.couchbase.lite.internal.InterfaceAudience;
 
 import org.apache.http.util.ByteArrayBuffer;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -59,6 +63,29 @@ public class TextUtils {
             offset += numRead;
         }
         return byteArrayBuffer.toByteArray();
+    }
+
+    public static String read(File file) throws IOException {
+        InputStream input = null;
+        try {
+            input = new FileInputStream(file);
+            byte[] content = read(input);
+            return content != null ? new String(content) : null;
+        } finally {
+            if (input != null)
+                input.close();
+        }
+    }
+
+    public static void write(String text, File file) throws IOException {
+        BufferedOutputStream output = null;
+        try {
+            output = new BufferedOutputStream(new FileOutputStream(file));
+            output.write(text.getBytes());
+        } finally {
+             if (output != null)
+                 output.close();
+        }
     }
 
     /**
