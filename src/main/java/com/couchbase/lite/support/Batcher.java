@@ -53,6 +53,7 @@ public class Batcher<T> {
         this.processor = processor;
         this.inbox = Collections.synchronizedList(new ArrayList<T>());
         this.scheduled = false;
+        this.lastProcessedTime = System.currentTimeMillis();
     }
 
     ///////////////////////////////////////////////////////////////////////////
