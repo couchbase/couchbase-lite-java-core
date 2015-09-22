@@ -1194,7 +1194,9 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public RevisionInternal loadRevisionBody(RevisionInternal rev) throws CouchbaseLiteException {
-        return store.loadRevisionBody(rev);
+        synchronized(store) {
+            return store.loadRevisionBody(rev);
+        }
     }
 
     /**
@@ -1759,7 +1761,9 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public List<RevisionInternal> getRevisionHistory(RevisionInternal rev) {
-        return store.getRevisionHistory(rev);
+        synchronized(store) {
+            return store.getRevisionHistory(rev);
+        }
     }
 
     private String getDesignDocFunction(String fnName, String key, List<String> outLanguageList) {
