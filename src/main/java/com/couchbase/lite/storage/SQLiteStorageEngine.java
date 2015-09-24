@@ -43,6 +43,8 @@ public interface SQLiteStorageEngine {
 
     long insert(String table, String nullColumnHack, ContentValues values);
 
+    long insertOrThrow(String table, String nullColumnHack, ContentValues values) throws SQLException;
+
     long insertWithOnConflict(String table, String nullColumnHack, ContentValues initialValues, int conflictAlgorithm);
 
     int update(String table, ContentValues values, String whereClause, String[] whereArgs);
