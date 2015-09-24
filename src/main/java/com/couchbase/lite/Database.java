@@ -1194,7 +1194,13 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public RevisionInternal loadRevisionBody(RevisionInternal rev) throws CouchbaseLiteException {
-        return store.loadRevisionBody(rev);
+        // loadRevisionBody() and getRevisionHistory() are called back by RemoteRequest threads.
+        // That causes non-synchronized access to database.
+        // This issue might not be occured with SQLite because SQLiteDatabase from Android takes
+        // care multi-threads access.
+        synchronized(store) {
+            return store.loadRevisionBody(rev);
+        }
     }
 
     /**
@@ -1759,7 +1765,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public List<RevisionInternal> getRevisionHistory(RevisionInternal rev) {
-        return store.getRevisionHistory(rev);
+        // loadRevisionBody() and getRevisionHistory() are called back by RemoteRequest threads.
+        // That causes non-synchronized access to database.
+        // This issue might not be occured with SQLite because SQLiteDatabase from Android takes
+        // care multi-threads access.
+        synchronized(store) {
+            return store.getRevisionHistory(rev);
+        }
     }
 
     private String getDesignDocFunction(String fnName, String key, List<String> outLanguageList) {
