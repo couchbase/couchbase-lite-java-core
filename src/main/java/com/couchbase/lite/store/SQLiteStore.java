@@ -334,14 +334,15 @@ public class SQLiteStore implements Store {
                 throw new CouchbaseLiteException("Cannot decrypt or access the database",
                         Status.DB_ERROR);
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             Log.w(TAG, "SQLiteStore: database is unreadable", e);
             if (e.getMessage() != null &&
                 e.getMessage().contains("file is encrypted or is not a database (code 26)")) {
                 throw new CouchbaseLiteException("Cannot decrypt or access the database",
                         Status.UNAUTHORIZED);
+            } else {
+                throw new CouchbaseLiteException(e, Status.DB_ERROR);
             }
-            throw  e;
         } finally {
             if (cursor != null) {
                 cursor.close();
