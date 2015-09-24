@@ -290,7 +290,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         // shutdown ScheduledExecutorService. Without shutdown, cause thread leak
         if (remoteRequestExecutor != null && !remoteRequestExecutor.isShutdown()) {
             // Note: Time to wait is set 60 sec because RemoteRequest's socket timeout is set 60 seconds.
-            Utils.shutdownAndAwaitTermination(remoteRequestExecutor, Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN);
+            Utils.shutdownAndAwaitTermination(remoteRequestExecutor,
+                    Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN,
+                    Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN);
         }
     }
 

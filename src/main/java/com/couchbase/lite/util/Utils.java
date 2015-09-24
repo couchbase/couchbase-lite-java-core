@@ -3,9 +3,6 @@ package com.couchbase.lite.util;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.storage.Cursor;
-import com.couchbase.lite.storage.SQLException;
-import com.couchbase.lite.storage.SQLiteStorageEngine;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -23,6 +20,9 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public class Utils {
+
+    public static int DEFAULT_TIME_TO_WAIT_4_SHUTDOWN = 20;
+    public static int DEFAULT_TIME_TO_WAIT_4_SHUTDOWNNOW = 20;
 
     /**
      * Like equals, but works even if either/both are null
@@ -254,20 +254,24 @@ public class Utils {
      * if necessary, to cancel any lingering tasks:
      * http://docs.oracle.com/javase/6/docs/api/java/util/concurrent/ExecutorService.html
      *
-     * @param timeToWait - Seconds
+     * @param timeToWait4ShutDown - Seconds
+     * @param timeToWait4ShutDownNow - Seconds
      */
-    public static void shutdownAndAwaitTermination(ExecutorService pool, long timeToWait) {
+    public static void shutdownAndAwaitTermination(ExecutorService pool,
+                                                   long timeToWait4ShutDown,
+                                                   long timeToWait4ShutDownNow) {
         synchronized (pool) {
-            pool.shutdown(); // Disable new tasks from being submitted
+            // Disable new tasks from being submitted
+            pool.shutdown();
         }
         try {
             // Wait a while for existing tasks to terminate
-            if (!pool.awaitTermination(timeToWait, TimeUnit.SECONDS)) {
+            if (!pool.awaitTermination(timeToWait4ShutDown, TimeUnit.SECONDS)) {
                 synchronized (pool) {
                     pool.shutdownNow(); // Cancel currently executing tasks
                 }
                 // Wait a while for tasks to respond to being cancelled
-                if (!pool.awaitTermination(timeToWait, TimeUnit.SECONDS)) {
+                if (!pool.awaitTermination(timeToWait4ShutDownNow, TimeUnit.SECONDS)) {
                     Log.e(Log.TAG_DATABASE, "Pool did not terminate");
                 }
             }
@@ -282,6 +286,8 @@ public class Utils {
     }
 
     public static void shutdownAndAwaitTermination(ExecutorService pool) {
-        shutdownAndAwaitTermination(pool, 20);
+        shutdownAndAwaitTermination(pool,
+                DEFAULT_TIME_TO_WAIT_4_SHUTDOWN,
+                DEFAULT_TIME_TO_WAIT_4_SHUTDOWNNOW);
     }
 }
