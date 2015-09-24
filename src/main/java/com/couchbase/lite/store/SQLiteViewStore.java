@@ -136,40 +136,42 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         // to avoid modifying the database if the version didn't change, and because the row might
         // not exist yet.
         SQLiteStorageEngine storage = store.getStorageEngine();
-        String sql = "SELECT name, version FROM views WHERE name=?";
-        String[] args = {name};
+        boolean hasView;
         Cursor cursor = null;
         try {
+            String sql = "SELECT name, version FROM views WHERE name=?";
+            String[] args = {name};
             cursor = storage.rawQuery(sql, args);
-            if (!cursor.moveToNext()) {
-                // no such record, so insert
-                ContentValues insertValues = new ContentValues();
-                insertValues.put("name", name);
-                insertValues.put("version", version);
-                insertValues.put("total_docs", 0);
-                storage.insert("views", null, insertValues);
-                createIndex();
-                return true; // created new view
-            }
-
-            ContentValues updateValues = new ContentValues();
-            updateValues.put("version", version);
-            updateValues.put("lastSequence", 0);
-            updateValues.put("total_docs", 0);
-            String[] whereArgs = {name, version};
-            int rowsAffected = storage.update("views",
-                    updateValues,
-                    "name=? AND version!=?",
-                    whereArgs);
-            return (rowsAffected > 0);
+            hasView = cursor.moveToNext();
         } catch (SQLException e) {
-            Log.e(Log.TAG_VIEW, "Error setting map block", e);
+            Log.e(Log.TAG_VIEW, "Error querying existing view name " + name, e);
             return false;
         } finally {
-            if (cursor != null) {
+            if (cursor != null)
                 cursor.close();
-            }
         }
+
+        if (!hasView) {
+            // no such record, so insert
+            ContentValues insertValues = new ContentValues();
+            insertValues.put("name", name);
+            insertValues.put("version", version);
+            insertValues.put("total_docs", 0);
+            storage.insert("views", null, insertValues);
+            createIndex();
+            return true; // created new view
+        }
+
+        ContentValues updateValues = new ContentValues();
+        updateValues.put("version", version);
+        updateValues.put("lastSequence", 0);
+        updateValues.put("total_docs", 0);
+        String[] whereArgs = {name, version};
+        int rowsAffected = storage.update("views",
+                updateValues,
+                "name=? AND version!=?",
+                whereArgs);
+        return (rowsAffected > 0);
     }
 
     @Override
