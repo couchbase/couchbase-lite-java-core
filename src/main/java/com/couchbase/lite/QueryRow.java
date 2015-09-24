@@ -135,8 +135,10 @@ public class QueryRow {
             docID = documentRevision.getDocID();
         if (docID == null) {
             if (value != null) {
-                Map<String, Object> props = (Map<String, Object>) value;
-                docID = (String) props.get("_id");
+                if (value instanceof Map) {
+                    Map<String, Object> props = (Map<String, Object>) value;
+                    docID = (String) props.get("_id");
+                }
             }
         }
         if (docID == null)
