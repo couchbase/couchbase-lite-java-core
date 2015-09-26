@@ -1,0 +1,3 @@
+[submodule "vendor/libtomcrypt"]
+	path = vendor/libtomcrypt
+	url = https://github.com/libtom/libtomcrypt.git

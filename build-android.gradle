@@ -1,0 +1,110 @@
+apply plugin: 'com.android.library'
+apply plugin: 'maven'
+
+version = System.getenv("MAVEN_UPLOAD_VERSION")
+
+sourceCompatibility = JavaVersion.VERSION_1_6
+targetCompatibility = JavaVersion.VERSION_1_6
+
+repositories {
+    jcenter()
+}
+
+android {
+    compileSdkVersion 22
+    buildToolsVersion "22.0.1"
+
+    defaultConfig {
+        minSdkVersion 9
+        targetSdkVersion 22
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    sourceSets {
+        main {
+            jni.srcDirs = []
+            jniLibs.srcDir file('src/main/libs')
+        }
+    }
+}
+
+dependencies {
+    compile 'com.fasterxml.jackson.core:jackson-core:2.5.0'
+    compile 'com.fasterxml.jackson.core:jackson-annotations:2.5.0'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.5.0'
+    compile 'com.github.oxo42:stateless4j:2.4.0'
+
+    // None of the jar files in 'libs' folder are needed for android:
+    // compile fileTree(dir: 'libs', include: '*.jar')
+
+    testCompile 'junit:junit:4.12'
+}
+
+// call regular ndk-build(.cmd) script from app directory
+task ndkBuild(type: Exec, description: 'Compile JNI source via NDK') {    
+    def ndkDir = android.ndkDirectory
+    commandLine "$ndkDir/ndk-build", "-C", "src/main"
+}
+
+task cleanNdkBuild(type: Exec, description: 'Clean JNI object files') {
+    def ndkDir = android.ndkDirectory
+    commandLine "$ndkDir/ndk-build", "-C", "src/main", "clean"
+}
+
+clean.dependsOn 'cleanNdkBuild'
+
+// Define a task for ndk-build
+tasks.withType(JavaCompile) {
+    compileTask -> compileTask.dependsOn ndkBuild
+}
+
+////////////////////////////////////////////
+// For Maven
+////////////////////////////////////////////
+
+task createMavenDirectory(type: Exec) {
+    ext {
+        uploadUser = System.getenv("MAVEN_UPLOAD_USERNAME") + ":" + System.getenv("MAVEN_UPLOAD_PASSWORD")
+        mkcolPath  = System.getenv("MAVEN_UPLOAD_REPO_URL") + "com/couchbase/lite/couchbase-lite-java-core/" + version + "/"
+    }
+    commandLine "curl", "--user", uploadUser, "-X", "MKCOL", mkcolPath
+}
+
+// this hack is only needed for apache mod_dav based Maven repo's like file.couchbase.com.  otherwise, skip it
+createMavenDirectory.onlyIf { System.getenv("MAVEN_UPLOAD_REPO_URL").contains("files") }
+
+// first create the directory, then do the upload
+task uploadArchivesWrapper(dependsOn: createMavenDirectory) << {
+    uploadArchives.execute()
+}
+
+// this will upload, but will not first create a directory (which is needed on some servers)
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: System.getenv("MAVEN_UPLOAD_REPO_URL")) {
+                authentication(userName: System.getenv("MAVEN_UPLOAD_USERNAME"), password: System.getenv("MAVEN_UPLOAD_PASSWORD"))
+            }
+            pom.version = version
+            pom.groupId = 'com.couchbase.lite'
+            pom.artifactId = 'couchbase-lite-java-core'
+            pom.project {
+                licenses {
+                    license {
+                        name 'Couchbase Community Edition License Agreement'
+                        url 'http://www.couchbase.com/agreement/community'
+                        distribution 'repo'
+                    }
+                }
+            }
+        }
+    }
+}

@@ -19,21 +19,20 @@ package com.couchbase.lite.support.security;
 
 import com.couchbase.lite.util.ArrayUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.NativeLibraryUtils;
 import com.couchbase.lite.util.Utils;
 
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.AlgorithmParameters;
-import java.security.SecureRandom;
+import java.security.*;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class SymmetricKey {
@@ -52,6 +51,23 @@ public class SymmetricKey {
 
     // Raw key data:
     private byte[] keyData = null;
+
+    // Remember when using BC provider
+    private boolean useBCProvider = false;
+
+    private static native byte[] nativeDeriveKey(String password, byte[] salt, int rounds);
+
+    private final static String NATIVE_LIB_NAME = "CouchbaseLiteJavaSymmetricKey";
+
+    /** static constructor */
+    static {
+        try {
+            System.loadLibrary(NATIVE_LIB_NAME);
+        } catch (UnsatisfiedLinkError e) {
+            if(!NativeLibraryUtils.loadLibrary(NATIVE_LIB_NAME))
+                Log.e(Log.TAG_SYMMETRIC_KEY, "ERROR: Failed to load %s", NATIVE_LIB_NAME);
+        }
+    }
 
     /**
      * Create a SymmetricKey object with a secure random generated key.
@@ -79,12 +95,10 @@ public class SymmetricKey {
 
         try {
             // Derive key from password:
-            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, rounds, KEY_SIZE * 8);
-            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-            keyData = factory.generateSecret(spec).getEncoded();
-        }  catch (Exception e) {
+            keyData = nativeDeriveKey(password, salt, rounds);
+        } catch (Exception e) {
             Log.e(Log.TAG_SYMMETRIC_KEY, "Error generating key from password", e);
-            throw new SymmetricKeyException(e.getCause());
+            throw new SymmetricKeyException(e);
         }
     }
 
@@ -125,7 +139,7 @@ public class SymmetricKey {
      * @return hex string of the key data
      */
     public String getHexData() {
-        return Utils.bytesToHex(keyData).toUpperCase();
+        return Utils.bytesToHex(keyData);
     }
 
     /**
@@ -168,7 +182,7 @@ public class SymmetricKey {
         try {
             return cipher.doFinal(data, iv.length, data.length - iv.length);
         } catch (Exception e) {
-            throw new SymmetricKeyException(e.getCause());
+            throw new SymmetricKeyException(e);
         }
     }
 
@@ -186,7 +200,7 @@ public class SymmetricKey {
             Cipher cipher = getCipher(Cipher.DECRYPT_MODE, iv);
             return new CipherInputStream(encryptedInputStream, cipher);
         } catch (IOException e) {
-            throw new SymmetricKeyException(e.getCause());
+            throw new SymmetricKeyException(e);
         }
     }
 
@@ -200,11 +214,54 @@ public class SymmetricKey {
     private Cipher getCipher(int mode, byte[] iv) throws SymmetricKeyException {
         Cipher cipher = null;
         try {
-            cipher = Cipher.getInstance("AES/CBC/PKCS7Padding");
+            cipher = getCipherInstance("AES/CBC/PKCS7Padding");
+            if (cipher == null) {
+                throw new SymmetricKeyException("Cannot get a cipher instance for AES/CBC/PKCS7Padding algorithm");
+            }
             SecretKey secret = new SecretKeySpec(getKey(), "AES");
             cipher.init(mode, secret, new IvParameterSpec(iv));
+        } catch (InvalidKeyException e) {
+            throw new SymmetricKeyException("Couchbase Lite uses the AES 256-bit key to provide data encryption. " +
+                    "Please make sure you have installed 'Java Cryptography Extension (JCE) " +
+                    "Unlimited Strength Jurisdiction' Policy provided by Oracle.", e);
+        } catch (SymmetricKeyException e) {
+            throw e;
         } catch (Exception e) {
-            throw new SymmetricKeyException(e.getCause());
+            throw new SymmetricKeyException(e);
+        }
+        return cipher;
+    }
+
+    private Cipher getCipherInstance(String algorithm) {
+        Cipher cipher = null;
+
+        if (!useBCProvider) {
+            try {
+                cipher = Cipher.getInstance(algorithm);
+            } catch (NoSuchAlgorithmException e) {
+                Log.v(Log.TAG_SYMMETRIC_KEY, "Cannot find a cipher (no algorithm); will try with Bouncy Castle provider.");
+            } catch (NoSuchPaddingException e) {
+                Log.v(Log.TAG_SYMMETRIC_KEY, "Cannot find a cipher (no padding); will try with Bouncy Castle provider.");
+            }
+        }
+
+        if (cipher == null) {
+            // Register and use BouncyCastle provider if applicable:
+            try {
+                if (Security.getProvider("BC") == null) {
+                    try {
+                        Class bc = Class.forName("org.bouncycastle.jce.provider.BouncyCastleProvider");
+                        Security.addProvider((Provider)bc.newInstance());
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_SYMMETRIC_KEY, "Cannot instantiate Bouncy Castle provider", e);
+                        return null;
+                    }
+                }
+                cipher = Cipher.getInstance(algorithm, "BC");
+                useBCProvider = true;
+            } catch (Exception e) {
+                Log.e(Log.TAG_SYMMETRIC_KEY, "Cannot find a cipher with Bouncy Castle provider", e);
+            }
         }
         return cipher;
     }
@@ -216,11 +273,7 @@ public class SymmetricKey {
      * @throws SymmetricKeyException
      */
     public Encryptor createEncryptor() throws SymmetricKeyException {
-        try {
-            return new Encryptor();
-        } catch (Exception e) {
-            throw new SymmetricKeyException(e.getCause());
-        }
+        return new Encryptor();
     }
 
     /**
@@ -276,7 +329,7 @@ public class SymmetricKey {
                     wroteIV = true;
                 }
             } catch (Exception e) {
-                throw new SymmetricKeyException(e.getCause());
+                throw new SymmetricKeyException(e);
             }
             return dataOut;
         }
