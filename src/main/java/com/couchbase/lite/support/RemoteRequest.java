@@ -267,10 +267,11 @@ public class RemoteRequest implements Runnable {
         if (userInfo != null) {
             if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
                 String[] userInfoElements = userInfo.split(":");
-                String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]): userInfoElements[0];
-                String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]): userInfoElements[1];
+                String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
+                String password = "";
+                if(userInfoElements.length >= 2)
+                    password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
                 final Credentials credentials = new UsernamePasswordCredentials(username, password);
-
                 if (httpClient instanceof DefaultHttpClient) {
                     DefaultHttpClient dhc = (DefaultHttpClient) httpClient;
                     HttpRequestInterceptor preemptiveAuth = new HttpRequestInterceptor() {
