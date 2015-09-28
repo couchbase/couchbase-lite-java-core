@@ -1284,28 +1284,28 @@ public class SQLiteStore implements Store {
             //// PART III: In which the actual insertion finally takes place:
             boolean hasAttachments = properties == null ? false : properties.get("_attachments") != null;
             String docType = properties == null ? null : (String) properties.get("type");
-            long sequence = insertRevision(newRev,
-                    docNumericID,
-                    parentSequence,
-                    true,
-                    hasAttachments,
-                    json,
-                    docType);
-            if (sequence <= 0) {
+            long sequence = 0;
+            try {
+                sequence = insertRevision(newRev,
+                        docNumericID,
+                        parentSequence,
+                        true,
+                        hasAttachments,
+                        json,
+                        docType);
+            }catch(SQLException ex){
                 // The insert failed. If it was due to a constraint violation, that means a revision
                 // already exists with identical contents and the same parent rev. We can ignore this
                 // insert call, then.
-                // TODO - figure out storageEngine error code
-                // NOTE - In AndroidSQLiteStorageEngine.java, CBL Android uses insert() method of SQLiteDatabase
-                //        which return -1 for error case. Instead of insert(), should use insertOrThrow method()
-                //        which throws detailed error code. Need to check with SQLiteDatabase.CONFLICT_FAIL.
-                //        However, returning after updating parentSequence might not cause any problem.
-                //if (_fmdb.lastErrorCode != SQLITE_CONSTRAINT)
-                //    return null;
+                if(ex.getCode() != SQLException.SQLITE_CONSTRAINT) {
+                    Log.e(TAG, "Error inserting revision: ", ex);
+                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                }
                 Log.w(TAG, "Duplicate rev insertion: " + docID + " / " + newRevId);
                 newRev.setBody(null);
                 // don't return yet; update the parent's current just to be sure (see #316 (iOS #509))
             }
+
 
             // Make replaced rev non-current:
             if (parentSequence > 0) {
@@ -2150,25 +2150,24 @@ public class SQLiteStore implements Store {
                                 boolean current,
                                 boolean hasAttachments,
                                 byte[] json,
-                                String docType) {
+                                String docType)
+            throws SQLException
+    {
         long rowId = 0;
-        try {
-            ContentValues args = new ContentValues();
-            args.put("doc_id", docNumericID);
-            args.put("revid", rev.getRevID());
-            if (parentSequence != 0) {
-                args.put("parent", parentSequence);
-            }
-            args.put("current", current);
-            args.put("deleted", rev.isDeleted());
-            args.put("no_attachments", !hasAttachments);
-            args.put("json", json);
-            args.put("doc_type", docType);
-            rowId = storageEngine.insert("revs", null, args);
-            rev.setSequence(rowId);
-        } catch (Exception e) {
-            Log.e(TAG, "Error inserting revision", e);
+        ContentValues args = new ContentValues();
+        args.put("doc_id", docNumericID);
+        args.put("revid", rev.getRevID());
+        if (parentSequence != 0) {
+            args.put("parent", parentSequence);
         }
+        args.put("current", current);
+        args.put("deleted", rev.isDeleted());
+        args.put("no_attachments", !hasAttachments);
+        args.put("json", json);
+        args.put("doc_type", docType);
+        rowId = storageEngine.insertOrThrow("revs", null, args);
+        rev.setSequence(rowId);
+
         return rowId;
     }
 

@@ -17,6 +17,15 @@
 package com.couchbase.lite.storage;
 
 public class SQLException extends RuntimeException {
+
+    // https://www.sqlite.org/rescode.html
+    // Note: needs to define other error code
+    public static final int SQLITE_OK = 0;
+    public static final int SQLITE_ERROR = 1;
+    public static final int SQLITE_CONSTRAINT = 19;
+    
+    private int code = SQLITE_ERROR;
+
     public SQLException() {
     }
 
@@ -30,5 +39,14 @@ public class SQLException extends RuntimeException {
 
     public SQLException(Throwable cause) {
         super(cause);
+    }
+
+    public SQLException(int code, Throwable cause) {
+        super(cause);
+        this.code = code;
+    }
+
+    public int getCode() {
+        return code;
     }
 }
