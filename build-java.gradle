@@ -1,0 +1,250 @@
+apply plugin: 'c'
+apply plugin: 'cpp'
+apply plugin: 'java'
+apply plugin: 'maven'
+
+version = System.getenv("MAVEN_UPLOAD_VERSION")
+
+sourceCompatibility = 1.6
+
+repositories {
+    mavenLocal()
+    maven { url 'http://files.couchbase.com/maven2/' }
+    mavenCentral()
+}
+
+////////////////////////////////////////////
+// For Java
+////////////////////////////////////////////
+
+dependencies {
+    compile 'com.fasterxml.jackson.core:jackson-core:2.5.0'
+    compile 'com.fasterxml.jackson.core:jackson-annotations:2.5.0'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.5.0'
+    compile 'com.github.oxo42:stateless4j:2.4.0'
+    compile 'org.bouncycastle:bcprov-jdk15on:1.52'
+    // Using this version of apache http client based on: http://bit.ly/1kiET7V
+    // Decided to use jars instead so this wasn't accidentally included in android version
+    // compile 'org.apache.httpcomponents:httpcore:4.0-beta2'
+    // compile 'org.apache.httpcomponents:httpclient:4.0-beta1'
+    compile fileTree(dir: 'libs', include: '*.jar')
+
+    testCompile 'junit:junit:4.12'
+}
+
+task generateJavadocs(type: Javadoc) {
+    source = sourceSets.main.java.srcDirs
+    List<File> pathList = new ArrayList<File>();
+    pathList.add(file('extra/doclet/doclet.jar'))
+    options.docletpath = pathList
+    options.doclet = "ExcludeDoclet"
+    options.showFromPublic()
+    exclude "org/apache/http/**"
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.java.srcDirs
+}
+
+artifacts {
+    archives sourcesJar
+}
+
+////////////////////////////////////////////
+// For Native
+////////////////////////////////////////////
+
+model {
+    platforms {
+        osx_x86 {
+            architecture "x86"
+            operatingSystem "osx"
+        }
+        osx_x86_64 {
+            architecture "x86_64"
+            operatingSystem "osx"
+        }
+        linux_x86 {
+            architecture "x86"
+            operatingSystem "linux"
+        }
+        linux_x86_64 {
+            architecture "x86_64"
+            operatingSystem "linux"
+        }
+        linux_amd64 {
+            architecture "amd64"
+            operatingSystem "linux"
+        }
+        windows_x86 {
+            architecture "x86"
+            operatingSystem "windows"
+        }
+        windows_x86_64 {
+            architecture "x86_64"
+            operatingSystem "windows"
+        }
+        windows_amd64 {
+            architecture "amd64"
+            operatingSystem "windows"
+        }
+    }
+
+    toolChains {
+        visualCpp(VisualCpp)
+        gcc(Gcc)
+        clang(Clang)
+    }
+
+    components {
+        libtomcrypt(NativeLibrarySpec) {
+            targetPlatform "osx_x86"
+            targetPlatform "osx_x86_64"
+            targetPlatform "linux_x86"
+            targetPlatform "linux_x86_64"
+            targetPlatform "linux_amd64"
+            targetPlatform "windows_x86"
+            targetPlatform "windows_x86_64"
+            targetPlatform "windows_amd64"
+            sources {
+                c {
+                    source {
+                        srcDir "vendor/libtomcrypt/src/"
+                        include "hashes/helper/hash_memory.c",
+                                "hashes/sha2/sha256.c",
+                                "mac/hmac/hmac_init.c",
+                                "mac/hmac/hmac_memory.c",
+                                "mac/hmac/hmac_process.c",
+                                "mac/hmac/hmac_done.c",
+                                "misc/zeromem.c",
+                                "misc/crypt/crypt_find_hash.c",
+                                "misc/crypt/crypt_register_hash.c",
+                                "misc/crypt/crypt_argchk.c",
+                                "misc/crypt/crypt_hash_is_valid.c",
+                                "misc/crypt/crypt_hash_descriptor.c",
+                                "misc/pkcs5/pkcs_5_2.c"
+                    }
+                    exportedHeaders {
+                        srcDir "vendor/libtomcrypt/src/headers"
+                    }
+                }
+            }
+            binaries.withType(SharedLibraryBinary) { binary ->
+                buildable = false
+            }
+            binaries.all {
+                if (toolChain in Gcc) {
+                    cCompiler.args "-fPIC"
+                }
+
+                // Workaround for Inline Assembly error in tomcrypt_macros.h
+                cCompiler.args "-DLTC_NO_ASM"
+            }
+        }
+
+        CouchbaseLiteJavaSymmetricKey(NativeLibrarySpec) {
+            targetPlatform "osx_x86"
+            targetPlatform "osx_x86_64"
+            targetPlatform "linux_x86"
+            targetPlatform "linux_x86_64"
+            targetPlatform "linux_amd64"
+            targetPlatform "windows_x86"
+            targetPlatform "windows_x86_64"
+            targetPlatform "windows_amd64"
+            sources {
+                cpp {
+                    source {
+                        srcDir "src/main/jni/source"
+                    }
+                    exportedHeaders {
+                        srcDir "src/main/jni/headers"
+                    }
+                    lib library: 'libtomcrypt', linkage: 'static'
+                }
+            }
+            binaries.withType(StaticLibraryBinary) { binary ->
+                buildable = false
+            }
+            binaries.all {
+                // Workaround for Inline Assembly error in tomcrypt_macros.h
+                cppCompiler.args "-DLTC_NO_ASM"
+
+                if (targetPlatform.operatingSystem.macOsX) {
+                    cppCompiler.args '-I', "${org.gradle.internal.jvm.Jvm.current().javaHome}/include"
+                    cppCompiler.args '-I', "${org.gradle.internal.jvm.Jvm.current().javaHome}/include/darwin"
+                    linker.args '-framework', "JavaVM"
+                } else if (targetPlatform.operatingSystem.linux) {
+                    cppCompiler.args '-I', "${org.gradle.internal.jvm.Jvm.current().javaHome}/include"
+                    cppCompiler.args '-I', "${org.gradle.internal.jvm.Jvm.current().javaHome}/include/linux"
+                } else if (targetPlatform.operatingSystem.windows) {
+                    cppCompiler.args "-I${org.gradle.internal.jvm.Jvm.current().javaHome}/include"
+                    cppCompiler.args "-I${org.gradle.internal.jvm.Jvm.current().javaHome}/include/win32"
+                }        
+            }
+        }
+    }
+}
+
+binaries.withType(SharedLibraryBinary) { binary ->
+    if (!buildable) {
+        return
+    }
+
+    def builderTask = binary.tasks
+    def platformName = targetPlatform.name
+    def os = targetPlatform.operatingSystem.name
+    def arch = targetPlatform.architecture.name.replaceAll("-", "_")
+    if (platformName == "windows_amd64" || platformName == "linux_amd64") {
+        arch = "amd64"
+    }
+    jar.into("native/${os}/${arch}") {
+        from builderTask.outputFile
+    }
+
+    jar.dependsOn builderTask
+}
+
+////////////////////////////////////////////
+// For Maven
+////////////////////////////////////////////
+
+task createMavenDirectory(type: Exec) {
+
+    ext {
+        uploadUser = System.getenv("MAVEN_UPLOAD_USERNAME") + ":" + System.getenv("MAVEN_UPLOAD_PASSWORD")
+        mkcolPath  = System.getenv("MAVEN_UPLOAD_REPO_URL") + "com/couchbase/lite/couchbase-lite-java-core/" + version + "/"
+    }
+    commandLine "curl", "--user", uploadUser, "-X", "MKCOL", mkcolPath
+}
+
+// this hack is only needed for apache mod_dav based Maven repo's like file.couchbase.com.  otherwise, skip it
+createMavenDirectory.onlyIf { System.getenv("MAVEN_UPLOAD_REPO_URL").contains("files") }
+
+// first create the directory, then do the upload
+task uploadArchivesWrapper(dependsOn: createMavenDirectory) << {
+    uploadArchives.execute()
+}
+
+// this will upload, but will not first create a directory (which is needed on some servers)
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: System.getenv("MAVEN_UPLOAD_REPO_URL")) {
+                authentication(userName: System.getenv("MAVEN_UPLOAD_USERNAME"), password: System.getenv("MAVEN_UPLOAD_PASSWORD"))
+            }
+            pom.version = version
+            pom.groupId = 'com.couchbase.lite'
+            pom.artifactId = 'couchbase-lite-java-core'
+            pom.project {
+                licenses {
+                    license {
+                        name 'Couchbase Community Edition License Agreement'
+                        url 'http://www.couchbase.com/agreement/community'
+                        distribution 'repo'
+                    }
+                }
+            }
+        }
+    }
+}

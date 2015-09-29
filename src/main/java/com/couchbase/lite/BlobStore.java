@@ -30,7 +30,6 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -360,14 +359,10 @@ public class BlobStore {
         }
 
         if (encryptionKey != null) {
-            SymmetricKeyException error = null;
             try {
                 data = encryptionKey.encryptData(data);
             } catch (SymmetricKeyException e) {
-                error = e;
-            }
-            if (data == null) {
-                Log.w(Log.TAG_DATABASE, "BlobStore: Failed to encode data for " + path, error);
+                Log.w(Log.TAG_DATABASE, "BlobStore: Failed to encode data for " + path, e);
                 return false;
             }
         }

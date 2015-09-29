@@ -123,7 +123,10 @@ public class BlobKey {
 
     @Override
     public String toString() {
-        return BlobKey.convertToHex(bytes);
+        if (bytes != null)
+            return BlobKey.convertToHex(bytes);
+        else
+            return null;
     }
 
     public String base64Digest() {

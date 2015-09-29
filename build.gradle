@@ -1,90 +1,15 @@
-apply plugin: 'java'
-apply plugin: 'maven'
-apply plugin: 'eclipse'
+if (!hasProperty("spec")) {
+    println "[couchbase-lite-java-core] No build 'spec' defined, use 'android' by default"
+    project.ext.spec = "android"
+} 
 
-version = System.getenv("MAVEN_UPLOAD_VERSION")
+apply from: "build-${spec}.gradle"
 
-sourceCompatibility = 1.6
-
-repositories {
-    mavenLocal()
-    maven { url 'http://files.couchbase.com/maven2/' }
-    mavenCentral()
-}
-
-dependencies {
-    testCompile 'junit:junit:4.11'
-    compile 'com.fasterxml.jackson.core:jackson-core:2.5.0'
-    compile 'com.fasterxml.jackson.core:jackson-annotations:2.5.0'
-    compile 'com.fasterxml.jackson.core:jackson-databind:2.5.0'
-    compile 'com.github.oxo42:stateless4j:2.4.0'
-    // Using this version of apache http client based on: http://bit.ly/1kiET7V
-    // Decided to use jars instead so this wasn't accidentally included in android version
-    // compile 'org.apache.httpcomponents:httpcore:4.0-beta2'
-    // compile 'org.apache.httpcomponents:httpclient:4.0-beta1'
-    compile fileTree(dir: 'libs', include: '*.jar')
-}
-
-
-////////////////////////////////////////////
-// For Maven
-////////////////////////////////////////////
-
-task createMavenDirectory(type: Exec) {
-
-    ext {
-        uploadUser = System.getenv("MAVEN_UPLOAD_USERNAME") + ":" + System.getenv("MAVEN_UPLOAD_PASSWORD")
-        mkcolPath  = System.getenv("MAVEN_UPLOAD_REPO_URL") + "com/couchbase/lite/couchbase-lite-java-core/" + version + "/"
-    }
-    commandLine "curl", "--user", uploadUser, "-X", "MKCOL", mkcolPath
-}
-
-// this hack is only needed for apache mod_dav based Maven repo's like file.couchbase.com.  otherwise, skip it
-createMavenDirectory.onlyIf { System.getenv("MAVEN_UPLOAD_REPO_URL").contains("files") }
-
-// first create the directory, then do the upload
-task uploadArchivesWrapper(dependsOn: createMavenDirectory) << {
-    uploadArchives.execute()
-}
-
-// this will upload, but will not first create a directory (which is needed on some servers)
-uploadArchives {
+buildscript {
     repositories {
-        mavenDeployer {
-            repository(url: System.getenv("MAVEN_UPLOAD_REPO_URL")) {
-                authentication(userName: System.getenv("MAVEN_UPLOAD_USERNAME"), password: System.getenv("MAVEN_UPLOAD_PASSWORD"))
-            }
-            pom.version = version
-            pom.groupId = 'com.couchbase.lite'
-            pom.artifactId = 'couchbase-lite-java-core'
-            pom.project {
-                licenses {
-                    license {
-                        name 'Couchbase Community Edition License Agreement'
-                        url 'http://www.couchbase.com/agreement/community'
-                        distribution 'repo'
-                    }
-                }
-            }
-        }
+        jcenter()
     }
-}
-
-task generateJavadocs(type: Javadoc) {
-    source = sourceSets.main.java.srcDirs
-    List<File> pathList = new ArrayList<File>();
-    pathList.add(file('extra/doclet/doclet.jar'))
-    options.docletpath = pathList
-    options.doclet = "ExcludeDoclet"
-    options.showFromPublic()
-    exclude "org/apache/http/**", "com/couchbase/touchdb/**"
-}
-
-task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = 'sources'
-    from sourceSets.main.java.srcDirs
-}
-
-artifacts {
-    archives sourcesJar
+    dependencies {
+        classpath 'com.android.tools.build:gradle:1.3.0'
+    }
 }
