@@ -20,6 +20,23 @@
 #include "com_couchbase_lite_support_security_SymmetricKey.h"
 
 /**
+ * Throw an exception of the given class name with the error code and message.
+ */
+static void throwException(JNIEnv* env, const char* className, int errCode, const char* message) {
+  // Construct the exception message:
+  char msg[1024];
+  if (message != NULL) {
+    sprintf(msg, "%s (code = %d)", message, errCode);
+  } else {
+    sprintf(msg, "(code = %d)", errCode);
+  }
+
+  // Throw the exception:
+  jclass cls = env->FindClass(className);
+  env->ThrowNew(cls, msg);
+}
+
+/**
  * Returns a derived PBKDF2-SHA256 key from a password with a given salt and the number of iterating rounds.
  */
 JNIEXPORT jbyteArray JNICALL Java_com_couchbase_lite_support_security_SymmetricKey_nativeDeriveKey
@@ -37,9 +54,17 @@ JNIEXPORT jbyteArray JNICALL Java_com_couchbase_lite_support_security_SymmetricK
     register_hash(&sha256_desc);
     int hash_id = find_hash(sha256_desc.name);
 
+    jbyteArray result = NULL;
     int code = pkcs_5_alg2(reinterpret_cast<const unsigned char*>(passwordStr), passwordLen, 
                            saltBytes, saltLen, rounds, hash_id, output, &outputLen);
-    jbyteArray result = env->NewByteArray((int)outputLen);
-    env->SetByteArrayRegion(result, 0, (int)outputLen, (jbyte*)output);
+    if (code != CRYPT_OK) {
+      // Error code definition are defined in the tomcrypt.h
+      throwException(env,
+                     "com/couchbase/lite/support/security/SymmetricKeyException", code,
+                     "Cannot derive a key");
+    } else {
+      result = env->NewByteArray((int) outputLen);
+      env->SetByteArrayRegion(result, 0, (int) outputLen, (jbyte *) output);
+    }
     return result;
 }
