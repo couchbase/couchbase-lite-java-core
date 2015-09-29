@@ -134,10 +134,7 @@ model {
                 buildable = false
             }
             binaries.all {
-                if (toolChain in Gcc) {
-                    cCompiler.args "-fPIC"
-                }
-
+                cCompiler.args "-fPIC"
                 // Workaround for Inline Assembly error in tomcrypt_macros.h
                 cCompiler.args "-DLTC_NO_ASM"
             }
