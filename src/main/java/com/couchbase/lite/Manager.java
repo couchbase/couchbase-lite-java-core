@@ -275,49 +275,29 @@ public final class Manager {
     }
 
     /**
-     * Registers an encryption key for a database. This must be called before opening an encrypted
-     * database, or before creating a database that's to be encrypted. If the key is incorrect
-     * (or no key is given for an encrypted database), the subsequent call
-     * to open the database will fail.
-     * @param key           The encryption key.
-     * @param databaseName  The name of the database.
-     * @return
-     */
-    @InterfaceAudience.Public
-    public boolean registerEncryptionKey(byte[] key, String databaseName) {
-        if (databaseName == null)
-            return false;
-
-        if (key != null) {
-            try {
-                SymmetricKey realKey = new SymmetricKey(key);
-                encryptionKeys.put(databaseName, realKey);
-            } catch (SymmetricKeyException e) {
-                Log.e(Database.TAG, "Cannot create a symmetric key", e);
-                return false;
-            }
-        } else
-            encryptionKeys.remove(databaseName);
-        return true;
-    }
-
-    /**
-     * Registers an encryption key with a password for a database. This must be called before
-     * opening an encrypted database, or before creating a database that's to be encrypted.
+     * Registers an encryption key for a database. This must be called _before_ opening an encrypted
+     * database, or before creating a database that's to be encrypted.
      * If the key is incorrect (or no key is given for an encrypted database), the subsequent call
-     * to open the database will fail.
-     * @param password      The encryption password.
+     * to open the database will fail with an error with code 401.
+     * To use this API, the database storage engine must support encryption, and the
+     * ManagerOptions.EnableStorageEncryption property must be set to true. Otherwise opening
+     * the database will fail with an error.
+     * @param keyOrPassword The encryption key in the form of an String (a password) or an
+     *                      byte[] object exactly 32 bytes in length (a raw AES key.)
+     *                      If a string is given, it will be internally converted to a raw key
+     *                      using 64,000 rounds of PBKDF2 hashing.
+     *                      A null value is legal, and clears a previously-registered key.
      * @param databaseName  The name of the database.
-     * @return
+     * @return              True if the key can be used, False if it's not in a legal form
+     *                      (e.g. key as a byte[] is not 32 bytes in length.)
      */
     @InterfaceAudience.Public
-    public boolean registerEncryptionKey(String password, String databaseName) {
+    public boolean registerEncryptionKey(Object keyOrPassword, String databaseName) {
         if (databaseName == null)
             return false;
-
-        if (password != null) {
+        if (keyOrPassword != null) {
             try {
-                SymmetricKey realKey = new SymmetricKey(password);
+                SymmetricKey realKey = new SymmetricKey(keyOrPassword);
                 encryptionKeys.put(databaseName, realKey);
             } catch (SymmetricKeyException e) {
                 Log.e(Database.TAG, "Cannot create a symmetric key", e);

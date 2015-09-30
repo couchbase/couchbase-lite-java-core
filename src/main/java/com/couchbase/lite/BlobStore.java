@@ -17,6 +17,10 @@
 
 package com.couchbase.lite;
 
+import com.couchbase.lite.support.FileDirUtils;
+import com.couchbase.lite.support.action.Action;
+import com.couchbase.lite.support.action.ActionBlock;
+import com.couchbase.lite.support.action.ActionException;
 import com.couchbase.lite.support.security.SymmetricKey;
 import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.Log;
@@ -50,15 +54,18 @@ public class BlobStore {
     public static final String ENCRYPTION_ALGORITHM = "AES";
     public static final String ENCRYPTION_MARKER_FILENAME = "_encryption";
 
+    private Context context;
     private String path;
     private SymmetricKey encryptionKey;
+    private BlobStore tempStore;
 
-    public BlobStore(String path, SymmetricKey encryptionKey) throws CouchbaseLiteException {
-        this(path, encryptionKey, false);
+    public BlobStore(Context context, String path, SymmetricKey encryptionKey) throws CouchbaseLiteException {
+        this(context, path, encryptionKey, false);
     }
 
-    public BlobStore(String path, SymmetricKey encryptionKey, boolean autoMigrate)
+    public BlobStore(Context context, String path, SymmetricKey encryptionKey, boolean autoMigrate)
             throws CouchbaseLiteException {
+        this.context = context;
         this.path = path;
         this.encryptionKey = encryptionKey;
 
@@ -106,10 +113,17 @@ public class BlobStore {
             }
         } else if (!isMarkerExists) {
             // No "_encryption" file was found, so on-disk store isn't encrypted:
-            if (encryptionKey != null) {
-                // This shouldn't be happening:
-                Log.e(Log.TAG_DATABASE, "BlobStore: Blob store was corrupted. Encryption marker file was not found");
-                throw new CouchbaseLiteException(Status.CORRUPT_ERROR);
+            SymmetricKey encKey = encryptionKey;
+            if (encKey != null) {
+                // In general, this case shouldn't happen but just in case:
+                Log.i(Log.TAG_DATABASE, "BlobStore: BlobStore should be encrypted; do it now...");
+                encryptionKey = null;
+                try {
+                    changeEncryptionKey(encKey);
+                } catch (ActionException e) {
+                    new CouchbaseLiteException("Cannot change the attachment encryption key", e,
+                            Status.ATTACHMENT_ERROR);
+                }
             }
         }
     }
@@ -136,6 +150,157 @@ public class BlobStore {
                 }
             }
         }
+    }
+
+    public Action actionToChangeEncryptionKey(final SymmetricKey newKey) {
+        Action action = new Action();
+
+        // Backup oldKey:
+        final SymmetricKey oldKey = encryptionKey;
+
+        // Find all blob files:
+        File directory = new File(path);
+        File[] files = null;
+        if (directory.exists() && directory.isDirectory()) {
+            files = directory.listFiles(new FilenameFilter() {
+                @Override
+                public boolean accept(File dir, String name) {
+                    return name.endsWith(FILE_EXTENSION);
+                }
+            });
+        }
+        // Make final:
+        final File[] blobs = files;
+
+        if (blobs == null || blobs.length == 0) {
+            // No blobs, so nothing to encrypt. Just add/remove the encryption marker file:
+            action.add(
+                // Perform:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        Log.i(Log.TAG_DATABASE, "BlobStore: " +
+                                (newKey != null ? "encrypting" : "decrypting") + " " + path);
+                        Log.i(Log.TAG_DATABASE, "BlobStore: **No blobs to copy; done.**");
+                        encryptionKey = newKey;
+                        try {
+                            markEncrypted(newKey != null);
+                        } catch (CouchbaseLiteException e) {
+                            new ActionException(e);
+                        }
+                    }
+                },
+                // Backout:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        encryptionKey = oldKey;
+                    }
+                }, null
+            );
+
+            return action;
+        }
+
+        // Create a new directory for the new blob store. Have to do this now, before starting the
+        // action, because farther down we create an action to move it...
+        File tempDir = new File (context.getTempDir(), Misc.CreateUUID());
+        final File tempStoreDir = tempDir.mkdirs() ? tempDir : null;
+        // Mark delete on exit:
+        if (tempStoreDir != null)
+            tempStoreDir.deleteOnExit();
+
+        action.add(
+            // Perform:
+            new ActionBlock() {
+                @Override
+                public void execute() throws ActionException {
+                    Log.i(Log.TAG_DATABASE, "BlobStore: " +
+                            (newKey != null ? "encrypting" : "decrypting") + " " + path);
+                    if (tempStoreDir == null)
+                        throw  new ActionException("Cannot create a temporary directory");
+                }
+            },
+            // Backout:
+            new ActionBlock() {
+                @Override
+                public void execute() throws ActionException {
+                    if (!FileDirUtils.deleteRecursive(tempStoreDir))
+                        throw new ActionException("Cannot delete a temporary directory " +
+                                tempStoreDir.getAbsolutePath());
+                }
+            }, null
+        );
+
+        // Create a new temporary BlobStore
+        action.add(new ActionBlock() {
+            @Override
+            public void execute() throws ActionException {
+                try {
+                    tempStore = new BlobStore(context, tempStoreDir.getAbsolutePath(), newKey);
+                    tempStore.markEncrypted(newKey != null);
+                } catch (CouchbaseLiteException e) {
+                    throw  new ActionException(e);
+                }
+            }
+        }, null, null);
+
+        // Copy each of my blobs into the new store (which will update its encryption):
+        action.add(new ActionBlock() {
+            @Override
+            public void execute() throws ActionException {
+                for (File blob : blobs) {
+                    InputStream readStream = null;
+                    BlobStoreWriter writer = null;
+                    try {
+                        Log.i(Log.TAG_DATABASE, "BlobStore: Copying " + blob);
+                        readStream = encryptionKey.decryptStream(new FileInputStream(blob));
+                        writer = new BlobStoreWriter(tempStore);
+                        writer.appendInputStream(readStream);
+                        writer.finish();
+                        writer.install();
+                    } catch (Exception e) {
+                        if (writer != null)
+                            writer.cancel();
+                        throw new ActionException(e);
+                    } finally {
+                        // Mark delete on exit to the temporary blob file:
+                        if (writer != null)
+                            new File(tempStore.getRawPathForKey(writer.getBlobKey())).deleteOnExit();
+                        // Close readStream:
+                        try {
+                            if (readStream != null)
+                                readStream.close();
+                        } catch (IOException e) { }
+                    }
+                }
+            }
+        }, null, null);
+
+        // Replace the attachment dir with the new one:
+        action.add(Action.moveAndReplaceFile(tempStoreDir.getAbsolutePath(), path,
+                context.getTempDir().getAbsolutePath()));
+
+        // Finally update encryptionKey:
+        action.add(
+            new ActionBlock() {
+                @Override
+                public void execute() throws ActionException {
+                    encryptionKey = newKey;
+                }
+            }, new ActionBlock() {
+                @Override
+                public void execute() throws ActionException {
+                    encryptionKey = oldKey;
+                }
+            }, null
+        );
+
+        return action;
+    }
+
+    private void changeEncryptionKey(SymmetricKey newKey) throws ActionException {
+        actionToChangeEncryptionKey(newKey).run();
     }
 
     protected void migrateBlobstoreFilenames(File directory) {
@@ -459,7 +624,7 @@ public class BlobStore {
                     if (result) {
                         ++numDeleted;
                     } else {
-                        Log.e(Log.TAG_BLOB_STORE, "Error deleting attachment: %s", attachment);
+                        Log.e(Log.TAG_DATABASE, "BlobStore: Error deleting attachment: %s", attachment);
                     }
                 }
             }

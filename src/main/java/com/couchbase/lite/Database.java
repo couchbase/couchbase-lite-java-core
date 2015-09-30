@@ -24,6 +24,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.store.EncryptableStore;
 import com.couchbase.lite.store.SQLiteStore;
 import com.couchbase.lite.store.StorageValidation;
 import com.couchbase.lite.store.Store;
@@ -33,7 +34,11 @@ import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.support.RevisionUtils;
+import com.couchbase.lite.support.action.Action;
+import com.couchbase.lite.support.action.ActionBlock;
+import com.couchbase.lite.support.action.ActionException;
 import com.couchbase.lite.support.security.SymmetricKey;
+import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.CollectionUtils.Functor;
 import com.couchbase.lite.util.Log;
@@ -242,6 +247,44 @@ public class Database implements StoreDelegate {
     public void compact() throws CouchbaseLiteException {
         store.compact();
         garbageCollectAttachments();
+    }
+
+    /**
+     * Changes the database's encryption key, or removes encryption if the new key is null.
+     *
+     * To use this API, the database storage engine must support encryption, and the
+     * ManagerOptions.EnableStorageEncryption property must be set to true.
+     * @param newKeyOrPassword The encryption key in the form of an String (a password) or an
+     *                         byte[] object exactly 32 bytes in length (a raw AES key.)
+     *                         If a string is given, it will be internally converted to a raw key
+     *                         using 64,000 rounds of PBKDF2 hashing.
+     *                         A null value is legal, and clears a previously-registered key.
+     * @throws CouchbaseLiteException
+     */
+    @InterfaceAudience.Public
+    public void changeEncryptionKey(final Object newKeyOrPassword) throws CouchbaseLiteException {
+        if (!(store instanceof EncryptableStore)) {
+            throw new CouchbaseLiteException(Status.NOT_IMPLEMENTED);
+        }
+
+        if (newKeyOrPassword != null) {
+            try {
+                SymmetricKey newKey = new SymmetricKey(newKeyOrPassword);
+                Action action = ((EncryptableStore) store).actionToChangeEncryptionKey(newKey);
+                action.add(attachments.actionToChangeEncryptionKey(newKey));
+                action.add(new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        manager.registerEncryptionKey(newKeyOrPassword, name);
+                    }
+                }, null, null);
+                action.run();
+            } catch (SymmetricKeyException e) {
+                throw new CouchbaseLiteException(Status.BAD_REQUEST);
+            } catch (ActionException e) {
+                throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
+            }
+        }
     }
 
     /**
@@ -629,15 +672,6 @@ public class Database implements StoreDelegate {
     ///////////////////////////////////////////////////////////////////////////
     // Implementation of StorageDelegate
     ///////////////////////////////////////////////////////////////////////////
-
-    /**
-     * in CBLDatabase+Internal.m
-     * - (CBLSymmetricKey*) encryptionKey
-     */
-    @InterfaceAudience.Private
-    public SymmetricKey getEncryptionKey() {
-        return manager.getEncryptionKeys().get(name);
-    }
 
     /**
      * in CBLDatabase+Internal.m
@@ -1039,6 +1073,13 @@ public class Database implements StoreDelegate {
         store = createStoreInstance();
         if(store == null)
             store = new SQLiteStore(path, manager, this);
+
+        // Set encryption key:
+        SymmetricKey encryptionKey = manager.getEncryptionKeys().get(name);
+        if (store instanceof EncryptableStore) {
+            ((EncryptableStore)store).setEncryptionKey(encryptionKey);
+        }
+
         if (!store.open())
             return false;
 
@@ -1080,9 +1121,11 @@ public class Database implements StoreDelegate {
 
         try {
             if (isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()) {
-                attachments = new BlobStore(getAttachmentStorePath(), getEncryptionKey(), false);
+                attachments = new BlobStore(manager.getContext(),
+                        getAttachmentStorePath(), encryptionKey, false);
             } else {
-                attachments = new BlobStore(getAttachmentStorePath(), getEncryptionKey(), true);
+                attachments = new BlobStore(manager.getContext(),
+                        getAttachmentStorePath(), encryptionKey, true);
                 markBlobstoreMigrated();
             }
 
