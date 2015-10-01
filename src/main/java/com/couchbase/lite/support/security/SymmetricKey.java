@@ -30,6 +30,7 @@ import java.util.Arrays;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
+import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
@@ -52,11 +53,11 @@ public class SymmetricKey {
     // Raw key data:
     private byte[] keyData = null;
 
-    // Remember when using BC provider
+    // Remember when using BC provider:
     private boolean useBCProvider = false;
 
+    // Native key derivation:
     private static native byte[] nativeDeriveKey(String password, byte[] salt, int rounds);
-
     private final static String NATIVE_LIB_NAME = "CouchbaseLiteJavaSymmetricKey";
 
     /** static constructor */
@@ -74,7 +75,7 @@ public class SymmetricKey {
      * @throws SymmetricKeyException
      */
     public SymmetricKey() throws SymmetricKeyException{
-        this(new SecureRandom().generateSeed(KEY_SIZE));
+        this(generateKey(KEY_SIZE));
     }
 
     /**
@@ -205,10 +206,46 @@ public class SymmetricKey {
     }
 
     /**
-     * Get a cipher object for either encrypt or decrypt mode with an IV header.
+     * Generate an AES key of the specifies size in bytes.
+     * @param size Size in bytes
+     * @return An AES key
+     * @throws SymmetricKeyException
+     */
+
+    private static byte[] generateKey(int size) throws SymmetricKeyException {
+        if (size <= 0)
+            throw new IllegalArgumentException("Size cannot be zero or less than zero.");
+
+        try {
+            SecureRandom secureRandom = new SecureRandom();
+            KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
+            keyGenerator.init(size * 8, secureRandom);
+            return keyGenerator.generateKey().getEncoded();
+        } catch (NoSuchAlgorithmException e) {
+            throw new SymmetricKeyException(e);
+        }
+    }
+
+    /**
+     * Secure random bytes of size in bytes
+     * @param size Size in bytes
+     * @return Random bytes
+     */
+    private static byte[] secureRandom(int size) {
+        if (size <= 0)
+            throw new IllegalArgumentException("Size cannot be zero or less than zero.");
+
+        SecureRandom secureRandom = new SecureRandom();
+        byte[] bytes = new byte[size];
+        secureRandom.nextBytes(bytes);
+        return bytes;
+    }
+
+    /**
+     * Get a cipher instance for either encrypt or decrypt mode with an IV header.
      * @param mode Cipher.ENCRYPT_MODE or Cipher.DECRYPT_MODE
      * @param iv IV header
-     * @return a Cipher object
+     * @return A cipher object
      * @throws SymmetricKeyException
      */
     private Cipher getCipher(int mode, byte[] iv) throws SymmetricKeyException {
@@ -232,6 +269,13 @@ public class SymmetricKey {
         return cipher;
     }
 
+    /**
+     * Get a cipher instance for the algorithm. It will try to use the Cipher from the default
+     * security provider by the platform. If it couldn't find the cipher, it will try to
+     * the cipher from the Bouncy Castle if the BouncyCastle library is available.
+     * @param algorithm Algorithm
+     * @return A cipher object
+     */
     private Cipher getCipherInstance(String algorithm) {
         Cipher cipher = null;
 
@@ -290,7 +334,7 @@ public class SymmetricKey {
          * @throws SymmetricKeyException
          */
         public Encryptor() throws SymmetricKeyException {
-            byte[] iv = new SecureRandom().generateSeed(IV_SIZE);
+            byte[] iv = secureRandom(IV_SIZE);
             cipher = getCipher(Cipher.ENCRYPT_MODE, iv);
             wroteIV = false;
         }
