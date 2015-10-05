@@ -18,12 +18,6 @@ import java.util.Map;
  */
 public interface StoreDelegate {
     /**
-     * Get encryption key registered with this database.
-     * @return encryption key
-     */
-    public SymmetricKey getEncryptionKey();
-
-    /**
      * Called whenever the outermost transaction completes.
      *
      * @param committed YES on commit, NO if the transaction was aborted.

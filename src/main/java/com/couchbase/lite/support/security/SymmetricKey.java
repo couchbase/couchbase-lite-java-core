@@ -71,7 +71,7 @@ public class SymmetricKey {
     }
 
     /**
-     * Create a SymmetricKey object with a secure random generated key.
+     * Create an instance with a secure random generated key.
      * @throws SymmetricKeyException
      */
     public SymmetricKey() throws SymmetricKeyException{
@@ -79,7 +79,7 @@ public class SymmetricKey {
     }
 
     /**
-     * Create a SymmetricKey object with a password, a salt, and number of iterating rounds
+     * Create an instance with a password, a salt, and number of iterating rounds
      * for deriving a PBKDF2 secret key.
      * @param password Password
      * @param salt Salt
@@ -87,6 +87,55 @@ public class SymmetricKey {
      * @throws SymmetricKeyException
      */
     public SymmetricKey(String password, byte[] salt, int rounds) throws SymmetricKeyException {
+        initWithPassword(password, salt, rounds);
+    }
+
+    /**
+     * Create an instance with a password. The constructor will use the default salt and
+     * number of iterating rounds when deriving a PBKDF2 secret key.
+     * @param password Password
+     * @throws SymmetricKeyException
+     */
+    public SymmetricKey(String password) throws SymmetricKeyException {
+        initWithPassword(password, DEFAULT_KEY_SALT.getBytes(), DEFAULT_KEY_ROUNDS);
+    }
+
+    /**
+     * Create an instance with a raw key. The size of the key needs to be 32 bytes.
+     * @param key
+     * @throws SymmetricKeyException
+     */
+    public SymmetricKey(byte[] key) throws SymmetricKeyException {
+        initWithKey(key);
+    }
+
+    /**
+     * Creates an instance with a raw key or a password string. The size of the key needs to
+     * be 32 bytes
+     * @param keyOrPassword Key or password
+     * @throws SymmetricKeyException
+     */
+    public SymmetricKey(Object keyOrPassword) throws SymmetricKeyException {
+        if (keyOrPassword instanceof String) {
+            initWithPassword((String)keyOrPassword, DEFAULT_KEY_SALT.getBytes(), DEFAULT_KEY_ROUNDS);
+        } else {
+            if (!(keyOrPassword instanceof byte[])) {
+                throw new IllegalArgumentException("Key must be String or byte[32]");
+            }
+            initWithKey((byte[])keyOrPassword);
+        }
+    }
+
+    /**
+     * Initialize the object with a password, sales, and number of rounds for deriving
+     * the password into a raw key by using 64,000 rounds of PBKDF2 hashing.
+     * @param password Password
+     * @param salt Salt
+     * @param rounds Number of rounds
+     * @throws SymmetricKeyException
+     */
+    private void initWithPassword(String password, byte[] salt, int rounds)
+            throws SymmetricKeyException {
         if (password == null)
             throw new SymmetricKeyException("Password cannot be null.");
         if (salt.length < MIN_KEY_SALT_SIZE)
@@ -104,21 +153,11 @@ public class SymmetricKey {
     }
 
     /**
-     * Create a SymmetricKey object with a password. The constructor will use the default salt and
-     * number of iterating rounds when deriving a PBKDF2 secret key.
-     * @param password Password
+     * Initialize the object with a raw key of 32 bytes size.
+     * @param key 32 bytes raw key
      * @throws SymmetricKeyException
      */
-    public SymmetricKey(String password) throws SymmetricKeyException {
-        this(password, DEFAULT_KEY_SALT.getBytes(), DEFAULT_KEY_ROUNDS);
-    }
-
-    /**
-     * Create a SymmetricKey object with a raw key. The size of the key needs to be 32 bytes.
-     * @param key
-     * @throws SymmetricKeyException
-     */
-    public SymmetricKey(byte[] key) throws SymmetricKeyException {
+    private void initWithKey(byte[] key) throws SymmetricKeyException {
         if (key == null)
             throw new SymmetricKeyException("Key cannot be null");
         if (key.length != KEY_SIZE)
