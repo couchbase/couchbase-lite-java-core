@@ -247,7 +247,7 @@ public class Action implements AtomicAction {
                         boolean success = new File(path).renameTo(tempFile);
                         exists.set(success);
                         if (success)
-                            // Mark delete on exit
+                            // Mark delete on exit (optional and work on Java only):
                             tempFile.deleteOnExit();
                         else
                             throw new ActionException("Cannot move file " + path +

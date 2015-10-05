@@ -206,7 +206,7 @@ public class BlobStore {
         // action, because farther down we create an action to move it...
         File tempDir = new File (context.getTempDir(), Misc.CreateUUID());
         final File tempStoreDir = tempDir.mkdirs() ? tempDir : null;
-        // Mark delete on exit:
+        // Mark delete on exit (optional and work on Java only):
         if (tempStoreDir != null)
             tempStoreDir.deleteOnExit();
 
@@ -264,7 +264,7 @@ public class BlobStore {
                             writer.cancel();
                         throw new ActionException(e);
                     } finally {
-                        // Mark delete on exit to the temporary blob file:
+                        // Mark delete on exit (optional and work on Java only):
                         if (writer != null)
                             new File(tempStore.getRawPathForKey(writer.getBlobKey())).deleteOnExit();
                         // Close readStream:
