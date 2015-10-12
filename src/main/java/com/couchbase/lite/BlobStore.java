@@ -558,13 +558,17 @@ public class BlobStore {
         try {
             is = new FileInputStream(file);
 
-            // Get the size of the file
+            // Get the size of the file:
             long length = file.length();
+            if (length > (long)Integer.MAX_VALUE)
+                throw new OutOfMemoryError("The file is too large to read into a byte array.");
 
-            // Create the byte array to hold the data
+            // Create the byte array to hold the data:
             byte[] bytes = new byte[(int) length];
+            if (bytes == null)
+                throw new OutOfMemoryError("The file is too large to read into a byte array.");
 
-            // Read in the bytes
+            // Read in the bytes:
             int offset = 0;
             int numRead = 0;
             while (offset < bytes.length
@@ -573,9 +577,8 @@ public class BlobStore {
             }
 
             // Ensure all the bytes have been read in
-            if (offset < bytes.length) {
+            if (offset < bytes.length)
                 throw new IOException("Could not completely read file " + file.getName());
-            }
             return bytes;
         } finally {
              if (is != null)
