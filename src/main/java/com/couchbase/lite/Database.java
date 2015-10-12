@@ -1054,20 +1054,21 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    public synchronized boolean open() throws CouchbaseLiteException {
-        if (open) {
-            return true;
-        }
+    public synchronized void open() throws CouchbaseLiteException {
+        if (open)
+            return;
 
         Log.v(TAG, "Opening %s", this);
 
         // Create the database directory:
         File dir = new File(path);
-        if (!dir.exists())
+        if (!dir.exists()) {
             if (!dir.mkdirs())
-                return false;
-            else if (!dir.isDirectory())
-                return false;
+                throw new CouchbaseLiteException("Cannot create database directory",
+                        Status.INTERNAL_SERVER_ERROR);
+        } else if (!dir.isDirectory())
+            throw new CouchbaseLiteException("Database directory is not directory",
+                    Status.INTERNAL_SERVER_ERROR);
 
         // Initialize & open store
         store = createStoreInstance();
@@ -1080,8 +1081,7 @@ public class Database implements StoreDelegate {
             ((EncryptableStore)store).setEncryptionKey(encryptionKey);
         }
 
-        if (!store.open())
-            return false;
+        store.open();
 
         // First-time setup:
         if (privateUUID() == null) {
@@ -1106,7 +1106,8 @@ public class Database implements StoreDelegate {
                     Log.e(Database.TAG, "Could not rename attachment store path");
                     store.close();
                     store = null;
-                    return false;
+                    throw new CouchbaseLiteException("Could not rename attachment store path",
+                            Status.INTERNAL_SERVER_ERROR);
                 }
             }
         }
@@ -1133,11 +1134,10 @@ public class Database implements StoreDelegate {
             Log.e(Database.TAG, "Could not initialize attachment store", e);
             store.close();
             store = null;
-            return false;
+            throw new CouchbaseLiteException("Could not initialize attachment store", e,
+                    Status.INTERNAL_SERVER_ERROR);
         }
-
         open = true;
-        return true;
     }
 
     @InterfaceAudience.Public

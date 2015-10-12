@@ -276,15 +276,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             return new Status(Status.NOT_FOUND);
         }
 
-        boolean isOpen = false;
         try {
-            isOpen = db.open();
+            db.open();
         } catch (CouchbaseLiteException e) {
             return e.getCBLStatus();
         }
-        if (!isOpen) {
-            return new Status(Status.INTERNAL_SERVER_ERROR);
-        }
+
         return new Status(Status.OK);
     }
 
@@ -998,16 +995,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             return new Status(Status.DUPLICATE);
         }
 
-        boolean isOpen = false;
         try {
-            isOpen = db.open();
+            db.open();
         } catch (CouchbaseLiteException e) {
             return e.getCBLStatus();
         }
 
-        if (!isOpen) {
-            return new Status(Status.INTERNAL_SERVER_ERROR);
-        }
         setResponseLocation(connection.getURL());
         return new Status(Status.CREATED);
     }

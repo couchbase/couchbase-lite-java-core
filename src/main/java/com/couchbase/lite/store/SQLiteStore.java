@@ -1,9 +1,19 @@
-//
-//  SQLiteStore.java
-//
-//  Created by Hideki Itakura on 6/16/15.
-//  Copyright (c) 2015 Couchbase, Inc All rights reserved.
-//
+/**
+ * Created by Hideki Itakura on 6/16/15.
+ * <p/>
+ * Copyright (c) 2015 Couchbase, Inc All rights reserved.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
+
 package com.couchbase.lite.store;
 
 import com.couchbase.lite.BlobKey;
@@ -155,17 +165,17 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     @Override
-    public synchronized boolean open() throws CouchbaseLiteException {
-        // Create the storage engine.
+    public synchronized void open() throws CouchbaseLiteException {
+        // Create the storage engine:
         SQLiteStorageEngineFactory factory =
                 manager.getContext().getSQLiteStorageEngineFactory();
         storageEngine = factory.createStorageEngine(manager.isEnableStorageEncryption());
 
-        // Try to open the storage engine and stop if we fail.
+        // Try to open the storage engine and stop if we fail:
         if (storageEngine == null) {
-            String msg = "Unable to create a storage engine, fatal error";
-            Log.e(TAG, msg);
-            throw new IllegalStateException(msg);
+            String message = "Unable to create a storage engine, fatal error";
+            Log.e(TAG, message);
+            throw new IllegalStateException(message);
         }
 
         boolean isOpenSuccess = false;
@@ -187,9 +197,12 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
 
         // Stuff we need to initialize every time the sqliteDb opens:
-        if (!initialize("PRAGMA foreign_keys = ON;")) {
-            Log.e(TAG, "Error turning on foreign keys");
-            return false;
+        try {
+            initialize("PRAGMA foreign_keys = ON;");
+        } catch (SQLException e) {
+            String message = "Cannot set enforcement of foreign key constraints";
+            Log.e(TAG, message, e);
+            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
         }
 
         // Check the user_version number we last stored in the sqliteDb:
@@ -197,77 +210,84 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         // Incompatible version changes increment the hundreds' place:
         if (dbVersion >= 200) {
-            Log.e(TAG, "Database: Database version (%d) is newer than I know how to work with",
-                    dbVersion);
             storageEngine.close();
-            return false;
+            String message = "Database version " + dbVersion +
+                    " is newer than I know how to work with";
+            Log.e(TAG, message, dbVersion);
+            throw new CouchbaseLiteException(message, Status.NOT_ACCEPTABLE);
         }
 
-        boolean isNew = (dbVersion == 0);
-        boolean isSuccessful = false;
-
         // BEGIN TRANSACTION
+        boolean isSuccessful = false;
         if (!beginTransaction()) {
             storageEngine.close();
-            return false;
+            String message = "Cannot begin transaction";
+            Log.e(TAG, message);
+            throw new CouchbaseLiteException(message, Status.DB_ERROR);
         }
 
         try {
+            boolean isNew = (dbVersion == 0);
             if (dbVersion < 17) {
                 // First-time initialization:
                 // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
                 // monotonically increasing, never reused. See <http://www.sqlite.org/autoinc.html>)
-
                 if (!isNew) {
-                    Log.w(TAG, "Database version (%d) is older than I know how to work with",
-                            dbVersion);
-                    storageEngine.close();
-                    return false;
+                    String message = "Database version " + dbVersion +
+                            " is older than I know how to work with";
+                    Log.e(TAG, message, dbVersion);
+                    throw new CouchbaseLiteException(message, Status.NOT_ACCEPTABLE);
                 }
 
-                if (!initialize(SCHEMA)) {
-                    return false;
+                try {
+                    initialize(SCHEMA);
+                } catch (SQLException e) {
+                    String message = "Cannot initialize database schema";
+                    Log.e(TAG, message, e);
+                    throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
                 }
                 dbVersion = 17;
             }
-
 
             if (dbVersion < 21) {
                 // Version 18:
                 String upgradeSql = "ALTER TABLE revs ADD COLUMN doc_type TEXT; " +
                         "PRAGMA user_version = 21";
-                if (!initialize(upgradeSql)) {
-                    return false;
+                try {
+                    initialize(upgradeSql);
+                } catch (SQLException e) {
+                    String message = "Cannot update revs table";
+                    Log.e(TAG, message, e);
+                    throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
                 }
                 dbVersion = 21;
             }
 
             if (dbVersion < 101) {
                 String upgradeSql = "PRAGMA user_version = 101";
-                if (!initialize(upgradeSql)) {
-                    return false;
+                try {
+                    initialize(upgradeSql);
+                } catch (SQLException e) {
+                    String message = "Cannot update user_version to " + dbVersion;
+                    Log.e(TAG, message, e);
+                    throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
                 }
                 dbVersion = 101;
             }
 
-            if (isNew) {
+            if (isNew)
                 optimizeSQLIndexes(); // runs ANALYZE query
-            }
 
-            // successfully updated storageEngine schema
+            // successfully updated storageEngine schema:
             isSuccessful = true;
-
         } finally {
             // END TRANSACTION WITH COMMIT OR ROLLBACK
             endTransaction(isSuccessful);
-
-            // if failed, close storageEngine before return
+            // if failed, close storageEngine before return:
             if (!isSuccessful) {
                 storageEngine.close();
             }
         }
-
-        return true;
     }
 
     @Override
@@ -443,10 +463,9 @@ public class SQLiteStore implements Store, EncryptableStore {
                 @Override
                 public void execute() throws ActionException {
                     try {
-                        if (!open())
-                            throw new ActionException("Cannot open the SQLiteStore");
+                        open();
                     } catch (CouchbaseLiteException e) {
-                        throw new ActionException(e);
+                        throw new ActionException("Cannot open the SQLiteStore", e);
                     }
                 }
             },
@@ -456,10 +475,9 @@ public class SQLiteStore implements Store, EncryptableStore {
                 public void execute() throws ActionException {
                     setEncryptionKey(newKey);
                     try {
-                        if (!open())
-                            throw new ActionException("Cannot open the SQLiteStore");
+                        open();
                     } catch (CouchbaseLiteException e) {
-                        throw new ActionException(e);
+                        throw new ActionException("Cannot open the SQLiteStore", e);
                     }
                 }
             }
@@ -2182,24 +2200,24 @@ public class SQLiteStore implements Store, EncryptableStore {
         return outPruned;
     }
 
-    protected boolean runStatements(String statements) {
+    protected void runStatements(String statements) throws SQLException {
         for (String statement : statements.split(";")) {
             try {
                 storageEngine.execSQL(statement);
             } catch (SQLException e) {
                 Log.e(TAG, "Failed to execSQL: " + statement, e);
-                return false;
+                throw e;
             }
         }
-        return true;
     }
 
-    private boolean initialize(String statements) {
-        if (!runStatements(statements)) {
+    private void initialize(String statements) throws SQLException {
+        try {
+            runStatements(statements);
+        } catch (SQLException e) {
             close();
-            return false;
+            throw e;
         }
-        return true;
     }
 
     private long getLastOptimized() {
