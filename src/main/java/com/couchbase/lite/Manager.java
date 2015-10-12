@@ -226,18 +226,22 @@ public final class Manager {
     @InterfaceAudience.Public
     public void close() {
         Log.d(Database.TAG, "Closing " + this);
-        for (Database database : databases.values()) {
-            // Database.close() closes all active replicators
+        // Close all database:
+        // Snapshot of the current open database to avoid concurrent modification as
+        // the database will be forgotten (removed from the databases map) when it is closed:
+        Database[] openDbs = databases.values().toArray(new Database[databases.size()]);
+        for (Database database : openDbs) {
             database.close();
         }
         databases.clear();
+
+        // Stop reachability:
         context.getNetworkReachabilityManager().stopListening();
 
-        // shutdown ScheduledExecutorService
+        // Shutdown ScheduledExecutorService:
         if (workExecutor != null && !workExecutor.isShutdown()) {
             Utils.shutdownAndAwaitTermination(workExecutor);
         }
-
         Log.d(Database.TAG, "Closed " + this);
     }
 
