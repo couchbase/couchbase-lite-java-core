@@ -43,4 +43,14 @@ public class ChangesOptions {
     public void setSortBySequence(boolean sortBySequence) {
         this.sortBySequence = sortBySequence;
     }
+
+    @Override
+    public String toString() {
+        return "ChangesOptions{" +
+                "limit=" + limit +
+                ", includeDocs=" + includeDocs +
+                ", includeConflicts=" + includeConflicts +
+                ", sortBySequence=" + sortBySequence +
+                '}';
+    }
 }

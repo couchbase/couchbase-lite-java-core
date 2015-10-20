@@ -499,8 +499,11 @@ public class SQLiteStore implements Store, EncryptableStore {
         ContentValues args = new ContentValues();
         args.put("key", key);
         args.put("value", info);
-        return storageEngine.insertWithOnConflict("info", null, args,
-                SQLiteStorageEngine.CONFLICT_REPLACE);
+        if(storageEngine.insertWithOnConflict("info", null, args,
+                SQLiteStorageEngine.CONFLICT_REPLACE) == -1)
+            return Status.DB_ERROR;
+        else
+            return Status.OK;
     }
 
     @Override
@@ -898,41 +901,6 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
         }
         return revIDs;
-    }
-
-    @Override
-    public String findCommonAncestor(RevisionInternal rev, List<String> revIDs) {
-        String result = null;
-
-        if (revIDs.size() == 0)
-            return null;
-        String docId = rev.getDocID();
-        long docNumericID = getDocNumericID(docId);
-        if (docNumericID <= 0)
-            return null;
-        String quotedRevIds = TextUtils.joinQuoted(revIDs);
-        String sql = "SELECT revid FROM revs " +
-                "WHERE doc_id=? and revid in (" + quotedRevIds + ") and revid <= ? " +
-                "ORDER BY revid DESC LIMIT 1";
-        String[] args = {Long.toString(docNumericID)};
-
-        Cursor cursor = null;
-        try {
-            cursor = storageEngine.rawQuery(sql, args);
-            cursor.moveToNext();
-            if (!cursor.isAfterLast()) {
-                result = cursor.getString(0);
-            }
-
-        } catch (SQLException e) {
-            Log.e(TAG, "Error getting all revisions of document", e);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
-        return result;
     }
 
     @Override

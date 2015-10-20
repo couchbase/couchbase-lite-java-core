@@ -37,7 +37,6 @@ public class QueryOptions {
     private int prefixMatchLevel = 0;
     private boolean descending = false;
     private boolean includeDocs = false;
-
     private boolean updateSeq = false;
     private boolean inclusiveStart = true;
     private boolean inclusiveEnd = true;
@@ -212,4 +211,29 @@ public class QueryOptions {
         this.postFilter = postFilter;
     }
 
+    @Override
+    public String toString() {
+        return "QueryOptions{" +
+                "startKey=" + startKey +
+                ", endKey=" + endKey +
+                ", keys=" + keys +
+                ", skip=" + skip +
+                ", limit=" + limit +
+                ", groupLevel=" + groupLevel +
+                ", prefixMatchLevel=" + prefixMatchLevel +
+                ", descending=" + descending +
+                ", includeDocs=" + includeDocs +
+                ", updateSeq=" + updateSeq +
+                ", inclusiveStart=" + inclusiveStart +
+                ", inclusiveEnd=" + inclusiveEnd +
+                ", reduce=" + reduce +
+                ", reduceSpecified=" + reduceSpecified +
+                ", group=" + group +
+                ", stale=" + stale +
+                ", allDocsMode=" + allDocsMode +
+                ", startKeyDocId='" + startKeyDocId + '\'' +
+                ", endKeyDocId='" + endKeyDocId + '\'' +
+                ", postFilter=" + postFilter +
+                '}';
+    }
 }
