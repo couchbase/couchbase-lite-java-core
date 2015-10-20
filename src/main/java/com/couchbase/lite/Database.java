@@ -1086,9 +1086,9 @@ public class Database implements StoreDelegate {
         // First-time setup:
         if (privateUUID() == null) {
             if (store.setInfo("privateUUID", Misc.CreateUUID()) != Status.OK)
-                return false;
+                throw new CouchbaseLiteException("Unable to set privateUUID in info", Status.DB_ERROR);
             if (store.setInfo("publicUUID", Misc.CreateUUID()) != Status.OK)
-                return false;
+                throw new CouchbaseLiteException("Unable to set publicUUID in info", Status.DB_ERROR);
         }
 
         String sMaxRevs = store.getInfo("max_revs");
