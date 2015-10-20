@@ -481,8 +481,11 @@ public class SQLiteStore implements Store, EncryptableStore {
         ContentValues args = new ContentValues();
         args.put("key", key);
         args.put("value", info);
-        return storageEngine.insertWithOnConflict("info", null, args,
-                SQLiteStorageEngine.CONFLICT_REPLACE);
+        if(storageEngine.insertWithOnConflict("info", null, args,
+                SQLiteStorageEngine.CONFLICT_REPLACE) == -1)
+            return Status.DB_ERROR;
+        else
+            return Status.OK;
     }
 
     @Override
