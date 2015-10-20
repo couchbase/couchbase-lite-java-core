@@ -1595,7 +1595,6 @@ public class Database implements StoreDelegate {
         } else if (!history.get(0).equals(revID)) {
             // If inRev's revID doesn't appear in history, add it at the start:
             List<String> nuHistory = new ArrayList<>(history);
-            //nuHistory.addAll(history);
             nuHistory.add(0, revID);
             history = nuHistory;
         }

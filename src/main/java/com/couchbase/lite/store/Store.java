@@ -197,16 +197,7 @@ public interface Store {
     List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev,
                                                 int limit,
                                                 AtomicBoolean onlyAttachments);
-
-    /**
-     * Returns the most recent member of revIDs that appears in rev's ancestry.
-     * In other words: Look at the revID properties of rev, its parent, grandparent, etc.
-     * As soon as you find a revID that's in the revIDs array, stop and return that revID.
-     * If no match is found, return nil.
-     */
-//    String findCommonAncestor(RevisionInternal rev, List<String> revIDs);
-
-
+    
     /**
      * Looks for each given revision in the local database, and removes each one found
      * from the list. On return, therefore,
