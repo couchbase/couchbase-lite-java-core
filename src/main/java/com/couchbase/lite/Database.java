@@ -1085,8 +1085,10 @@ public class Database implements StoreDelegate {
 
         // First-time setup:
         if (privateUUID() == null) {
-            store.setInfo("privateUUID", Misc.CreateUUID());
-            store.setInfo("publicUUID", Misc.CreateUUID());
+            if (store.setInfo("privateUUID", Misc.CreateUUID()) != Status.OK)
+                return false;
+            if (store.setInfo("publicUUID", Misc.CreateUUID()) != Status.OK)
+                return false;
         }
 
         String sMaxRevs = store.getInfo("max_revs");
@@ -1586,13 +1588,14 @@ public class Database implements StoreDelegate {
         int historyCount = 0;
         if (history != null)
             historyCount = history.size();
+
         if (historyCount == 0) {
-            history = new ArrayList<String>();
+            history = new ArrayList<>();
             history.add(revID);
         } else if (!history.get(0).equals(revID)) {
             // If inRev's revID doesn't appear in history, add it at the start:
-            List<String> nuHistory = new ArrayList<String>();
-            nuHistory.addAll(history);
+            List<String> nuHistory = new ArrayList<>(history);
+            //nuHistory.addAll(history);
             nuHistory.add(0, revID);
             history = nuHistory;
         }

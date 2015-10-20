@@ -204,7 +204,7 @@ public interface Store {
      * As soon as you find a revID that's in the revIDs array, stop and return that revID.
      * If no match is found, return nil.
      */
-    String findCommonAncestor(RevisionInternal rev, List<String> revIDs);
+//    String findCommonAncestor(RevisionInternal rev, List<String> revIDs);
 
 
     /**

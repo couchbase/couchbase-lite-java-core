@@ -882,40 +882,40 @@ public class SQLiteStore implements Store, EncryptableStore {
         return revIDs;
     }
 
-    @Override
-    public String findCommonAncestor(RevisionInternal rev, List<String> revIDs) {
-        String result = null;
-
-        if (revIDs.size() == 0)
-            return null;
-        String docId = rev.getDocID();
-        long docNumericID = getDocNumericID(docId);
-        if (docNumericID <= 0)
-            return null;
-        String quotedRevIds = TextUtils.joinQuoted(revIDs);
-        String sql = "SELECT revid FROM revs " +
-                "WHERE doc_id=? and revid in (" + quotedRevIds + ") and revid <= ? " +
-                "ORDER BY revid DESC LIMIT 1";
-        String[] args = {Long.toString(docNumericID)};
-
-        Cursor cursor = null;
-        try {
-            cursor = storageEngine.rawQuery(sql, args);
-            cursor.moveToNext();
-            if (!cursor.isAfterLast()) {
-                result = cursor.getString(0);
-            }
-
-        } catch (SQLException e) {
-            Log.e(TAG, "Error getting all revisions of document", e);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-
-        return result;
-    }
+//    @Override
+//    public String findCommonAncestor(RevisionInternal rev, List<String> revIDs) {
+//        String result = null;
+//
+//        if (revIDs.size() == 0)
+//            return null;
+//        String docId = rev.getDocID();
+//        long docNumericID = getDocNumericID(docId);
+//        if (docNumericID <= 0)
+//            return null;
+//        String quotedRevIds = TextUtils.joinQuoted(revIDs);
+//        String sql = "SELECT revid FROM revs " +
+//                "WHERE doc_id=? and revid in (" + quotedRevIds + ") and revid <= ? " +
+//                "ORDER BY revid DESC LIMIT 1";
+//        String[] args = {Long.toString(docNumericID)};
+//
+//        Cursor cursor = null;
+//        try {
+//            cursor = storageEngine.rawQuery(sql, args);
+//            cursor.moveToNext();
+//            if (!cursor.isAfterLast()) {
+//                result = cursor.getString(0);
+//            }
+//
+//        } catch (SQLException e) {
+//            Log.e(TAG, "Error getting all revisions of document", e);
+//        } finally {
+//            if (cursor != null) {
+//                cursor.close();
+//            }
+//        }
+//
+//        return result;
+//    }
 
     @Override
     public int findMissingRevisions(RevisionList touchRevs) throws SQLException {
