@@ -445,6 +445,9 @@ public class BlobStore {
                 Log.w(Log.TAG_DATABASE, "BlobStore: Attachment " + path + " decoded incorrectly!");
                 blob = null;
             }
+        } catch (OutOfMemoryError e) {
+            blob = null;
+            Log.e(Log.TAG_DATABASE, "BlobStore: Error reading file", e);
         } catch (IOException e) {
             blob = null;
             Log.e(Log.TAG_DATABASE, "BlobStore: Error reading file", e);
