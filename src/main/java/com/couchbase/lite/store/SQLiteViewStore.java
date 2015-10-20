@@ -897,7 +897,9 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         return db.runInTransaction(new TransactionalTask() {
             @Override
             public boolean run() {
-                if (!db.runStatements(queryString(sql))) {
+                try {
+                    db.runStatements(queryString(sql));
+                } catch (SQLException e) {
                     return false;
                 }
                 return true;

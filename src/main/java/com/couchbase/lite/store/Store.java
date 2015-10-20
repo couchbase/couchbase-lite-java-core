@@ -6,22 +6,17 @@
 //
 package com.couchbase.lite.store;
 
-import com.couchbase.lite.Attachment;
 import com.couchbase.lite.BlobKey;
 import com.couchbase.lite.ChangesOptions;
 import com.couchbase.lite.CouchbaseLiteException;
-import com.couchbase.lite.Database;
 import com.couchbase.lite.QueryOptions;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
-import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.storage.SQLiteStorageEngine;
 
 import java.net.URL;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,18 +39,8 @@ public interface Store {
 
     /**
      * Opens storage. Files will be created in the directory, which must already exist.
-     *
-     * @param directory The existing directory to put data files into. The implementation may create
-     *                  as many files as it wants here. There will be a subdirectory called
-     *                  "attachments" which contains attachments; don't mess with that.
-     * @param readOnly  If this is true, the database is opened read-only and any attempt to modify
-     *                  it must return an error.
-     * @param manager   The owning Manager; this is provided so the storage can examine its
-     *                  properties.
-     * @return true on success, false on failure.
      */
-    //boolean open(String directory, boolean readOnly, Manager manager);
-    boolean open() throws CouchbaseLiteException;
+    void open() throws CouchbaseLiteException;
 
     /**
      * Closes storage before it's deallocated.

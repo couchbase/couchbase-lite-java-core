@@ -1054,20 +1054,21 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    public synchronized boolean open() throws CouchbaseLiteException {
-        if (open) {
-            return true;
-        }
+    public synchronized void open() throws CouchbaseLiteException {
+        if (open)
+            return;
 
         Log.v(TAG, "Opening %s", this);
 
         // Create the database directory:
         File dir = new File(path);
-        if (!dir.exists())
+        if (!dir.exists()) {
             if (!dir.mkdirs())
-                return false;
-            else if (!dir.isDirectory())
-                return false;
+                throw new CouchbaseLiteException("Cannot create database directory",
+                        Status.INTERNAL_SERVER_ERROR);
+        } else if (!dir.isDirectory())
+            throw new CouchbaseLiteException("Database directory is not directory",
+                    Status.INTERNAL_SERVER_ERROR);
 
         // Initialize & open store
         store = createStoreInstance();
@@ -1080,8 +1081,7 @@ public class Database implements StoreDelegate {
             ((EncryptableStore)store).setEncryptionKey(encryptionKey);
         }
 
-        if (!store.open())
-            return false;
+        store.open();
 
         // First-time setup:
         if (privateUUID() == null) {
@@ -1108,7 +1108,8 @@ public class Database implements StoreDelegate {
                     Log.e(Database.TAG, "Could not rename attachment store path");
                     store.close();
                     store = null;
-                    return false;
+                    throw new CouchbaseLiteException("Could not rename attachment store path",
+                            Status.INTERNAL_SERVER_ERROR);
                 }
             }
         }
@@ -1135,16 +1136,17 @@ public class Database implements StoreDelegate {
             Log.e(Database.TAG, "Could not initialize attachment store", e);
             store.close();
             store = null;
-            return false;
+            throw new CouchbaseLiteException("Could not initialize attachment store", e,
+                    Status.INTERNAL_SERVER_ERROR);
         }
-
         open = true;
-        return true;
     }
 
     @InterfaceAudience.Public
     public boolean close() {
         if (!open) {
+            // Ensure that the database is forgotten:
+            manager.forgetDatabase(this);
             return false;
         }
 
@@ -1154,7 +1156,6 @@ public class Database implements StoreDelegate {
 
         if (views != null) {
             for (View view : views.values()) {
-                //view.databaseClosing();
                 view.close();
             }
         }
@@ -1166,7 +1167,7 @@ public class Database implements StoreDelegate {
                 for (Replication replicator : activeReplicators) {
                     if(replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
                         continue;
-                    // handler to check if the replicator stopped
+                    // Handler to check if the replicator stopped:
                     final CountDownLatch latch = new CountDownLatch(1);
                     replicator.addChangeListener(new Replication.ChangeListener() {
                         @Override
@@ -1179,16 +1180,17 @@ public class Database implements StoreDelegate {
                     });
                     latches.add(latch);
 
-                    // ask replicator to stop
+                    // Ask replicator to stop:
                     replicator.databaseClosing();
                 }
             }
 
-            // wait till all replicator stopped
+            // Wait till all replicator stopped:
             for (CountDownLatch latch : latches) {
                 try {
-                    boolean success = latch.await(Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN,
-                            TimeUnit.SECONDS);
+                    boolean success = latch.getCount() == 0 ||
+                            latch.await(Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN,
+                                    TimeUnit.SECONDS);
                     if (!success) {
                         Log.w(Log.TAG_DATABASE, "Replicator could not stop in " +
                                 Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN + " second.");
@@ -1197,14 +1199,20 @@ public class Database implements StoreDelegate {
                     Log.w(Log.TAG_DATABASE, e.getMessage());
                 }
             }
-
             activeReplicators = null;
         }
 
         allReplicators = null;
 
-        if (store != null) store.close();
+        if (store != null)
+            store.close();
         store = null;
+
+        // Clear document cache:
+        clearDocumentCache();
+
+        // Forget database:
+        manager.forgetDatabase(this);
 
         open = false;
         return true;

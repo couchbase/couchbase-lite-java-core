@@ -352,7 +352,7 @@ public class Log {
     public static void w(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, WARN)) {
             try {
-                logger.w(tag, String.format(formatString, args));
+                logger.w(tag, String.format(formatString, args), tr);
             } catch (Exception e) {
                 logger.w(tag, String.format("Unable to format log: %s", formatString), e);
             }

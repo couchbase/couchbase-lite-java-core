@@ -748,9 +748,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         remoteCheckpoint = body;
                         boolean isOpen = false;
                         try {
-                            isOpen = (db != null && db.open());
+                            if (db != null) {
+                                db.open();
+                                isOpen = true;
+                            }
                         } catch (CouchbaseLiteException ex) {
-                            Log.w(Log.TAG_SYNC, "%s: Cannot open the database", this, ex);
+                            Log.w(Log.TAG_SYNC, "%s: Cannot open the database", ex, this);
                         }
 
                         if (isOpen) {
@@ -763,9 +766,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         }
                     }
                 } finally {
-
                     savingCheckpoint = false;
-
                     if (overdueForCheckpointSave) {
                         Log.i(Log.TAG_SYNC, "%s: overdueForCheckpointSave == true, calling saveLastSequence()", this);
                         overdueForCheckpointSave = false;
