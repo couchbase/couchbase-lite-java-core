@@ -83,15 +83,10 @@ final public class DatabaseUpgrade {
             }
 
             // Open destination database:
-            boolean isOpen = false;
-            Throwable error = null;
             try {
-                isOpen = db.open();
+                db.open();
             } catch (CouchbaseLiteException e) {
-                error = e;
-            }
-            if (!isOpen) {
-                Log.e(TAG, "Upgrade failed:  Couldn't open new db: %s", db.toString(), error);
+                Log.e(TAG, "Upgrade failed:  Couldn't open new db: %s", e, db.toString());
                 return false;
             }
 

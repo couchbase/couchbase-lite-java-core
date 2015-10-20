@@ -256,8 +256,7 @@ public final class Manager {
     public Database getDatabase(String name) throws CouchbaseLiteException {
         Database db = getDatabase(name, false);
         if (db != null) {
-            if (!db.open())
-                db = null;
+            db.open();
         }
         return db;
     }
@@ -272,8 +271,7 @@ public final class Manager {
     public Database getExistingDatabase(String name) throws CouchbaseLiteException {
         Database db = getDatabase(name, true);
         if (db != null) {
-            if (!db.open())
-                db = null;
+            db.open();
         }
         return db;
     }
@@ -384,16 +382,10 @@ public final class Manager {
             return false;
         }
 
-        boolean isOpen = false;
-        CouchbaseLiteException error = null;
         try {
-            isOpen = db.open();
+            db.open();
         } catch (CouchbaseLiteException e) {
-            error = e;
-        }
-
-        if (!isOpen) {
-            Log.w(Database.TAG, "Failed to open database", error);
+            Log.w(Database.TAG, "Failed to open database", e);
             return false;
         }
 
@@ -566,9 +558,7 @@ public final class Manager {
             if (createTarget && !cancel) {
                 boolean mustExist = false;
                 db = getDatabase(target, mustExist);
-                if (!db.open()) {
-                    throw new CouchbaseLiteException("cannot open database: " + db, new Status(Status.INTERNAL_SERVER_ERROR));
-                }
+                db.open();
             } else {
                 db = getExistingDatabase(target);
             }
