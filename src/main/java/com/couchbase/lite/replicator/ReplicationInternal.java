@@ -753,7 +753,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                                 isOpen = true;
                             }
                         } catch (CouchbaseLiteException ex) {
-                            Log.w(Log.TAG_SYNC, "%s: Cannot open the database", this, ex);
+                            Log.w(Log.TAG_SYNC, "%s: Cannot open the database", ex, this);
                         }
 
                         if (isOpen) {

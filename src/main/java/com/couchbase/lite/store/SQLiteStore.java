@@ -213,7 +213,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             storageEngine.close();
             String message = "Database version " + dbVersion +
                     " is newer than I know how to work with";
-            Log.e(TAG, message, dbVersion);
+            Log.e(TAG, message);
             throw new CouchbaseLiteException(message, Status.NOT_ACCEPTABLE);
         }
 
@@ -235,7 +235,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 if (!isNew) {
                     String message = "Database version " + dbVersion +
                             " is older than I know how to work with";
-                    Log.e(TAG, message, dbVersion);
+                    Log.e(TAG, message);
                     throw new CouchbaseLiteException(message, Status.NOT_ACCEPTABLE);
                 }
 

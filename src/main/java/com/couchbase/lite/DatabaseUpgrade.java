@@ -86,7 +86,7 @@ final public class DatabaseUpgrade {
             try {
                 db.open();
             } catch (CouchbaseLiteException e) {
-                Log.e(TAG, "Upgrade failed:  Couldn't open new db: %s", db.toString(), e);
+                Log.e(TAG, "Upgrade failed:  Couldn't open new db: %s", e, db.toString());
                 return false;
             }
 
