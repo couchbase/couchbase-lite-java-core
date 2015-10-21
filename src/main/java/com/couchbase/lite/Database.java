@@ -1598,11 +1598,11 @@ public class Database implements StoreDelegate {
             historyCount = history.size();
 
         if (historyCount == 0) {
-            history = new ArrayList<>();
+            history = new ArrayList<String>();
             history.add(revID);
         } else if (!history.get(0).equals(revID)) {
             // If inRev's revID doesn't appear in history, add it at the start:
-            List<String> nuHistory = new ArrayList<>(history);
+            List<String> nuHistory = new ArrayList<String>(history);
             nuHistory.add(0, revID);
             history = nuHistory;
         }
