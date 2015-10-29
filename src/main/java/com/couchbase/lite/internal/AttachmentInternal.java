@@ -101,7 +101,8 @@ public class AttachmentInternal {
                 ((Boolean) attachInfo.get("stub")).booleanValue()) {
             // This item is just a stub; validate and skip it
             if (attachInfo.containsKey("revpos")) {
-                int revPos = ((Integer) attachInfo.get("revpos")).intValue();
+                // revpos will most likely always be an Integer, but this code will also handle a Double
+                int revPos = ((Number) attachInfo.get("revpos")).intValue();
                 if (revPos <= 0) {
                     throw new CouchbaseLiteException(Status.BAD_ATTACHMENT);
                 }
