@@ -355,7 +355,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 boolean deleted = cursor.getInt(5) > 0;
                 String docType = checkDocTypes ? cursor.getString(6) : null;
 
-                while ((keepGoing = cursor.moveToNext()) &&
+                while ((keepGoing = cursor.moveToNext()) && !deleted &&
                         (cursor.isNull(0) || cursor.getLong(0) == docID)) {
                     // Skip rows with the same doc_id -- these are losing conflicts.
                     // NOTE: Or Skip rows if 1st column is null
