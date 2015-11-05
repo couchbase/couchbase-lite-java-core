@@ -1162,11 +1162,11 @@ public class Database implements StoreDelegate {
                     (String)keyOrPassword,
                     DEFAULT_PBKDF2_KEY_SALT.getBytes(),
                     DEFAULT_PBKDF2_KEY_ROUNDS);
-        } else {
-            if (!(keyOrPassword instanceof byte[]))
-                throw new CouchbaseLiteException("Key must be String or byte[" +
-                        SymmetricKey.KEY_SIZE + "]", Status.BAD_REQUEST);
+        } else if (keyOrPassword instanceof byte[]) {
             rawKey = (byte[])keyOrPassword;
+        } else {
+            throw new CouchbaseLiteException("Key must be String or byte[" +
+                    SymmetricKey.KEY_SIZE + "]", Status.BAD_REQUEST);
         }
 
         SymmetricKey symmetricKey = null;

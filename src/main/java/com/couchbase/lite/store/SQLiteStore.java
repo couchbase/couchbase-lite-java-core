@@ -146,7 +146,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
         this.path = new File(directory, kDBFilename).getPath();
         this.manager = manager;
-        this.storageEngine = createStorageEngine();
+        this.storageEngine = null;
         this.transactionLevel = new TransactionLevel();
         this.delegate = delegate;
         this.maxRevTreeDepth = DEFAULT_MAX_REVS;
@@ -502,6 +502,9 @@ public class SQLiteStore implements Store, EncryptableStore {
     @Override
     public byte[] derivePBKDF2SHA256Key(String password, byte[] salt, int rounds)
             throws CouchbaseLiteException {
+        if (storageEngine == null)
+            storageEngine = createStorageEngine();
+
         if (!storageEngine.supportEncryption()) {
             Log.w(TAG, "SQLiteStore: encryption not available (app not built with SQLCipher)");
             throw new CouchbaseLiteException("Encryption not available",
