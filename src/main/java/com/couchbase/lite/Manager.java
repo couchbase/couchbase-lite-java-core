@@ -57,7 +57,7 @@ public final class Manager {
     private ManagerOptions options;
     private File directoryFile;
     private Map<String, Database> databases;
-    private Map<String, SymmetricKey> encryptionKeys;
+    private Map<String, Object> encryptionKeys;
     private List<Replication> replications;
     private ScheduledExecutorService workExecutor;
     private HttpClientFactory defaultHttpClientFactory;
@@ -100,7 +100,7 @@ public final class Manager {
         this.directoryFile = context.getFilesDir();
         this.options = (options != null) ? options : DEFAULT_OPTIONS;
         this.databases = new HashMap<String, Database>();
-        this.encryptionKeys = new HashMap<String, SymmetricKey>();
+        this.encryptionKeys = new HashMap<String, Object>();
         this.replications = new ArrayList<Replication>();
         this.storeClassName = options.getStoreClassName() != null ?
                 options.getStoreClassName() : DEFAULT_STORE_CLASSNAME;
@@ -298,13 +298,7 @@ public final class Manager {
         if (databaseName == null)
             return false;
         if (keyOrPassword != null) {
-            try {
-                SymmetricKey realKey = new SymmetricKey(keyOrPassword);
-                encryptionKeys.put(databaseName, realKey);
-            } catch (SymmetricKeyException e) {
-                Log.e(Database.TAG, "Cannot create a symmetric key", e);
-                return false;
-            }
+            encryptionKeys.put(databaseName, keyOrPassword);
         } else
             encryptionKeys.remove(databaseName);
         return true;
@@ -456,7 +450,7 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    public Map<String, SymmetricKey> getEncryptionKeys() {
+    public Map<String, Object> getEncryptionKeys() {
         return Collections.unmodifiableMap(encryptionKeys) ;
     }
 

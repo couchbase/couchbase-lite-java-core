@@ -16,11 +16,39 @@
 
 package com.couchbase.lite.store;
 
+import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.support.action.Action;
 import com.couchbase.lite.support.security.SymmetricKey;
 
 public interface EncryptableStore {
+    /**
+     * Set encryption key for opening the storage.
+     * @param key a SymmetricKey object
+     */
     void setEncryptionKey(SymmetricKey key);
 
+    /**
+     * Action for changing the encryption key of the storage.
+     * @param newKey a new SymmetricKey object
+     * @return an Action object
+     */
     Action actionToChangeEncryptionKey(SymmetricKey newKey);
+
+    /**
+     * A utility method for deriving PBKDF2-SHA256 based key from the password.
+     * @param password password
+     * @param salt salt
+     * @param rounds number of rounds
+     * @return a derived PBKDF2-SHA256 key
+     */
+
+    /**
+     * A utility method for deriving PBKDF2-SHA256 based key from the password.
+     * @param password password
+     * @param salt salt
+     * @param rounds number of rounds
+     * @return a derived PBKDF2-SHA256 key
+     * @throws CouchbaseLiteException
+     */
+    byte[] derivePBKDF2SHA256Key(String password, byte[] salt, int rounds) throws CouchbaseLiteException;
 }
