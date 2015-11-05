@@ -74,6 +74,10 @@ public class Database implements StoreDelegate {
     // When this many changes pile up in _changesToNotify, start removing their bodies to save RAM
     private static final int MANY_CHANGES_TO_NOTIFY = 5000;
 
+    private static final String DEFAULT_PBKDF2_KEY_SALT = "Salty McNaCl";
+    private static final int DEFAULT_PBKDF2_KEY_ROUNDS = 1024;
+
+
     private static ReplicationFilterCompiler filterCompiler;
 
     // Length that constitutes a 'big' attachment
@@ -81,7 +85,6 @@ public class Database implements StoreDelegate {
 
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     public static int DEFAULT_MAX_REVS = 20;
-
 
     private Store store = null;
     private String path;
@@ -263,27 +266,25 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void changeEncryptionKey(final Object newKeyOrPassword) throws CouchbaseLiteException {
-        if (!(store instanceof EncryptableStore)) {
+        if (!(store instanceof EncryptableStore))
             throw new CouchbaseLiteException(Status.NOT_IMPLEMENTED);
-        }
 
-        if (newKeyOrPassword != null) {
-            try {
-                SymmetricKey newKey = new SymmetricKey(newKeyOrPassword);
-                Action action = ((EncryptableStore) store).actionToChangeEncryptionKey(newKey);
-                action.add(attachments.actionToChangeEncryptionKey(newKey));
-                action.add(new ActionBlock() {
-                    @Override
-                    public void execute() throws ActionException {
-                        manager.registerEncryptionKey(newKeyOrPassword, name);
-                    }
-                }, null, null);
-                action.run();
-            } catch (SymmetricKeyException e) {
-                throw new CouchbaseLiteException(Status.BAD_REQUEST);
-            } catch (ActionException e) {
-                throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
-            }
+        SymmetricKey newKey = null;
+        if (newKeyOrPassword != null)
+            newKey = createSymmetricKey(newKeyOrPassword);
+
+        try {
+            Action action = ((EncryptableStore) store).actionToChangeEncryptionKey(newKey);
+            action.add(attachments.actionToChangeEncryptionKey(newKey));
+            action.add(new ActionBlock() {
+                @Override
+                public void execute() throws ActionException {
+                    manager.registerEncryptionKey(newKeyOrPassword, name);
+                }
+            }, null, null);
+            action.run();
+        } catch (ActionException e) {
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -1076,8 +1077,10 @@ public class Database implements StoreDelegate {
             store = new SQLiteStore(path, manager, this);
 
         // Set encryption key:
-        SymmetricKey encryptionKey = manager.getEncryptionKeys().get(name);
+        SymmetricKey encryptionKey = null;
         if (store instanceof EncryptableStore) {
+            Object keyOrPassword = manager.getEncryptionKeys().get(name);
+            encryptionKey = createSymmetricKey(keyOrPassword);
             ((EncryptableStore)store).setEncryptionKey(encryptionKey);
         }
 
@@ -1140,6 +1143,39 @@ public class Database implements StoreDelegate {
                     Status.INTERNAL_SERVER_ERROR);
         }
         open = true;
+    }
+
+    /**
+     * Create a SymmetricKey object from the key (byte[32]) or password string.
+     * @param keyOrPassword
+     * @return
+     * @throws CouchbaseLiteException
+     */
+    @InterfaceAudience.Private
+    SymmetricKey createSymmetricKey(Object keyOrPassword) throws CouchbaseLiteException {
+        if (keyOrPassword == null)
+            return null;
+
+        byte[] rawKey = null;
+        if (keyOrPassword instanceof String) {
+            rawKey = ((EncryptableStore) store).derivePBKDF2SHA256Key(
+                    (String)keyOrPassword,
+                    DEFAULT_PBKDF2_KEY_SALT.getBytes(),
+                    DEFAULT_PBKDF2_KEY_ROUNDS);
+        } else if (keyOrPassword instanceof byte[]) {
+            rawKey = (byte[])keyOrPassword;
+        } else {
+            throw new CouchbaseLiteException("Key must be String or byte[" +
+                    SymmetricKey.KEY_SIZE + "]", Status.BAD_REQUEST);
+        }
+
+        SymmetricKey symmetricKey = null;
+        try {
+            symmetricKey = new SymmetricKey(rawKey);
+        } catch (SymmetricKeyException e) {
+            throw new CouchbaseLiteException(e, Status.BAD_REQUEST);
+        }
+        return symmetricKey;
     }
 
     @InterfaceAudience.Public

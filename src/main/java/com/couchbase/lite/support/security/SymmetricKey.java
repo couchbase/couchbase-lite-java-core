@@ -19,7 +19,6 @@ package com.couchbase.lite.support.security;
 
 import com.couchbase.lite.util.ArrayUtils;
 import com.couchbase.lite.util.Log;
-import com.couchbase.lite.util.NativeLibraryUtils;
 import com.couchbase.lite.util.Utils;
 
 import java.io.FilterInputStream;
@@ -37,14 +36,8 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class SymmetricKey {
-    // Key Derivation:
-    private static final int KEY_SIZE = 32; // AES256
-
-    private static final int MIN_KEY_ROUNDS = 200;
-    private static final int DEFAULT_KEY_ROUNDS = 1024;
-
-    private static final int MIN_KEY_SALT_SIZE = 4;
-    private static final String DEFAULT_KEY_SALT = "Salty McNaCl";
+    // Key:
+    public static final int KEY_SIZE = 32; // AES256
 
     // Encryption:
     private static final int BLOCK_SIZE = 16; // AES use a 128-bit block
@@ -56,48 +49,12 @@ public class SymmetricKey {
     // Remember when using BC provider:
     private boolean useBCProvider = false;
 
-    // Native key derivation:
-    private static native byte[] nativeDeriveKey(String password, byte[] salt, int rounds);
-    private final static String NATIVE_LIB_NAME = "CouchbaseLiteJavaSymmetricKey";
-
-    /** static constructor */
-    static {
-        try {
-            System.loadLibrary(NATIVE_LIB_NAME);
-        } catch (UnsatisfiedLinkError e) {
-            if(!NativeLibraryUtils.loadLibrary(NATIVE_LIB_NAME))
-                Log.e(Log.TAG_SYMMETRIC_KEY, "ERROR: Failed to load %s", NATIVE_LIB_NAME);
-        }
-    }
-
     /**
      * Create an instance with a secure random generated key.
      * @throws SymmetricKeyException
      */
-    public SymmetricKey() throws SymmetricKeyException{
+    public SymmetricKey() throws SymmetricKeyException {
         this(generateKey(KEY_SIZE));
-    }
-
-    /**
-     * Create an instance with a password, a salt, and number of iterating rounds
-     * for deriving a PBKDF2 secret key.
-     * @param password Password
-     * @param salt Salt
-     * @param rounds Number of iterating rounds
-     * @throws SymmetricKeyException
-     */
-    public SymmetricKey(String password, byte[] salt, int rounds) throws SymmetricKeyException {
-        initWithPassword(password, salt, rounds);
-    }
-
-    /**
-     * Create an instance with a password. The constructor will use the default salt and
-     * number of iterating rounds when deriving a PBKDF2 secret key.
-     * @param password Password
-     * @throws SymmetricKeyException
-     */
-    public SymmetricKey(String password) throws SymmetricKeyException {
-        initWithPassword(password, DEFAULT_KEY_SALT.getBytes(), DEFAULT_KEY_ROUNDS);
     }
 
     /**
@@ -107,49 +64,6 @@ public class SymmetricKey {
      */
     public SymmetricKey(byte[] key) throws SymmetricKeyException {
         initWithKey(key);
-    }
-
-    /**
-     * Creates an instance with a raw key or a password string. The size of the key needs to
-     * be 32 bytes
-     * @param keyOrPassword Key or password
-     * @throws SymmetricKeyException
-     */
-    public SymmetricKey(Object keyOrPassword) throws SymmetricKeyException {
-        if (keyOrPassword instanceof String) {
-            initWithPassword((String)keyOrPassword, DEFAULT_KEY_SALT.getBytes(), DEFAULT_KEY_ROUNDS);
-        } else {
-            if (!(keyOrPassword instanceof byte[])) {
-                throw new IllegalArgumentException("Key must be String or byte[32]");
-            }
-            initWithKey((byte[])keyOrPassword);
-        }
-    }
-
-    /**
-     * Initialize the object with a password, sales, and number of rounds for deriving
-     * the password into a raw key by using 64,000 rounds of PBKDF2 hashing.
-     * @param password Password
-     * @param salt Salt
-     * @param rounds Number of rounds
-     * @throws SymmetricKeyException
-     */
-    private void initWithPassword(String password, byte[] salt, int rounds)
-            throws SymmetricKeyException {
-        if (password == null)
-            throw new SymmetricKeyException("Password cannot be null.");
-        if (salt.length < MIN_KEY_SALT_SIZE)
-            throw new SymmetricKeyException("Insufficient salt");
-        if (rounds < MIN_KEY_ROUNDS)
-            throw new SymmetricKeyException("Insufficient rounds");
-
-        try {
-            // Derive key from password:
-            keyData = nativeDeriveKey(password, salt, rounds);
-        } catch (Exception e) {
-            Log.e(Log.TAG_SYMMETRIC_KEY, "Error generating key from password", e);
-            throw new SymmetricKeyException(e);
-        }
     }
 
     /**

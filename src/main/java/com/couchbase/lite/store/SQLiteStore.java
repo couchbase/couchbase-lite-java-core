@@ -136,7 +136,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     // Constructor
     ///////////////////////////////////////////////////////////////////////////
 
-    public SQLiteStore(String directory, Manager manager, StoreDelegate delegate) {
+    public SQLiteStore(String directory, Manager manager, StoreDelegate delegate)
+            throws CouchbaseLiteException{
         assert (new File(directory).isAbsolute()); // path must be absolute
         this.directory = directory;
         File dir = new File(directory);
@@ -166,17 +167,12 @@ public class SQLiteStore implements Store, EncryptableStore {
 
     @Override
     public synchronized void open() throws CouchbaseLiteException {
-        // Create the storage engine:
-        SQLiteStorageEngineFactory factory =
-                manager.getContext().getSQLiteStorageEngineFactory();
-        storageEngine = factory.createStorageEngine(manager.isEnableStorageEncryption());
-
         // Try to open the storage engine and stop if we fail:
-        if (storageEngine == null) {
-            String message = "Unable to create a storage engine, fatal error";
-            Log.e(TAG, message);
-            throw new IllegalStateException(message);
-        }
+        if (storageEngine == null)
+            storageEngine = createStorageEngine();
+
+        if (storageEngine.isOpen())
+            return;
 
         boolean isOpenSuccess = false;
         try {
@@ -192,7 +188,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         } finally {
             if (!isOpenSuccess) {
                 // As an exception will be thrown, no return false is needed here:
-                storageEngine.close();
+                close();
             }
         }
 
@@ -210,7 +206,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         // Incompatible version changes increment the hundreds' place:
         if (dbVersion >= 200) {
-            storageEngine.close();
+            close();
             String message = "Database version " + dbVersion +
                     " is newer than I know how to work with";
             Log.e(TAG, message);
@@ -220,7 +216,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         // BEGIN TRANSACTION
         boolean isSuccessful = false;
         if (!beginTransaction()) {
-            storageEngine.close();
+            close();
             String message = "Cannot begin transaction";
             Log.e(TAG, message);
             throw new CouchbaseLiteException(message, Status.DB_ERROR);
@@ -285,7 +281,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             endTransaction(isSuccessful);
             // if failed, close storageEngine before return:
             if (!isSuccessful) {
-                storageEngine.close();
+                close();
             }
         }
     }
@@ -295,6 +291,19 @@ public class SQLiteStore implements Store, EncryptableStore {
         if (storageEngine != null && storageEngine.isOpen())
             storageEngine.close();
         storageEngine = null;
+    }
+
+    private SQLiteStorageEngine createStorageEngine() throws CouchbaseLiteException {
+        SQLiteStorageEngineFactory factory =
+                manager.getContext().getSQLiteStorageEngineFactory();
+        SQLiteStorageEngine engine =
+                factory.createStorageEngine(manager.isEnableStorageEncryption());
+        if (engine == null) {
+            String message = "Unable to create a storage engine, fatal error";
+            Log.e(TAG, message);
+            throw new CouchbaseLiteException(message, Status.INTERNAL_SERVER_ERROR);
+        }
+        return engine;
     }
 
     @Override
@@ -488,6 +497,25 @@ public class SQLiteStore implements Store, EncryptableStore {
                 manager.getContext().getTempDir().getAbsolutePath()));
 
         return action;
+    }
+
+    @Override
+    public byte[] derivePBKDF2SHA256Key(String password, byte[] salt, int rounds)
+            throws CouchbaseLiteException {
+        if (storageEngine == null)
+            storageEngine = createStorageEngine();
+
+        if (!storageEngine.supportEncryption()) {
+            Log.w(TAG, "SQLiteStore: encryption not available (app not built with SQLCipher)");
+            throw new CouchbaseLiteException("Encryption not available",
+                    Status.NOT_IMPLEMENTED);
+        }
+
+        byte[] result = storageEngine.derivePBKDF2SHA256Key(password, salt, rounds);
+        if (result == null)
+            throw new CouchbaseLiteException("Cannot derive key for the password",
+                    Status.BAD_REQUEST);
+        return result;
     }
 
     ///////////////////////////////////////////////////////////////////////////

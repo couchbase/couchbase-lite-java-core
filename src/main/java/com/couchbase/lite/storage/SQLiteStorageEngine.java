@@ -54,4 +54,6 @@ public interface SQLiteStorageEngine {
     void close();
 
     boolean supportEncryption();
+
+    byte[] derivePBKDF2SHA256Key(String password, byte[] salt, int rounds);
 }
