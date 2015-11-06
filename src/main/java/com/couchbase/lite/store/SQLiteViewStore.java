@@ -425,10 +425,10 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 }
             }
 
-            // Finally, record the last revision sequence number that was
-            // indexed:
+            // Finally, record the last revision sequence number that was indexed and update #rows:
+            finishCreatingIndex();
             int newTotalRows = countTotalRows();
-            ;
+
             ContentValues updateValues = new ContentValues();
             updateValues.put("lastSequence", dbMaxSequence);
             updateValues.put("total_docs", newTotalRows);
@@ -958,5 +958,16 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         } else {
             return key;
         }
+    }
+
+    /**
+     * in CBL_SQLiteViewStorage.m
+     * - (void) finishCreatingIndex
+     */
+    private void finishCreatingIndex(){
+        String sql = "CREATE INDEX IF NOT EXISTS 'maps_#_keys' on 'maps_#'(key COLLATE JSON);"
+                + "CREATE INDEX IF NOT EXISTS 'maps_#_sequence' ON 'maps_#'(sequence)";
+        if (!runStatements(sql))
+            Log.w(TAG, "Couldn't create view SQL index `%s`", name);
     }
 }
