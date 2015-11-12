@@ -1436,13 +1436,25 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             RevisionInternal rev = change.getAddedRevision();
 
+            // https://github.com/couchbase/couchbase-lite-android/issues/683
+            // DocumentChange of Database.ChangeEvent might not contain revision body.
+            // In case of include_docs=true, needs to load revision body
+            if (changesIncludesDocs && (rev.getBody() == null || !rev.getBody().hasContent())) {
+                EnumSet<TDContentOptions> options = getContentOptions();
+                try {
+                    rev = db.loadRevisionBody(rev, options);
+                } catch (CouchbaseLiteException e) {
+                    Log.w(Log.TAG_ROUTER, "Error loading revision body", e);
+                }
+            }
+
             final boolean allowRevision = event.getSource().runFilter(changesFilter, changesFilterParams, rev);
             if (!allowRevision) {
                 return;
             }
 
             if (longpoll) {
-                Log.w(Log.TAG_ROUTER, "Router: Sending longpoll response");
+                Log.i(Log.TAG_ROUTER, "Router: Sending longpoll response");
                 sendResponse();
                 List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
                 revs.add(rev);
