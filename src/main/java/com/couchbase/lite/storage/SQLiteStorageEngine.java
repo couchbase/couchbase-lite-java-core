@@ -16,12 +16,14 @@
 
 package com.couchbase.lite.storage;
 
+import com.couchbase.lite.support.security.SymmetricKey;
+
 public interface SQLiteStorageEngine {
     int CONFLICT_NONE = 0;
     int CONFLICT_IGNORE = 4;
     int CONFLICT_REPLACE = 5;
 
-    boolean open(String path) throws SQLException;
+    boolean open(String path, SymmetricKey encryptionKey) throws SQLException;
 
     int getVersion();
 

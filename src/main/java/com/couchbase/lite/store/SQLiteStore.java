@@ -177,14 +177,19 @@ public class SQLiteStore implements Store, EncryptableStore {
         boolean isOpenSuccess = false;
         try {
             // Open database:
-            storageEngine.open(path);
-            // Try to decrypt or access the database:
-            decrypt(encryptionKey);
+            storageEngine.open(path, encryptionKey);
             isOpenSuccess = true;
         } catch (SQLException e) {
             String message = "Unable to create a storage engine";
             Log.e(TAG, message, e);
-            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
+            int statusCode;
+            if (e.getCode() == SQLException.SQLITE_ENCRYPTION_UNAUTHORIZED)
+                statusCode = Status.UNAUTHORIZED;
+            else if (e.getCode() == SQLException.SQLITE_ENCRYPTION_NOTAVAILABLE)
+                statusCode = Status.NOT_IMPLEMENTED;
+            else
+                statusCode = Status.DB_ERROR;
+            throw new CouchbaseLiteException(message, e, statusCode);
         } finally {
             if (!isOpenSuccess) {
                 // As an exception will be thrown, no return false is needed here:
@@ -200,6 +205,16 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.e(TAG, message, e);
             throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
         }
+
+        /*
+        try {
+            initialize("PRAGMA journal_size_limit=524288;");
+        } catch (SQLException e) {
+            String message = "Cannot set journal_size_limit";
+            Log.e(TAG, message, e);
+            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
+        }
+        */
 
         // Check the user_version number we last stored in the sqliteDb:
         int dbVersion = storageEngine.getVersion();
@@ -296,8 +311,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     private SQLiteStorageEngine createStorageEngine() throws CouchbaseLiteException {
         SQLiteStorageEngineFactory factory =
                 manager.getContext().getSQLiteStorageEngineFactory();
-        SQLiteStorageEngine engine =
-                factory.createStorageEngine(manager.isEnableStorageEncryption());
+        SQLiteStorageEngine engine = factory.createStorageEngine();
         if (engine == null) {
             String message = "Unable to create a storage engine, fatal error";
             Log.e(TAG, message);

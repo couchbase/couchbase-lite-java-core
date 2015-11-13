@@ -7,6 +7,6 @@ import com.couchbase.lite.CouchbaseLiteException;
  */
 public interface SQLiteStorageEngineFactory {
 
-    SQLiteStorageEngine createStorageEngine(boolean enableEncryption) throws CouchbaseLiteException;
+    SQLiteStorageEngine createStorageEngine() throws CouchbaseLiteException;
 
 }
