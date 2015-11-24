@@ -1347,6 +1347,9 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public Map<String, Object> getAllDocs(QueryOptions options) throws CouchbaseLiteException {
+
+        // TODO - This method is not fully implemented. Further work will be required.
+
         return store.getAllDocs(options);
     }
 
