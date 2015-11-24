@@ -2144,7 +2144,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         if (maxDepth == 0)
             maxDepth = getMaxRevTreeDepth();
 
-        Log.e(TAG, "CBLDatabase: Pruning revisions to max depth %d...", maxDepth);
+        Log.v(TAG, "Pruning revisions to max depth %d...", maxDepth);
 
         // First find which docs need pruning, and by how much:
         Map<Long, Integer> toPrune = new HashMap<Long, Integer>();

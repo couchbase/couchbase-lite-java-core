@@ -1349,6 +1349,7 @@ public class Database implements StoreDelegate {
     public Map<String, Object> getAllDocs(QueryOptions options) throws CouchbaseLiteException {
 
         // TODO - This method is not fully implemented. Further work will be required.
+        //        https://github.com/couchbase/couchbase-lite-ios/blob/master/Source/CBLDatabase%2BInternal.m#L676-L739
 
         return store.getAllDocs(options);
     }
