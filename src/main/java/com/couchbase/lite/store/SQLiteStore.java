@@ -2141,14 +2141,12 @@ public class SQLiteStore implements Store, EncryptableStore {
      * would require an expensive full tree traversal. Hopefully this way is good enough.
      */
     protected int pruneRevsToMaxDepth(int maxDepth) throws CouchbaseLiteException {
-        if (maxDepth == 0) {
+        if (maxDepth == 0)
             maxDepth = getMaxRevTreeDepth();
-        }
+
+        Log.v(TAG, "Pruning revisions to max depth %d...", maxDepth);
 
         // First find which docs need pruning, and by how much:
-        long docNumericID = -1;
-        int minGen = 0;
-        int maxGen = 0;
         Map<Long, Integer> toPrune = new HashMap<Long, Integer>();
         Cursor cursor = null;
         try {
@@ -2156,32 +2154,32 @@ public class SQLiteStore implements Store, EncryptableStore {
             cursor = storageEngine.rawQuery(
                     "SELECT doc_id, MIN(revid), MAX(revid) FROM revs GROUP BY doc_id", args);
             while (cursor.moveToNext()) {
-                docNumericID = cursor.getLong(0);
+                long docNumericID = cursor.getLong(0);
                 String minGenRevId = cursor.getString(1);
                 String maxGenRevId = cursor.getString(2);
-                minGen = Revision.generationFromRevID(minGenRevId);
-                maxGen = Revision.generationFromRevID(maxGenRevId);
+                int minGen = Revision.generationFromRevID(minGenRevId);
+                int maxGen = Revision.generationFromRevID(maxGenRevId);
                 if ((maxGen - minGen + 1) > maxDepth) {
-                    toPrune.put(docNumericID, (maxGen - minGen));
+                    toPrune.put(docNumericID, (maxGen - maxDepth));
                 }
             }
         } catch (Exception e) {
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } finally {
-            if (cursor != null) {
+            if (cursor != null)
                 cursor.close();
-            }
         }
 
+        if (toPrune.size() == 0)
+            return 0;
+
+        // Now prune:
         int outPruned = 0;
         boolean shouldCommit = false;
         try {
             beginTransaction();
-            if (toPrune.size() == 0) {
-                return 0;
-            }
-            for (Long docNumericIDLong : toPrune.keySet()) {
-                String minIDToKeep = String.format("%d-", toPrune.get(docNumericIDLong).intValue() + 1);
+            for (Long docNumericID : toPrune.keySet()) {
+                String minIDToKeep = String.format("%d-", toPrune.get(docNumericID).intValue() + 1);
                 String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
                 int rowsDeleted = storageEngine.delete(
                         "revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
