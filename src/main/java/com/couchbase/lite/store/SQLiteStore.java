@@ -31,9 +31,9 @@ import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
 import com.couchbase.lite.View;
+import com.couchbase.lite.database.ContentValues;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.storage.ContentValues;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
@@ -205,16 +205,6 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.e(TAG, message, e);
             throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
         }
-
-        /*
-        try {
-            initialize("PRAGMA journal_size_limit=524288;");
-        } catch (SQLException e) {
-            String message = "Cannot set journal_size_limit";
-            Log.e(TAG, message, e);
-            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
-        }
-        */
 
         // Check the user_version number we last stored in the sqliteDb:
         int dbVersion = storageEngine.getVersion();

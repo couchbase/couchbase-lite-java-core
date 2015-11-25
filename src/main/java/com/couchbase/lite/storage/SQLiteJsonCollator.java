@@ -20,8 +20,6 @@ import java.text.Collator;
 
 public class SQLiteJsonCollator {
     private static native void nativeRegister(long connectionPtr, String locale, String icuDataPath);
-
-    private static native int nativeSetICUDataPath(String icuDataPath);
     private static native int nativeTestCollate(int rule, int len1, String string1, int len2, String string2);
     private static native int nativeTestCollateWithLocale(int rule, String locale, int len1, String string1, int len2, String string2);
     private static native int nativeTestDigitToInt(int digit);

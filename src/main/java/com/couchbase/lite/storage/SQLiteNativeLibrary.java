@@ -23,24 +23,24 @@ public class SQLiteNativeLibrary {
     private static final String TAG = Log.TAG_DATABASE;
 
     // JNI Native libraries:
-    public static final String NATIVE_SQLITE_SYSTEM_LIBRARY = "CBLJavaNativeSQLiteSystem";
-    public static final String NATIVE_SQLITE_CUSTOM_LIBRARY = "CBLJavaNativeSQLite";
-    public static final String NATIVE_SQLCIPHER_LIBRARY = "CBLJavaNativeSQLCipher";
+    public static final String JNI_SQLITE_SYSTEM_LIBRARY = "CBLJavaNativeSQLiteSystem";
+    public static final String JNI_SQLITE_CUSTOM_LIBRARY = "CBLJavaNativeSQLite";
+    public static final String JNI_SQLCIPHER_LIBRARY = "CBLJavaNativeSQLCipher";
     public static final String[] NATIVE_LIBRARY_OPTIONS =
-            {NATIVE_SQLCIPHER_LIBRARY, NATIVE_SQLITE_CUSTOM_LIBRARY, NATIVE_SQLITE_SYSTEM_LIBRARY};
+            {JNI_SQLCIPHER_LIBRARY, JNI_SQLITE_CUSTOM_LIBRARY, JNI_SQLITE_SYSTEM_LIBRARY};
 
     // Use this to override auto loading native libraries:
     public static String TEST_NATIVE_LIBRARY_NAME = null;
 
     // JNI Key Derivation Native library:
-    private static final String KEY_LIBRARY = "CBLJavaNativeKey";
+    private static final String JNI_KEY_LIBRARY = "CBLJavaNativeKey";
 
     // SQLite library:
-    private static final String ANDROID_SQLITE_LIBRARY = "sqlite";
-    private static final String SQLITE_LIBRARY = "sqlite3";
+    private static final String SHARED_ANDROID_SQLITE_LIBRARY = "sqlite";
+    private static final String SHARED_SQLITE_LIBRARY = "sqlite3";
 
     // SQLCipher library:
-    private static final String SQLCIPHER_LIBRARY = "sqlcipher";
+    private static final String SHARED_SQLCIPHER_LIBRARY = "sqlcipher";
 
     public static void load() {
         String[] libraryOption;
@@ -54,20 +54,20 @@ public class SQLiteNativeLibrary {
         String loadedLibrary = null;
         boolean success = false;
         for (String libName : libraryOption) {
-            if (NATIVE_SQLCIPHER_LIBRARY.equals(libName)) {
-                if (load(SQLCIPHER_LIBRARY)) {
-                    if (load(KEY_LIBRARY))
+            if (JNI_SQLCIPHER_LIBRARY.equals(libName)) {
+                if (load(SHARED_SQLCIPHER_LIBRARY)) {
+                    if (load(JNI_KEY_LIBRARY))
                         success = load(libName);
                 }
-            } else if (NATIVE_SQLITE_CUSTOM_LIBRARY.equals(libName)) {
-                if (load(SQLITE_LIBRARY))
+            } else if (JNI_SQLITE_CUSTOM_LIBRARY.equals(libName)) {
+                if (load(SHARED_SQLITE_LIBRARY))
                     success = load(libName);
-            } else if (NATIVE_SQLITE_SYSTEM_LIBRARY.equals(libName)) {
+            } else if (JNI_SQLITE_SYSTEM_LIBRARY.equals(libName)) {
                 if (isAndriod()) {
-                    if (load(ANDROID_SQLITE_LIBRARY))
+                    if (load(SHARED_ANDROID_SQLITE_LIBRARY))
                         success = load(libName);
                 } else {
-                    if (loadSystemLibrary(SQLITE_LIBRARY))
+                    if (loadSystemLibrary(SHARED_SQLITE_LIBRARY))
                         success = load(libName);
                 }
             } else

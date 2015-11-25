@@ -16,6 +16,7 @@
 
 package com.couchbase.lite.storage;
 
+import com.couchbase.lite.database.ContentValues;
 import com.couchbase.lite.database.DatabasePlatformSupport;
 import com.couchbase.lite.database.security.Key;
 import com.couchbase.lite.database.sqlite.SQLiteConnection;
@@ -25,7 +26,6 @@ import com.couchbase.lite.database.sqlite.exception.SQLiteDatabaseCorruptExcepti
 import com.couchbase.lite.support.security.SymmetricKey;
 import com.couchbase.lite.util.Log;
 
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
@@ -99,7 +99,8 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     // Database Encryption
     ///////////////////////////////////////////////////////////////////////////
 
-    private void decrypt(SQLiteConnection connection, SymmetricKey key) throws com.couchbase.lite.database.SQLException {
+    private void decrypt(SQLiteConnection connection, SymmetricKey key)
+            throws com.couchbase.lite.database.SQLException {
         if (key != null) {
             try {
                 connection.execute("PRAGMA key = \"x'" + key.getHexData() + "'\"", null, null);
@@ -172,13 +173,14 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
 
     @Override
     public long insert(String table, String nullColumnHack, ContentValues values) {
-        return database.insert(table, nullColumnHack, toContentValues(values));
+        return database.insert(table, nullColumnHack, values);
     }
 
     @Override
-    public long insertOrThrow(String table, String nullColumnHack, ContentValues values) throws SQLException {
+    public long insertOrThrow(String table, String nullColumnHack, ContentValues values)
+            throws SQLException {
         try {
-            return database.insertOrThrow(table, nullColumnHack, toContentValues(values));
+            return database.insertOrThrow(table, nullColumnHack, values);
         } catch (com.couchbase.lite.database.SQLException e) {
             if(e instanceof com.couchbase.lite.database.sqlite.exception.SQLiteConstraintException)
                 throw new SQLException(SQLException.SQLITE_CONSTRAINT, e);
@@ -190,13 +192,12 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     @Override
     public long insertWithOnConflict(String table, String nullColumnHack,
                                      ContentValues initialValues, int conflictAlgorithm) {
-        return database.insertWithOnConflict(table, nullColumnHack,
-                toContentValues(initialValues), conflictAlgorithm);
+        return database.insertWithOnConflict(table, nullColumnHack, initialValues, conflictAlgorithm);
     }
 
     @Override
     public int update(String table, ContentValues values, String whereClause, String[] whereArgs) {
-        return database.update(table, toContentValues(values), whereClause, whereArgs);
+        return database.update(table, values, whereClause, whereArgs);
     }
 
     @Override
@@ -230,27 +231,6 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
         return "SQLiteStorageEngine {" +
                 "database=" + Integer.toHexString(System.identityHashCode(database)) +
                 "}";
-    }
-
-    private com.couchbase.lite.database.ContentValues toContentValues(ContentValues values) {
-        com.couchbase.lite.database.ContentValues contentValues =
-                new com.couchbase.lite.database.ContentValues(values.size());
-        for (Map.Entry<String, Object> value : values.valueSet()) {
-            if (value.getValue() == null) {
-                contentValues.put(value.getKey(), (String) null);
-            } else if (value.getValue() instanceof String) {
-                contentValues.put(value.getKey(), (String) value.getValue());
-            } else if (value.getValue() instanceof Integer) {
-                contentValues.put(value.getKey(), (Integer) value.getValue());
-            } else if (value.getValue() instanceof Long) {
-                contentValues.put(value.getKey(), (Long) value.getValue());
-            } else if (value.getValue() instanceof Boolean) {
-                contentValues.put(value.getKey(), (Boolean) value.getValue());
-            } else if (value.getValue() instanceof byte[]) {
-                contentValues.put(value.getKey(), (byte[]) value.getValue());
-            }
-        }
-        return contentValues;
     }
 
     private class SQLiteCursor implements Cursor {
