@@ -599,6 +599,27 @@ public class Database implements StoreDelegate {
         }
     }
 
+    /**
+     * Set the maximum depth of a document's revision tree (or, max length of its revision history.)
+     * Revisions older than this limit will be deleted during a -compact: operation.
+     * Smaller values save space, at the expense of making document conflicts somewhat more likely.
+     */
+    @InterfaceAudience.Public
+    public void setMaxRevTreeDepth(int maxRevTreeDepth) {
+        if (store != null)
+            store.setMaxRevTreeDepth(maxRevTreeDepth);
+    }
+
+    /**
+     * Get the maximum depth of a document's revision tree (or, max length of its revision history.)
+     * Revisions older than this limit will be deleted during a -compact: operation.
+     * Smaller values save space, at the expense of making document conflicts somewhat more likely.
+     */
+    @InterfaceAudience.Public
+    public int getMaxRevTreeDepth() {
+        return store.getMaxRevTreeDepth();
+    }
+    
     ///////////////////////////////////////////////////////////////////////////
     // Events
     ///////////////////////////////////////////////////////////////////////////
@@ -1776,16 +1797,6 @@ public class Database implements StoreDelegate {
     ///////////////////////////////////////////////////////////////////////////
     // Internal (protected or private) Methods
     ///////////////////////////////////////////////////////////////////////////
-
-    /**
-     * Set the maximum depth of a document's revision tree (or, max length of its revision history.)
-     * Revisions older than this limit will be deleted during a -compact: operation.
-     * Smaller values save space, at the expense of making document conflicts somewhat more likely.
-     */
-    protected void setMaxRevTreeDepth(int maxRevTreeDepth) {
-        if (store != null)
-            store.setMaxRevTreeDepth(maxRevTreeDepth);
-    }
 
     /**
      * Empties the cache of recently used Document objects.
