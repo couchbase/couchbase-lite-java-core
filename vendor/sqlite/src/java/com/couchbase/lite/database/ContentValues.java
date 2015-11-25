@@ -1,5 +1,10 @@
-/*
- * Copyright (C) 2010 The Android Open Source Project
+/**
+ * Modified by Pasin Suriyentrakorn on 9/21/15.
+ * Source: https://github.com/android/platform_frameworks_base/tree/24ff6823c411f794aceaae89b0b029fbf8ef6b29
+ *
+ * Copyright (c) 2015 Couchbase, Inc.
+ *
+ * Copyright (C) 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +19,20 @@
  * limitations under the License.
  */
 
-package com.couchbase.lite.storage;
+package com.couchbase.lite.database;
 
-import com.couchbase.lite.util.Log;
 
+import com.couchbase.lite.database.log.Log;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-// COPY: Copied from android.content.ContentValues
+/**
+ * This class is used to store a set of values that the {@link ContentResolver}
+ * can process.
+ */
 public final class ContentValues {
     public static final String TAG = "ContentValues";
 
@@ -54,6 +64,17 @@ public final class ContentValues {
      */
     public ContentValues(ContentValues from) {
         mValues = new HashMap<String, Object>(from.mValues);
+    }
+
+    /**
+     * Creates a set of values copied from the given HashMap. This is used
+     * by the Parcel unmarshalling code.
+     *
+     * @param values the values to start with
+     * {@hide}
+     */
+    private ContentValues(HashMap<String, Object> values) {
+        mValues = values;
     }
 
     @Override
@@ -249,11 +270,11 @@ public final class ContentValues {
                 try {
                     return Long.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Long value for %s at key %s", value, key);
+                    Log.e(TAG, "Cannot parse Long value for " + value + " at key " + key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for %s to a Long: %s", e, key, value);
+                Log.e(TAG, "Cannot cast value for " + key + " to a Long: " + value, e);
                 return null;
             }
         }
@@ -274,11 +295,11 @@ public final class ContentValues {
                 try {
                     return Integer.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Integer value for %s at key %s", value, key);
+                    Log.e(TAG, "Cannot parse Integer value for " + value + " at key " + key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for %s to a Integer: %s", e, key, value);
+                Log.e(TAG, "Cannot cast value for " + key + " to a Integer: " + value, e);
                 return null;
             }
         }
@@ -299,11 +320,11 @@ public final class ContentValues {
                 try {
                     return Short.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Short value for %s at key %s", value, key);
+                    Log.e(TAG, "Cannot parse Short value for " + value + " at key " + key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for %s to a Short: %s", e, key, value);
+                Log.e(TAG, "Cannot cast value for " + key + " to a Short: " + value, e);
                 return null;
             }
         }
@@ -324,11 +345,11 @@ public final class ContentValues {
                 try {
                     return Byte.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Byte value for %s at key %s", value, key);
+                    Log.e(TAG, "Cannot parse Byte value for " + value + " at key " + key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for %s to a Byte: %s", e, key, value);
+                Log.e(TAG, "Cannot cast value for " + key + " to a Byte: " + value, e);
                 return null;
             }
         }
@@ -349,11 +370,11 @@ public final class ContentValues {
                 try {
                     return Double.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Double value for %s at key %s", value, key);
+                    Log.e(TAG, "Cannot parse Double value for " + value + " at key " + key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for %s to a Double: %s", e, key, value);
+                Log.e(TAG, "Cannot cast value for " + key + " to a Double: " + value, e);
                 return null;
             }
         }
@@ -374,11 +395,11 @@ public final class ContentValues {
                 try {
                     return Float.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    Log.e(TAG, "Cannot parse Float value for %s at key %s", value, key);
+                    Log.e(TAG, "Cannot parse Float value for " + value + " at key " + key);
                     return null;
                 }
             } else {
-                Log.e(TAG, "Cannot cast value for %s to a Float: %s", e, key, value);
+                Log.e(TAG, "Cannot cast value for " + key + " to a Float: " + value, e);
                 return null;
             }
         }
@@ -438,6 +459,25 @@ public final class ContentValues {
      */
     public Set<String> keySet() {
         return mValues.keySet();
+    }
+
+    /**
+     * Unsupported, here until we get proper bulk insert APIs.
+     * {@hide}
+     */
+    @Deprecated
+    public void putStringArrayList(String key, ArrayList<String> value) {
+        mValues.put(key, value);
+    }
+
+    /**
+     * Unsupported, here until we get proper bulk insert APIs.
+     * {@hide}
+     */
+    @SuppressWarnings("unchecked")
+    @Deprecated
+    public ArrayList<String> getStringArrayList(String key) {
+        return (ArrayList<String>) mValues.get(key);
     }
 
     /**

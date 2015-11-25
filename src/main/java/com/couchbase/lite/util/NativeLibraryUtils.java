@@ -26,25 +26,29 @@ public class NativeLibraryUtils {
     private static final Map<String, Boolean> LOADED_LIBRARIES = new HashMap<String, Boolean>();
 
     public static boolean loadLibrary(String libraryName) {
-        // If the library has already been loaded then no need to reload.
         if (LOADED_LIBRARIES.containsKey(libraryName))
             return true;
 
         try {
-            File libraryFile = null;
+            File libraryFile;
             String libraryPath = getConfiguredLibraryPath(libraryName);
-            if (libraryPath != null) {
-                // If library path is configured then use it.
+            if (libraryPath != null)
                 libraryFile = new File(libraryPath);
+            else
+                libraryFile = extractLibrary(libraryName);
+
+            if (libraryFile != null) {
+                System.load(libraryFile.getAbsolutePath());
+                LOADED_LIBRARIES.put(libraryName, true);
             } else {
-                libraryFile = _extractLibrary(libraryName);
+                Log.e(Log.TAG, "Cannot find library: " + libraryName);
+                return false;
             }
-            System.load(libraryFile.getAbsolutePath());
-            LOADED_LIBRARIES.put(libraryName, true);
         } catch (Exception e) {
-            System.err.println("Error loading library: " + libraryName);
+            Log.e(Log.TAG, "Error loading library: " + libraryName, e);
             return false;
         }
+
         return true;
     }
 
@@ -63,24 +67,23 @@ public class NativeLibraryUtils {
         return name;
     }
 
-    private static File _extractLibrary(String libraryName) throws IOException {
+    private static File extractLibrary(String libraryName) throws IOException {
         String libraryResourcePath = getLibraryResourcePath(libraryName);
         String targetFolder = new File(System.getProperty("java.io.tmpdir")).getAbsolutePath();
-
         File targetFile = new File(targetFolder, getLibraryFullName(libraryName));
 
         // If the target already exists, and it's unchanged, then use it, otherwise delete it and
         // it will be replaced.
         if (targetFile.exists()) {
-            // Remove old native library file.
+            // Remove old native library file:
             if (!targetFile.delete()) {
-                // If we can't remove the old library file then log a warning and try to use it.
-                System.err.println("Failed to delete existing library file: " + targetFile.getAbsolutePath());
+                // If we can't remove the old library file then log a warning and try to use it:
+                Log.w(Log.TAG, "Failed to delete existing library file: " + targetFile.getAbsolutePath());
                 return targetFile;
             }
         }
 
-        // Extract the library to the target directory.
+        // Extract the library to the target directory:
         InputStream libraryReader = NativeLibraryUtils.class.getResourceAsStream(libraryResourcePath);
         if (libraryReader == null) {
             System.err.println("Library not found: " + libraryResourcePath);
@@ -91,7 +94,6 @@ public class NativeLibraryUtils {
         try {
             byte[] buffer = new byte[1024];
             int bytesRead = 0;
-
             while ((bytesRead = libraryReader.read(buffer)) != -1) {
                 libraryWriter.write(buffer, 0, bytesRead);
             }
@@ -103,13 +105,12 @@ public class NativeLibraryUtils {
         // On non-windows systems set up permissions for the extracted native library.
         if (!System.getProperty("os.name").toLowerCase().contains("windows")) {
             try {
-                Runtime.getRuntime().exec(new String[]{"chmod", "755", targetFile.getAbsolutePath()}).waitFor();
+                Runtime.getRuntime().exec(
+                        new String[]{"chmod", "755", targetFile.getAbsolutePath()}).waitFor();
             } catch (Throwable e) {
-                System.err.println("Error executing 'chmod 755' on extracted native library");
-                e.printStackTrace();
+                Log.e(Log.TAG, "Error executing 'chmod 755' on extracted native library", e);
             }
         }
-
         return targetFile;
     }
 
@@ -140,5 +141,3 @@ public class NativeLibraryUtils {
         return path;
     }
 }
-
-

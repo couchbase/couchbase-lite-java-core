@@ -23,6 +23,10 @@ public class SQLException extends RuntimeException {
     public static final int SQLITE_OK = 0;
     public static final int SQLITE_ERROR = 1;
     public static final int SQLITE_CONSTRAINT = 19;
+
+    // Extension codes for encryption errors:
+    public static final int SQLITE_ENCRYPTION_UNAUTHORIZED = 401;
+    public static final int SQLITE_ENCRYPTION_NOTAVAILABLE = 501;
     
     private int code = SQLITE_ERROR;
 
@@ -31,6 +35,11 @@ public class SQLException extends RuntimeException {
 
     public SQLException(String error) {
         super(error);
+    }
+
+    public SQLException(int code, String error) {
+        super(error);
+        this.code = code;
     }
 
     public SQLException(String error, Throwable cause) {
