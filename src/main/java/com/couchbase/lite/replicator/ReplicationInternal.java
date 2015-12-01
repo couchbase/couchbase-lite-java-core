@@ -854,11 +854,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     setError(e);
 
                     // TODO: double check this behavior against iOS implementation, especially
-                    // TODO: with regards to behavior of a continuous replication.
+                    //       with regards to behavior of a continuous replication.
                     // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
-                    // (before adding this, the replication would just end up in limbo and never finish)
-                    fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStopGraceful(); just to be more consistent
-
+                    //       (before adding this, the replication would just end up in limbo and never finish)
+                    triggerStopGraceful();
                 } else {
                     if (e != null && Utils.is404(e)) {
                         Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s",

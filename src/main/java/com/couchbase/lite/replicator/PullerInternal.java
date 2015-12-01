@@ -797,8 +797,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Log.d(Log.TAG_SYNC, "changeTrackerStopped.  lifecycle: %s", lifecycle);
         switch (lifecycle) {
             case ONESHOT:
-                // TODO: This is too early to fire STOP_GRACEFUL, Need to change.
-                Log.d(Log.TAG_SYNC, "fire STOP_GRACEFUL");
                 if (tracker.getLastError() != null) {
                     setError(tracker.getLastError());
                 }
@@ -943,11 +941,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         // continuous mode, make state IDLE
-        if(isContinuous()) {
+        if (isContinuous()) {
             fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
         }
         // one shot mode, make state STOPPING
-        else{
+        else {
             triggerStopGraceful();
         }
 

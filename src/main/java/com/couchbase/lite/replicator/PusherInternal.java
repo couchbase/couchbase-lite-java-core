@@ -179,11 +179,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 //       This is reason to check if queue is empty.
                 if (pendingFutures.isEmpty()) {
                     Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] state=" + stateMachine.getState());
-                    if(isContinuous()) {
+                    if (isContinuous()) {
                         // Make state IDLE
                         Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);");
                         fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                    }else{
+                    } else {
                         // Make state STOPPING
                         triggerStopGraceful();
                     }
