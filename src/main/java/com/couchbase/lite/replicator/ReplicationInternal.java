@@ -89,7 +89,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected Map<String, Object> requestHeaders;
     private String serverType;
     protected Batcher<RevisionInternal> batcher;
-    protected static final int PROCESSOR_DELAY = 500;
+    protected static int PROCESSOR_DELAY = 500;
     protected static int INBOX_CAPACITY = 100;
     protected ScheduledExecutorService remoteRequestExecutor;
     protected Throwable error;
