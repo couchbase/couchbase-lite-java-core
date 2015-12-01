@@ -170,7 +170,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     /**
      * Trigger this replication to stop (async)
      */
-    public void triggerStop() {
+    public void triggerStopGraceful() {
         fireTrigger(ReplicationTrigger.STOP_GRACEFUL);
     }
 
@@ -280,7 +280,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     public void databaseClosing() {
-        triggerStop();
+        triggerStopGraceful();
     }
 
     /**
@@ -434,7 +434,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     // TODO: with regards to behavior of a continuous replication.
                     // Note: was added in order that unit test testReplicatorErrorStatus() finished and passed.
                     // (before adding this, the replication would just end up in limbo and never finish)
-                    triggerStop();
+                    triggerStopGraceful();
 
                 } else {
                     Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);
@@ -857,7 +857,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     // TODO: with regards to behavior of a continuous replication.
                     // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
                     // (before adding this, the replication would just end up in limbo and never finish)
-                    fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStop(); just to be more consistent
+                    fireTrigger(ReplicationTrigger.STOP_GRACEFUL);  // TODO: call triggerStopGraceful(); just to be more consistent
 
                 } else {
                     if (e != null && Utils.is404(e)) {
@@ -1152,7 +1152,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
-                ReplicationInternal.this.start();
+                start();
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -1179,8 +1179,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
                 // state becomes IDLE.
                 if (Utils.isPermanentError(error) && isContinuous()) {
-                    Log.d(Log.TAG_SYNC, "IDLE: triggerStop() " + error.toString());
-                    triggerStop();
+                    Log.d(Log.TAG_SYNC, "IDLE: triggerStopGraceful() " + error.toString());
+                    triggerStopGraceful();
                 }
             }
         });
@@ -1224,7 +1224,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     return;
                 }
 
-                ReplicationInternal.this.stopGraceful();
+                stopGraceful();
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -1234,7 +1234,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
                 saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
-                ReplicationInternal.this.clearDbRef();
+                clearDbRef();
 
                 // close any active resources associated with this replicator
                 close();
@@ -1609,29 +1609,21 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     public abstract void waitForPendingFutures();
 
-    //@Override
-    //public void changed(EventType type, Object o, BlockingQueue queue) {
-    // should be overide
-    //}
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {
-        // Log.d(Log.TAG_SYNC, "[changed()] " + type + " size="+queue.size());
-
         if (type == EventType.PUT || type == EventType.ADD) {
-            // in case of one shot, not necessary to switch state and call waitForPendingFutures.
-            if (isContinuous()) {
-                if (!queue.isEmpty()) {
-                    // trigger to RUNNING if state is IDLE
+            if (!queue.isEmpty()) {
+                // trigger to RUNNING if state is IDLE
+                if (isContinuous())
                     fireTrigger(ReplicationTrigger.RESUME);
 
-                    // run waitForPendingFutures.
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            waitForPendingFutures();
-                        }
-                    }).start();
-                }
+                // run waitForPendingFutures.
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        waitForPendingFutures();
+                    }
+                }).start();
             }
         }
     }

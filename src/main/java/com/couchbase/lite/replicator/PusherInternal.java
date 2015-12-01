@@ -96,6 +96,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         this.createTarget = createTarget;
     }
 
+    @Override
     protected void stopGraceful() {
 
         super.stopGraceful();
@@ -178,8 +179,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 //       This is reason to check if queue is empty.
                 if (pendingFutures.isEmpty()) {
                     Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] state=" + stateMachine.getState());
-                    Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);");
-                    fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                    if(isContinuous()) {
+                        // Make state IDLE
+                        Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);");
+                        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+                    }else{
+                        // Make state STOPPING
+                        triggerStopGraceful();
+                    }
                 }
             } catch (Exception e) {
                 Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
@@ -211,7 +218,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         ((HttpResponseException) e).getStatusCode() != 412) {
                     Log.e(Log.TAG_SYNC, this + ": Failed to create remote db", e);
                     setError(e);
-                    triggerStop();  // this is fatal: no db to push to!
+                    triggerStopGraceful();  // this is fatal: no db to push to!
                 } else {
                     Log.v(Log.TAG_SYNC, "%s: Created remote db", this);
                     createTarget = false;
@@ -289,10 +296,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if (isContinuous()) {
             observing = true;
             db.addChangeListener(this);
-        } else {
-            // if it's one shot, then we can stop graceful and wait for
-            // pending work to drain.
-            triggerStop();
         }
     }
 

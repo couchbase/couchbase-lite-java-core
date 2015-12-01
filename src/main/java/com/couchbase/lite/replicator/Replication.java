@@ -282,7 +282,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public void stop() {
         if (replicationInternal != null) {
-            replicationInternal.triggerStop();
+            replicationInternal.triggerStopGraceful();
         }
     }
 
