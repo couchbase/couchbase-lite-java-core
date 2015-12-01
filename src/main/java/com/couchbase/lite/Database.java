@@ -75,7 +75,7 @@ public class Database implements StoreDelegate {
     private static final int MANY_CHANGES_TO_NOTIFY = 5000;
 
     private static final String DEFAULT_PBKDF2_KEY_SALT = "Salty McNaCl";
-    private static final int DEFAULT_PBKDF2_KEY_ROUNDS = 1024;
+    private static final int DEFAULT_PBKDF2_KEY_ROUNDS = 64000;
 
 
     private static ReplicationFilterCompiler filterCompiler;
