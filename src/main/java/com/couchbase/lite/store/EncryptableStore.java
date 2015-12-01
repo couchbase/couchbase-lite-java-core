@@ -28,6 +28,12 @@ public interface EncryptableStore {
     void setEncryptionKey(SymmetricKey key);
 
     /**
+     * Return current encryption key
+     * @return a SymmetricKey object
+     */
+    SymmetricKey getEncryptionKey();
+
+    /**
      * Action for changing the encryption key of the storage.
      * @param newKey a new SymmetricKey object
      * @return an Action object
