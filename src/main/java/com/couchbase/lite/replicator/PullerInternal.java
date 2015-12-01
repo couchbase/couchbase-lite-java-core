@@ -797,12 +797,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Log.d(Log.TAG_SYNC, "changeTrackerStopped.  lifecycle: %s", lifecycle);
         switch (lifecycle) {
             case ONESHOT:
-                // TODO: This is too early to fire STOP_GRACEFUL, Need to change.
-                Log.d(Log.TAG_SYNC, "fire STOP_GRACEFUL");
                 if (tracker.getLastError() != null) {
                     setError(tracker.getLastError());
                 }
-                stateMachine.fire(ReplicationTrigger.STOP_GRACEFUL);
+                // once replication finished, needs to stop replicator gracefully.
+                waitForPendingFuturesWithNewThread();
                 break;
             case CONTINUOUS:
                 if (stateMachine.isInState(ReplicationState.OFFLINE)) {
@@ -891,6 +890,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
     }
 
+    @Override
     protected void stopGraceful() {
         super.stopGraceful();
 
@@ -940,7 +940,14 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
         }
 
-        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+        // continuous mode, make state IDLE
+        if (isContinuous()) {
+            fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+        }
+        // one shot mode, make state STOPPING
+        else {
+            triggerStopGraceful();
+        }
 
         Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
 
