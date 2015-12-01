@@ -396,6 +396,11 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     @Override
+    public SymmetricKey getEncryptionKey() {
+        return encryptionKey;
+    }
+
+    @Override
     public Action actionToChangeEncryptionKey(final SymmetricKey newKey) {
         if (!storageEngine.supportEncryption())
             return null;
