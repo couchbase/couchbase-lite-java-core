@@ -52,6 +52,7 @@ public class Status {
     public static final int BAD_ID = 494;
     public static final int BAD_PARAM = 495;
     public static final int DELETED = 496; // Document deleted
+    public static final int INVALID_STORAGE_TYPE = 497;
 
     public static final int BAD_CHANGES_FEED = 587;
     public static final int CHANGES_FEED_TRUNCATED = 588;

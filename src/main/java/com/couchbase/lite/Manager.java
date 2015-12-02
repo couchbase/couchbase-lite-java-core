@@ -1,3 +1,18 @@
+/**
+ * <p/>
+ * Copyright (c) 2012 Couchbase, Inc. All rights reserved.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
+
 package com.couchbase.lite;
 
 import com.couchbase.lite.auth.Authorizer;
@@ -8,8 +23,6 @@ import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.Version;
-import com.couchbase.lite.support.security.SymmetricKey;
-import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 import com.couchbase.lite.util.Utils;
@@ -39,6 +52,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.xml.crypto.Data;
+
 /**
  * Top-level CouchbaseLite object; manages a collection of databases as a CouchDB server does.
  */
@@ -46,11 +61,13 @@ public final class Manager {
 
     protected static final String kV1DBExtension = ".cblite";  // Couchbase Lite 1.0
     protected static final String kDBExtension   = ".cblite2"; // Couchbase Lite 1.2 or later (for iOS 1.1 or later)
-    protected static final String DEFAULT_STORE_CLASSNAME = "com.couchbase.lite.store.SQLiteStore";
 
     public static final ManagerOptions DEFAULT_OPTIONS = new ManagerOptions();
     public static final String LEGAL_CHARACTERS = "[^a-z]{1,}[^a-z0-9_$()/+-]*$";
     public static final String USER_AGENT = "CouchbaseLite/" + Version.getVersionName();
+
+    public static final String SQLITE_STORAGE = "SQLite";
+    public static final String FORESTDB_STORAGE = "ForestDB";
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
@@ -62,7 +79,7 @@ public final class Manager {
     private ScheduledExecutorService workExecutor;
     private HttpClientFactory defaultHttpClientFactory;
     private Context context;
-    private String storeClassName;
+    private String storageType;
 
     ///////////////////////////////////////////////////////////////////////////
     // APIs
@@ -102,8 +119,6 @@ public final class Manager {
         this.databases = new HashMap<String, Database>();
         this.encryptionKeys = new HashMap<String, Object>();
         this.replications = new ArrayList<Replication>();
-        this.storeClassName = options.getStoreClassName() != null ?
-                options.getStoreClassName() : DEFAULT_STORE_CLASSNAME;
 
         if (!directoryFile.exists()) {
             directoryFile.mkdirs();
@@ -147,6 +162,25 @@ public final class Manager {
         final String detailMessage = "getSharedInstance() is not a valid API call on Android. " +
                 " Pure java version coming soon";
         throw new UnsupportedOperationException(detailMessage);
+    }
+
+    /**
+     * Get the default storage type.
+     * @return Storage type.
+     */
+    @InterfaceAudience.Public
+    public String getStorageType() {
+        return storageType;
+    }
+
+    /**
+     * Set default storage engine type for newly-created databases.
+     * There are two options, "SQLite" (the default) or "ForestDB".
+     * @param storageType
+     */
+    @InterfaceAudience.Public
+    public void setStorageType(String storageType) {
+        this.storageType = storageType;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -246,37 +280,67 @@ public final class Manager {
     }
 
     /**
-     * Returns the database with the given name, or creates it if it doesn't exist.
-     * Multiple calls with the same name will return the same Database instance.
+     * <p>
+     *     Returns the database with the given name, or creates it if it doesn't exist.
+     *     Multiple calls with the same name will return the same {@link Database} instance.
      * <p/>
-     * in CBLManager.m
-     * - (CBLDatabase*) databaseNamed: (NSString*)name error: (NSError**)outError
+     * <p>
+     *     This is equivalent to calling {@link #openDatabase(String, DatabaseOptions)}
+     *     with a default set of options with the `Create` flag set.
+     * </p>
+     * <p>
+     *     NOTE: Database names may not contain capital letters.
+     * </p>
      */
     @InterfaceAudience.Public
     public Database getDatabase(String name) throws CouchbaseLiteException {
-        Database db = getDatabase(name, false);
-        if (db != null) {
-            db.open();
-        }
-        return db;
+        DatabaseOptions options = getDefaultOptions(name);
+        options.setCreate(true);
+        return openDatabase(name, options);
     }
 
     /**
-     * Returns the database with the given name, or null if it doesn't exist.
-     * Multiple calls with the same name will return the same Database instance.
+     * <p>
+     *     Returns the database with the given name, or null if it doesn't exist.
+     *     Multiple calls with the same name will return the same {@link Database} instance.
      * <p/>
-     * - (CBLDatabase*) existingDatabaseNamed: (NSString*)name error: (NSError**)outError
+     * <p>
+     *     This is equivalent to calling {@link #openDatabase(String, DatabaseOptions)}
+     *     with a default set of options.
+     * </p>
      */
     @InterfaceAudience.Public
     public Database getExistingDatabase(String name) throws CouchbaseLiteException {
-        Database db = getDatabase(name, true);
-        if (db != null) {
-            db.open();
+        DatabaseOptions options = getDefaultOptions(name);
+        return openDatabase(name, options);
+    }
+
+    /**
+     * Returns the database with the given name. If the database is not yet open, the options given
+     * will be applied; if it's already open, the options are ignored.
+     * Multiple calls with the same name will return the same {@link Database} instance.
+     * @param name The name of the database. May NOT contain capital letters!
+     * @param options Options to use when opening, such as the encryption key; if null, a default
+     *                set of options will be used.
+     * @return The database instance.
+     * @throws CouchbaseLiteException thrown when there is an error.
+     */
+    @InterfaceAudience.Public
+    public Database openDatabase(String name, DatabaseOptions options)
+            throws CouchbaseLiteException {
+        if (options == null)
+            options = getDefaultOptions(name);
+        Database db = getDatabase(name, !options.isCreate());
+        if (db != null && !db.isOpen()) {
+            db.open(options);
+            registerEncryptionKey(options.getEncryptionKey(), name);
         }
         return db;
     }
 
     /**
+     * This method has been superseded by {@link #openDatabase(String, DatabaseOptions)}.
+     *
      * Registers an encryption key for a database. This must be called _before_ opening an encrypted
      * database, or before creating a database that's to be encrypted.
      * If the key is incorrect (or no key is given for an encrypted database), the subsequent call
@@ -406,6 +470,13 @@ public final class Manager {
     // Public but Not API
     ///////////////////////////////////////////////////////////////////////////
 
+    @InterfaceAudience.Private
+    DatabaseOptions getDefaultOptions(String databaseName) {
+        DatabaseOptions options = new DatabaseOptions();
+        options.setEncryptionKey(encryptionKeys.get(databaseName));
+        return options;
+    }
+
     /**
      * @exclude
      */
@@ -436,14 +507,6 @@ public final class Manager {
     @InterfaceAudience.Private
     public Collection<Database> allOpenDatabases() {
         return databases.values();
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    public boolean isEnableStorageEncryption() {
-        return options.isEnableStorageEncryption();
     }
 
     /**
@@ -656,6 +719,7 @@ public final class Manager {
     // Internal (protected or private) Methods
     ///////////////////////////////////////////////////////////////////////////
 
+    @InterfaceAudience.Private
     private void replaceDatabase(String databaseName,
                                  InputStream databaseStream,
                                  Iterator<Map.Entry<String, InputStream>> attachmentStreams)
@@ -877,9 +941,5 @@ public final class Manager {
     @InterfaceAudience.Private
     private static boolean isWindows() {
         return (OS.indexOf("win") >= 0);
-    }
-
-    protected String getStoreClassName() {
-        return storeClassName;
     }
 }

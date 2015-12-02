@@ -1,3 +1,18 @@
+/**
+ * <p/>
+ * Copyright (c) 2012 Couchbase, Inc. All rights reserved.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
+
 package com.couchbase.lite;
 
 /**
@@ -21,13 +36,6 @@ public class ManagerOptions {
      * https://github.com/couchbase/couchbase-lite-java-core/issues/343
      */
     private int executorThreadPoolSize = 0;
-
-    private String storeClassName = null;
-
-    /**
-     * Enable data storage encryption.
-     */
-    private boolean enableStorageEncryption = false;
 
     public ManagerOptions() {
     }
@@ -54,27 +62,5 @@ public class ManagerOptions {
 
     public void setExecutorThreadPoolSize(int executorThreadPoolSize) {
         this.executorThreadPoolSize = executorThreadPoolSize;
-    }
-
-    public String getStoreClassName() {
-        return storeClassName;
-    }
-
-    public void setStoreClassName(String storeClassName) {
-        this.storeClassName = storeClassName;
-    }
-
-    public boolean isEnableStorageEncryption() {
-        return enableStorageEncryption;
-    }
-
-    /**
-     * In addition to linking with the sqlcipher-andriod library, to enable storage encryption,
-     * set enableStorageEncryption to 'true'.
-     * Note: This is subject to change upon release. The couchbase-lite-ios doesn't have this.
-     * @param enableStorageEncryption
-     */
-    public void setEnableStorageEncryption(boolean enableStorageEncryption) {
-        this.enableStorageEncryption = enableStorageEncryption;
     }
 }
