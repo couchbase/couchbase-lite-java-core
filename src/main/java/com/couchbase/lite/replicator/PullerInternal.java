@@ -856,14 +856,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @Override
     public void changeTrackerCaughtUp() {
         Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
-        // for continuous replications, once the change tracker is caught up, we
-        // should try to go into the idle state.
-        if (isContinuous()) {
-            // this has to be on a different thread than the replicator thread, or else it's a deadlock
-            // because it might be waiting for jobs that have been scheduled, and not
-            // yet executed (and which will never execute because this will block processing).
-            waitForPendingFuturesWithNewThread();
-        }
+        // this has to be on a different thread than the replicator thread, or else it's a deadlock
+        // because it might be waiting for jobs that have been scheduled, and not
+        // yet executed (and which will never execute because this will block processing).
+        waitForPendingFuturesWithNewThread();
     }
 
     /**
