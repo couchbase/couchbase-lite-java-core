@@ -25,7 +25,6 @@ import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.store.EncryptableStore;
-import com.couchbase.lite.store.SQLiteStore;
 import com.couchbase.lite.store.StorageValidation;
 import com.couchbase.lite.store.Store;
 import com.couchbase.lite.store.StoreDelegate;
@@ -49,6 +48,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Exchanger;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -77,6 +78,9 @@ public class Database implements StoreDelegate {
     private static final String DEFAULT_PBKDF2_KEY_SALT = "Salty McNaCl";
     private static final int DEFAULT_PBKDF2_KEY_ROUNDS = 64000;
 
+    private static final String DEFAULT_STORAGE = Manager.SQLITE_STORAGE;
+    private static final String SQLITE_STORE_CLASS = "com.couchbase.lite.store.SQLiteStore";
+    private static final String FORESTDB_STORE_CLASS = "com.couchbase.lite.store.ForestDBStore";
 
     private static ReplicationFilterCompiler filterCompiler;
 
@@ -1062,21 +1066,44 @@ public class Database implements StoreDelegate {
         return new File(path).exists();
     }
 
-    private Store createStoreInstance() {
-        String className = manager.getStoreClassName();
+    @InterfaceAudience.Private
+    private Store createStoreInstance(String storageType) {
+        String className = getStoreClassName(storageType);
         try {
             Class<?> clazz = Class.forName(className);
-            Constructor<?> ctor = clazz.getDeclaredConstructor(String.class, Manager.class, StoreDelegate.class);
+            Constructor<?> ctor = clazz.getDeclaredConstructor(
+                    String.class, Manager.class, StoreDelegate.class);
             Store store = (Store) ctor.newInstance(path, manager, this);
             return store;
-        }catch(Exception ex){
-            Log.e(TAG, "Failed to create a Store instance: " + className, ex);
+        } catch (ClassNotFoundException e) {
+            Log.d(TAG, "No '%s' class found for the storage type '%s'", className, storageType);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot create a Store instance of class : %s for the storage type '%s'",
+                    e, className, storageType);
+        }
+        return null;
+    }
+
+    @InterfaceAudience.Private
+    private String getStoreClassName(String storageType) {
+        if (storageType == null) storageType = DEFAULT_STORAGE;
+        if (storageType.equals(Manager.SQLITE_STORAGE))
+            return SQLITE_STORE_CLASS;
+        else if (storageType.equals(Manager.FORESTDB_STORAGE))
+            return FORESTDB_STORE_CLASS;
+        else {
+            Log.e(Database.TAG, "Invalid storage type: " + storageType);
             return null;
         }
     }
 
     @InterfaceAudience.Private
     public synchronized void open() throws CouchbaseLiteException {
+        open(manager.getDefaultOptions(name));
+    }
+
+    @InterfaceAudience.Private
+    public synchronized void open(DatabaseOptions options) throws CouchbaseLiteException {
         if (open)
             return;
 
@@ -1092,17 +1119,48 @@ public class Database implements StoreDelegate {
             throw new CouchbaseLiteException("Database directory is not directory",
                     Status.INTERNAL_SERVER_ERROR);
 
-        // Initialize & open store
-        store = createStoreInstance();
-        if(store == null)
-            store = new SQLiteStore(path, manager, this);
+        String storageType = options.getStorageType();
+        if (storageType == null)
+            storageType = manager.getStorageType();
+        if (storageType == null)
+            storageType = DEFAULT_STORAGE;
+
+        Store primaryStore = createStoreInstance(storageType);
+        if (primaryStore == null) {
+            if (storageType.equals(Manager.SQLITE_STORAGE) || storageType.equals(Manager.FORESTDB_STORAGE))
+                Log.w(TAG, "storageType is '%s' but no class implementation found", storageType);
+            throw new CouchbaseLiteException("Can't open database in that storage format",
+                    Status.INVALID_STORAGE_TYPE);
+        }
+
+        boolean primarySQLite = Manager.SQLITE_STORAGE.equals(storageType);
+        Store otherStore = createStoreInstance(primarySQLite ? Manager.FORESTDB_STORAGE : Manager.SQLITE_STORAGE);
+
+        boolean upgrade = false;
+        if (options.getStorageType() != null) {
+            // If explicit storage type given in options, always use primary storage type,
+            // and if secondary db exists, try to upgrade from it:
+            if (otherStore != null && otherStore.databaseExists(path) && !primaryStore.databaseExists(path))
+                upgrade = true;
+
+            if (upgrade && primarySQLite)
+                throw new CouchbaseLiteException("Cannot upgrade to SQLite Storage", Status.INVALID_STORAGE_TYPE);
+        } else {
+            // If options don't specify, use primary unless secondary db already exists in dir:
+            if (otherStore != null && otherStore.databaseExists(path))
+                primaryStore = otherStore;
+        }
+
+        store = primaryStore;
 
         // Set encryption key:
         SymmetricKey encryptionKey = null;
         if (store instanceof EncryptableStore) {
-            Object keyOrPassword = manager.getEncryptionKeys().get(name);
-            encryptionKey = createSymmetricKey(keyOrPassword);
-            ((EncryptableStore)store).setEncryptionKey(encryptionKey);
+            Object keyOrPassword = options.getEncryptionKey();
+            if (keyOrPassword != null) {
+                encryptionKey = createSymmetricKey(keyOrPassword);
+                ((EncryptableStore) store).setEncryptionKey(encryptionKey);
+            }
         }
 
         store.open();
@@ -1163,7 +1221,13 @@ public class Database implements StoreDelegate {
             throw new CouchbaseLiteException("Could not initialize attachment store", e,
                     Status.INTERNAL_SERVER_ERROR);
         }
+
         open = true;
+
+        if (upgrade) {
+            // TODO: Perform database upgrading here:
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/722
+        }
     }
 
     /**
