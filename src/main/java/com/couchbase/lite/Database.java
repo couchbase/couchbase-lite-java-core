@@ -48,6 +48,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -59,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Exchanger;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -77,6 +79,8 @@ public class Database implements StoreDelegate {
     private static final int DEFAULT_PBKDF2_KEY_ROUNDS = 64000;
 
     private static final String DEFAULT_STORAGE = Manager.SQLITE_STORAGE;
+    private static final String SQLITE_STORE_CLASS = "com.couchbase.lite.store.SQLiteStore";
+    private static final String FORESTDB_STORE_CLASS = "com.couchbase.lite.store.ForestDBStore";
 
     private static ReplicationFilterCompiler filterCompiler;
 
@@ -1067,31 +1071,26 @@ public class Database implements StoreDelegate {
         String className = getStoreClassName(storageType);
         try {
             Class<?> clazz = Class.forName(className);
-            Constructor<?> ctor = clazz.getDeclaredConstructor(String.class, Manager.class,
-                    StoreDelegate.class);
+            Constructor<?> ctor = clazz.getDeclaredConstructor(
+                    String.class, Manager.class, StoreDelegate.class);
             Store store = (Store) ctor.newInstance(path, manager, this);
             return store;
-        } catch(Exception ex) {
-            return null;
-        }
-    }
-
-    private Class<?> getStoreClass(String storageType) {
-        String className = getStoreClassName(storageType);
-        try {
-            return Class.forName(className);
         } catch (ClassNotFoundException e) {
-            return null;
+            Log.d(TAG, "No '%s' class found for the storage type '%s'", className, storageType);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot create a Store instance of class : %s for the storage type '%s'",
+                    e, className, storageType);
         }
+        return null;
     }
 
     @InterfaceAudience.Private
     private String getStoreClassName(String storageType) {
         if (storageType == null) storageType = DEFAULT_STORAGE;
-        if (storageType.equals("SQLite"))
-            return "com.couchbase.lite.store.SQLiteStore";
-        else if (storageType.equals("ForestDB"))
-            return "com.couchbase.lite.store.ForestDBStore";
+        if (storageType.equals(Manager.SQLITE_STORAGE))
+            return SQLITE_STORE_CLASS;
+        else if (storageType.equals(Manager.FORESTDB_STORAGE))
+            return FORESTDB_STORE_CLASS;
         else {
             Log.e(Database.TAG, "Invalid storage type: " + storageType);
             return null;

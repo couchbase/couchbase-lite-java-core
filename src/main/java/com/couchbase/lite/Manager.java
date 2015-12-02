@@ -52,8 +52,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.xml.crypto.Data;
-
 /**
  * Top-level CouchbaseLite object; manages a collection of databases as a CouchDB server does.
  */
