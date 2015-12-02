@@ -734,7 +734,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private void uploadJsonRevision(final RevisionInternal rev) {
         // Get the revision's properties:
         if (!db.inlineFollowingAttachmentsIn(rev)) {
-            error = new CouchbaseLiteException(Status.BAD_ATTACHMENT);
+            setError(new CouchbaseLiteException(Status.BAD_ATTACHMENT));
             return;
         }
 

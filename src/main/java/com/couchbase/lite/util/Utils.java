@@ -56,20 +56,18 @@ public class Utils {
         }
     }
 
-    /**
-     * in CBLMisc.m
-     * BOOL CBLIsPermanentError( NSError* error )
-     */
     public static boolean isPermanentError(int code) {
-        // TODO: make sure if 406 is acceptable error
         // 406 - in Test cases, server return 406 because of CouchDB API
         //       http://docs.couchdb.org/en/latest/api/database/bulk-api.html
         //       GET /{db}/_all_docs or POST /{db}/_all_docs
         return (code >= 400 && code <= 405) || (code >= 407 && code <= 499);
     }
 
+    /**
+     * in CBLMisc.m
+     * BOOL CBLMayBeTransientError( NSError* error )
+     */
     public static boolean isTransientError(Throwable throwable) {
-
         if (throwable instanceof CouchbaseLiteException) {
             CouchbaseLiteException e = (CouchbaseLiteException) throwable;
             return isTransientError(e.getCBLStatus().getCode());
@@ -79,9 +77,7 @@ public class Utils {
         } else {
             return false;
         }
-
     }
-
 
     public static boolean isTransientError(StatusLine status) {
 
@@ -97,12 +93,10 @@ public class Utils {
     }
 
     public static boolean isTransientError(int statusCode) {
-
         if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504) {
             return true;
         }
         return false;
-
     }
 
     /**
