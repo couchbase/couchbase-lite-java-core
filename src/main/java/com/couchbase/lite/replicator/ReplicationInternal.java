@@ -1041,7 +1041,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         // cancel all pending future tasks.
         while (!pendingFutures.isEmpty()) {
             Future future = pendingFutures.poll();
-            if (future != null && !future.isCancelled() && future.isDone()) {
+            if (future != null && !future.isCancelled() && !future.isDone()) {
                 future.cancel(true);
             }
         }
