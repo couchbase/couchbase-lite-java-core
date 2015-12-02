@@ -887,10 +887,21 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     @Override
-    protected void stopGraceful() {
-        super.stopGraceful();
+    protected void stop() {
+        if (stateMachine.isInState(ReplicationState.STOPPED))
+            return;
 
-        Log.d(Log.TAG_SYNC, "PullerInternal.stopGraceful() started");
+        Log.d(Log.TAG_SYNC, "%s STOPPING...", toString());
+
+        // stop change tracker
+        if (changeTracker != null)
+            changeTracker.stop();
+
+        // clear downloadsToInsert batcher.
+        if (downloadsToInsert != null)
+            downloadsToInsert.flushAll();
+
+        super.stop();
 
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
@@ -901,21 +912,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 try {
                     // wait for all tasks completed
                     waitForAllTasksCompleted();
-
-                    // stop change tracker
-                    if (changeTracker != null) {
-                        Log.d(Log.TAG_SYNC, "stopping change tracker");
-                        changeTracker.stop();
-                        Log.d(Log.TAG_SYNC, "stopped change tracker");
-                    }
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
-                    e.printStackTrace();
+                    Log.e(Log.TAG_SYNC, "stop.run() had exception: %s", e);
                 } finally {
                     // stop replicator immediate
                     triggerStopImmediate();
+                    Log.d(Log.TAG_SYNC, "PullerInternal stop.run() finished");
                 }
-                Log.d(Log.TAG_SYNC, "PullerInternal stopGraceful.run() finished");
             }
         }).start();
     }
