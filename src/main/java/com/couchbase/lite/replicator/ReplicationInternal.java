@@ -1028,9 +1028,23 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     /**
      * Actual work of stopping the replication process.
      */
-    protected void stopGraceful() {
-        Log.d(Log.TAG_SYNC, "stopGraceful()");
-        this.retryCount = 0;
+    protected void stop() {
+        if (!isRunning())
+            return;
+
+        // clear batcher
+        batcher.clear();
+        // set non-continuous
+        setLifecycle(Replication.Lifecycle.ONESHOT);
+        // cancel if middle of retry
+        cancelRetryFuture();
+        // cancel all pending future tasks.
+        while (!pendingFutures.isEmpty()) {
+            Future future = pendingFutures.poll();
+            if (future != null && !future.isCancelled() && future.isDone()) {
+                future.cancel(true);
+            }
+        }
     }
 
     /**
@@ -1223,7 +1237,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     return;
                 }
 
-                stopGraceful();
+                stop();
                 notifyChangeListenersStateTransition(transition);
             }
         });
@@ -1640,5 +1654,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         } else {
             return URIUtils.encode(docId);
         }
+    }
+
+    protected boolean isRunning() {
+        return stateMachine.isInState(ReplicationState.RUNNING) ||
+                stateMachine.isInState(ReplicationState.IDLE) ||
+                stateMachine.isInState(ReplicationState.OFFLINE);
     }
 }

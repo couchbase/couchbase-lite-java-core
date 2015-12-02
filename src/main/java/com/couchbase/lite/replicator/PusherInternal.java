@@ -97,32 +97,30 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     @Override
-    protected void stopGraceful() {
+    protected void stop() {
+        if (stateMachine.isInState(ReplicationState.STOPPED))
+            return;
 
-        super.stopGraceful();
+        Log.d(Log.TAG_SYNC, "%s STOPPING...", toString());
 
-        Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful()");
+        stopObserving();
+
+        super.stop();
 
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
         new Thread(new Runnable() {
-
             @Override
             public void run() {
                 try {
-                    Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful()");
-
-                    // wait for pending futures from the pusher (eg, oustanding http requests)
+                    // wait for all tasks completed
                     waitForPendingFutures();
-
-                    stopObserving();
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "stopGraceful.run() had exception: %s", e);
-                    e.printStackTrace();
+                    Log.e(Log.TAG_SYNC, "stop.run() had exception: %s", e);
                 } finally {
                     triggerStopImmediate();
-                    Log.d(Log.TAG_SYNC, "PusherInternal stopGraceful.run() finished");
+                    Log.d(Log.TAG_SYNC, "PusherInternal stop.run() finished");
                 }
             }
         }).start();
