@@ -40,6 +40,7 @@ public class Status {
     public static final int METHOD_NOT_ALLOWED = 405;
     public static final int NOT_ACCEPTABLE = 406;
     public static final int CONFLICT = 409;
+    public static final int GONE = 410;
     public static final int DUPLICATE = 412;                // Formally known as "Precondition Failed" (PRECONDITION_FAILED)
     public static final int UNSUPPORTED_TYPE = 415;
 
@@ -108,6 +109,7 @@ public class Status {
         statusMap.put(METHOD_NOT_ALLOWED,       new HTTPStatus(405, "method_not_allowed"));
         statusMap.put(NOT_ACCEPTABLE,           new HTTPStatus(406, "not_acceptable"));
         statusMap.put(CONFLICT,                 new HTTPStatus(409, "conflict"));
+        statusMap.put(GONE,                     new HTTPStatus(410, "gone"));
         statusMap.put(DUPLICATE,                new HTTPStatus(412, "file_exists"));
         statusMap.put(UNSUPPORTED_TYPE,         new HTTPStatus(415, "bad_content_type"));
 
