@@ -80,16 +80,13 @@ public class Utils {
     }
 
     public static boolean isTransientError(StatusLine status) {
-
         // TODO: in ios implementation, it considers others errors
-        /*
-            if ($equal(domain, NSURLErrorDomain)) {
-        return code == NSURLErrorTimedOut || code == NSURLErrorCannotConnectToHost
-                                          || code == NSURLErrorNetworkConnectionLost;
-         */
+        //if ($equal(domain, NSURLErrorDomain)) {
+        //    return code == NSURLErrorTimedOut
+        //            || code == NSURLErrorCannotConnectToHost
+        //            || code == NSURLErrorNetworkConnectionLost;
 
         return isTransientError(status.getStatusCode());
-
     }
 
     public static boolean isTransientError(int statusCode) {
@@ -97,6 +94,23 @@ public class Utils {
             return true;
         }
         return false;
+    }
+
+    public static boolean isDocumentError(Throwable throwable) {
+
+        if (throwable instanceof CouchbaseLiteException) {
+            CouchbaseLiteException e = (CouchbaseLiteException) throwable;
+            return isDocumentError(e.getCBLStatus().getCode());
+        } else if (throwable instanceof HttpResponseException) {
+            HttpResponseException e = (HttpResponseException) throwable;
+            return isDocumentError(e.getStatusCode());
+        } else {
+            return false;
+        }
+    }
+
+    public static boolean isDocumentError(int statusCode) {
+        return (statusCode == Status.NOT_FOUND || statusCode == Status.FORBIDDEN || statusCode == Status.GONE) ? true : false;
     }
 
     /**

@@ -630,7 +630,14 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 if (e != null) {
                     Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);
-                    revisionFailed(rev, e);
+                    if(Utils.isDocumentError(e)){
+                        // Revision is missing or not accessible:
+                        revisionFailed(rev, e);
+                    }
+                    else{
+                        // Request failed:
+                        setError(e);
+                    }
                 } else {
                     Map<String, Object> properties = (Map<String, Object>) result;
                     PulledRevision gotRev = new PulledRevision(properties);
