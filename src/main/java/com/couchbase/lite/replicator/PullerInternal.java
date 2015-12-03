@@ -193,7 +193,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         if (inboxCount == 0) {
             // Nothing to do. Just bump the lastSequence.
-            Log.w(Log.TAG_SYNC,
+            Log.d(Log.TAG_SYNC,
                     "%s no new remote revisions to fetch.  add lastInboxSequence (%s) to pendingSequences (%s)",
                     this, lastInboxSequence, pendingSequences);
             long seq = pendingSequences.addValue(lastInboxSequence);
