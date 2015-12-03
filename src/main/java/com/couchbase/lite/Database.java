@@ -1120,10 +1120,11 @@ public class Database implements StoreDelegate {
                     Status.INTERNAL_SERVER_ERROR);
 
         String storageType = options.getStorageType();
-        if (storageType == null)
+        if (storageType == null) {
             storageType = manager.getStorageType();
-        if (storageType == null)
-            storageType = DEFAULT_STORAGE;
+            if (storageType == null)
+                storageType = DEFAULT_STORAGE;
+        }
 
         Store primaryStore = createStoreInstance(storageType);
         if (primaryStore == null) {
@@ -1225,8 +1226,17 @@ public class Database implements StoreDelegate {
         open = true;
 
         if (upgrade) {
-            // TODO: Perform database upgrading here:
-            // https://github.com/couchbase/couchbase-lite-java-core/issues/722
+            Log.i(TAG, "Upgrading to %s ...", storageType);
+            String dbPath = new File(path, "db.sqlite3").getAbsolutePath();
+            DatabaseUpgrade upgrader = new DatabaseUpgrade(manager, this, dbPath);
+            if (!upgrader.importData()) {
+                Log.w(TAG, "Upgrade to %s failed", storageType);
+                upgrader.backOut();
+                close();
+                throw new CouchbaseLiteException("Cannot upgrade to " + storageType, Status.DB_ERROR);
+            } else {
+                upgrader.deleteSQLiteFiles();
+            }
         }
     }
 

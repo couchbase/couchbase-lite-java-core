@@ -454,9 +454,12 @@ public final class Manager {
 
         if(!db.replaceUUIDs()){
             Log.w(Database.TAG, "Failed to replace UUIDs");
+            db.close();
             return false;
         }
 
+        // close so app can (re)open db with its preferred options:
+        db.close();
         return true;
     }
 
@@ -738,16 +741,16 @@ public final class Manager {
             if (attachmentStreams != null) {
                 StreamUtils.copyStreamsToFolder(attachmentStreams, attachmentsFile);
             }
-            if (!upgradeDatabase(databaseName, dstDbPath))
+            if (!upgradeV1Database(databaseName, dstDbPath)) {
                 throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
-
+            }
             db.open();
             db.replaceUUIDs();
         } catch (FileNotFoundException e) {
-            Log.e(Database.TAG, "", e);
+            Log.e(Database.TAG, "Error replacing the database: %s", e, databaseName);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } catch (IOException e) {
-            Log.e(Database.TAG, "", e);
+            Log.e(Database.TAG, "Error replacing the database: %s", e, databaseName);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         }
     }
@@ -783,7 +786,7 @@ public final class Manager {
             String filename = file.getName();
             String name = nameOfDatabaseAtPath(filename);
             String oldDbPath = new File(directory, filename).getAbsolutePath();
-            upgradeDatabase(name, oldDbPath);
+            upgradeDatabase(name, oldDbPath, true);
         }
     }
 
@@ -793,12 +796,8 @@ public final class Manager {
      * atPath: (NSString*)dbPath
      * error: (NSError**)outError
      */
-    private boolean upgradeDatabase(String name, String dbPath) {
-        if (!dbPath.endsWith(kV1DBExtension)) {
-            Log.w(Log.TAG_DATABASE, "Upgrade skipped: Database file extension is not %s", kV1DBExtension);
-            return true;
-        }
-        Log.v(Log.TAG_DATABASE, "CouchbaseLite: Upgrading v1 database at %s ...", dbPath);
+    private boolean upgradeDatabase(String name, String dbPath, boolean close) {
+        Log.v(Log.TAG_DATABASE, "CouchbaseLite: Upgrading database at %s ...", dbPath);
         if (!name.equals("_replicator")) {
             // Create and open new CBLDatabase:
             Database db = getDatabase(name, false);
@@ -814,30 +813,44 @@ public final class Manager {
                     return false;
                 }
             }
-            db.close();
+            if (close)
+                db.close();
         }
 
         // Remove old database file and its SQLite side files:
-        for (String suffix : Arrays.asList("", "-wal", "-shm", "-journal")) {
-            File file = new File(dbPath + suffix);
-            if (file.exists())
-                file.delete();
+        moveSQLiteDbFiles(dbPath, null);
+
+        if (dbPath.endsWith(kV1DBExtension)) {
+            String oldAttachmentsName = FileDirUtils.getDatabaseNameFromPath(dbPath) + " attachments";
+            File oldAttachmentsDir = new File(directoryFile, oldAttachmentsName);
+            if (oldAttachmentsDir.exists())
+                FileDirUtils.deleteRecursive(oldAttachmentsDir);
         }
-        String oldAttachmentsName = FileDirUtils.getDatabaseNameFromPath(dbPath) + " attachments";
-        File oldAttachmentsDir = new File(directoryFile, oldAttachmentsName);
-        if (oldAttachmentsDir.exists())
-            FileDirUtils.deleteRecursive(oldAttachmentsDir);
+
         Log.v(Log.TAG_DATABASE, "    ...success!");
         return true;
     }
 
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    private String filenameWithNewExtension(String oldFilename, String oldExtension, String newExtension) {
-        String oldExtensionRegex = String.format("%s$", oldExtension);
-        return oldFilename.replaceAll(oldExtensionRegex, newExtension);
+    private boolean upgradeV1Database(String name, String dbPath) {
+        if (dbPath.endsWith(kV1DBExtension)) {
+            return upgradeDatabase(name, dbPath, false);
+        } else {
+            // Gracefully skipping the upgrade:
+            Log.w(Log.TAG_DATABASE, "Upgrade skipped: Database file extension is not %s", kDBExtension);
+            return true;
+        }
+    }
+
+    private void moveSQLiteDbFiles(String oldDbPath, String newDbPath) {
+        for (String suffix : Arrays.asList("", "-wal", "-shm", "-journal")) {
+            File oldFile = new File(oldDbPath + suffix);
+            if (!oldFile.exists())
+                continue;
+            if (newDbPath != null)
+                oldFile.renameTo(new File(newDbPath + suffix));
+            else
+                oldFile.delete();
+        }
     }
 
     /**

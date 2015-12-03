@@ -17,6 +17,7 @@ import com.couchbase.lite.util.Log;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +148,14 @@ final public class DatabaseUpgrade {
             db.delete();
         } catch (CouchbaseLiteException e) {
             Log.w(TAG, "Failed to delete Database: %s: %s", db, e);
+        }
+    }
+
+    protected void deleteSQLiteFiles() {
+        for (String suffix : Arrays.asList("", "-wal", "-shm", "-journal")) {
+            File file = new File(path + suffix);
+            if (file.exists())
+                file.delete();
         }
     }
 
