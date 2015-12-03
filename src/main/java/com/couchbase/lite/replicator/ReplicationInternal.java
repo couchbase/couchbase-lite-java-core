@@ -465,11 +465,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
             // iOS version sends notification from stop() method, but java version does not.
             // following codes are always executed.
-            {
-                Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
-                changeEvent.setError(this.error);
-                notifyChangeListeners(changeEvent);
-            }
+            Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
+            changeEvent.setError(this.error);
+            notifyChangeListeners(changeEvent);
         }
     }
 
