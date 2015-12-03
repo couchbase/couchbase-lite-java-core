@@ -92,7 +92,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected static int PROCESSOR_DELAY = 500;
     protected static int INBOX_CAPACITY = 100;
     protected ScheduledExecutorService remoteRequestExecutor;
-    protected Throwable error;
+    private Throwable error; // use private to make sure if error is set through setError()
     private String remoteCheckpointDocID;
     protected Map<String, Object> remoteCheckpoint;
     protected AtomicInteger completedChangesCount;
@@ -103,7 +103,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private boolean lastSequenceChanged = false;
     private boolean savingCheckpoint;
     private boolean overdueForCheckpointSave;
-
 
     // the code assumes this is a _single threaded_ work executor.
     // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
@@ -370,20 +369,20 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable error) {
+            public void onCompletion(HttpResponse httpResponse, Object result, Throwable err) {
 
                 try {
-                    if (error != null) {
+                    if (err != null) {
                         // If not at /db/_session, try CouchDB location /_session
-                        if (error instanceof HttpResponseException &&
-                                ((HttpResponseException) error).getStatusCode() == 404 &&
+                        if (err instanceof HttpResponseException &&
+                                ((HttpResponseException) err).getStatusCode() == 404 &&
                                 sessionPath.equalsIgnoreCase("/_session")) {
 
                             checkSessionAtPath("_session");
                             return;
                         }
-                        Log.e(Log.TAG_SYNC, this + ": Session check failed", error);
-                        setError(error);
+                        Log.e(Log.TAG_SYNC, this + ": Session check failed", err);
+                        setError(err);
 
                     } else {
                         Map<String, Object> response = (Map<String, Object>) result;
@@ -450,27 +449,27 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     @InterfaceAudience.Private
     protected void setError(Throwable throwable) {
 
-        // TODO
-        /*
-        if (error.code == NSURLErrorCancelled && $equal(error.domain, NSURLErrorDomain))
-            return;
-         */
+        // TODO - needs to port
+        //if (error.code == NSURLErrorCancelled && $equal(error.domain, NSURLErrorDomain))
+        //    return;
 
-        if (throwable != error) {
+        if (throwable != this.error) {
             Log.e(Log.TAG_SYNC, "%s: Progress: set error = %s", this, throwable);
             parentReplication.setLastError(throwable);
-            error = throwable;
+            this.error = throwable;
+
+            // if permanent error, stop immediately
+            if(Utils.isPermanentError(this.error)) {
+                stop();
+            }
+
+            // iOS version sends notification from stop() method, but java version does not.
+            // following codes are always executed.
             Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
-            changeEvent.setError(error);
+            changeEvent.setError(this.error);
             notifyChangeListeners(changeEvent);
         }
-
-        // #352
-        // iOS version: stop replicator immediately when call setError() with permanent error.
-        // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
-        // state becomes IDLE.
     }
-
 
     @InterfaceAudience.Private
     protected void addToCompletedChangesCount(int delta) {
@@ -1191,8 +1190,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 // iOS version: stop replicator immediately when call setError() with permanent error.
                 // But, for Core Java, some of codes wait IDLE state. So this is reason to wait till
                 // state becomes IDLE.
-                if (Utils.isPermanentError(error) && isContinuous()) {
-                    Log.d(Log.TAG_SYNC, "IDLE: triggerStopGraceful() " + error.toString());
+                if (Utils.isPermanentError(ReplicationInternal.this.error) && isContinuous()) {
+                    Log.d(Log.TAG_SYNC, "IDLE: triggerStopGraceful() " + ReplicationInternal.this.error.toString());
                     triggerStopGraceful();
                 }
             }
@@ -1327,7 +1326,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected void retry() {
         Log.v(Log.TAG_SYNC, "[retry()]");
         retryCount++;
-        error = null;
+        this.error = null;
         checkSession();
     }
 
@@ -1379,7 +1378,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
 
         // IDLE_OK
-        if (error == null) {
+        if (this.error == null) {
             retryCount = 0;
         }
         // IDLE_ERROR
@@ -1390,8 +1389,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 if (isContinuous()) {
                     // 12/16/2014 - only retry if error is transient error 50x http error
                     // It may need to retry for any kind of errors
-                    if (Utils.isTransientError(error)) {
-
+                    if (Utils.isTransientError(this.error)) {
                         cancelRetryFuture();
                         scheduleRetryFuture();
                     }

@@ -146,7 +146,9 @@ public class Batcher<T> {
     public void clear() {
         unschedule();
         inbox.clear();
-        inbox.notify();
+        synchronized (inbox) {
+            inbox.notify();
+        }
     }
 
     public void waitForPendingFutures() {
