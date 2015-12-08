@@ -23,6 +23,7 @@ import com.couchbase.lite.util.Log;
 
 import org.apache.http.client.CookieStore;
 import org.apache.http.cookie.Cookie;
+import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -39,6 +40,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 
 public class PersistentCookieStore implements CookieStore {
+
+    private static final String SYNC_GATEWAY_SESSION_COOKIE_NAME = "SyncGatewaySession";
 
     private static final String COOKIE_LOCAL_DOC_NAME = "PersistentCookieStore";
     private boolean omitNonPersistentCookies = false;
@@ -113,6 +116,14 @@ public class PersistentCookieStore implements CookieStore {
             return;
         }
 
+        // WORKAROUND for Sync Gateway Session ID
+        // Sync Gateway return Set-Cookie with Session ID. Cookie path is also updated, that causes mis-matching.
+        // https://github.com/couchbase/couchbase-lite-java-core/issues/852
+        if (SYNC_GATEWAY_SESSION_COOKIE_NAME.equalsIgnoreCase(cookie.getName()) && cookies.containsKey(name)) {
+            Cookie oldCookie = cookies.get(name);
+            cookie = createCookie(cookie.getName(), cookie.getValue(), cookie.getDomain(), oldCookie.getPath(), cookie.getExpiryDate(), cookie.isSecure());
+        }
+
         // Save cookie into local store, or remove if expired
         if (!cookie.isExpired(new Date())) {
             cookies.put(name, cookie);
@@ -136,7 +147,15 @@ public class PersistentCookieStore implements CookieStore {
             Log.e(Log.TAG_SYNC, "Exception saving local doc", e);
             throw new RuntimeException(e);
         }
+    }
 
+    private Cookie createCookie(String name, String value, String domain, String path, Date expirationDate, boolean secure) {
+        BasicClientCookie2 cookie = new BasicClientCookie2(name, value);
+        cookie.setDomain(domain);
+        cookie.setPath(path);
+        cookie.setExpiryDate(expirationDate);
+        cookie.setSecure(secure);
+        return cookie;
     }
 
     @Override
