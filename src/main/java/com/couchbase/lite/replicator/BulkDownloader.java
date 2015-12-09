@@ -42,6 +42,8 @@ import java.util.zip.GZIPInputStream;
 @InterfaceAudience.Private
 public class BulkDownloader extends RemoteRequest implements MultipartReaderDelegate {
 
+    public static final String TAG = Log.TAG_SYNC;
+
     private Database _db;
     private MultipartReader _topReader;
     private MultipartDocumentReader _docReader;
@@ -78,8 +80,8 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");
-        request.addHeader("X-Accept-Part-Encoding", "gzip");
         request.addHeader("User-Agent", Manager.USER_AGENT);
+        request.addHeader("X-Accept-Part-Encoding", "gzip");
         request.addHeader("Accept-Encoding", "gzip, deflate");
 
         addRequestHeaders(request);
@@ -134,47 +136,45 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                         InputStream inputStream = null;
                         try {
                             inputStream = entity.getContent();
+                            GZIPInputStream gzipStream = null;
+                            try {
+                                Header contentTypeHeader = entity.getContentType();
+                                if (contentTypeHeader != null) {
+                                    // decompress if contentEncoding is gzip
+                                    if (Utils.isGzip(entity)) {
+                                        gzipStream = new GZIPInputStream(inputStream);
+                                        inputStream = gzipStream;
+                                    }
 
-                            Header contentTypeHeader = entity.getContentType();
-                            if (contentTypeHeader != null) {
-                                // multipart
-                                if (contentTypeHeader.getValue().contains("multipart/")) {
-                                    Log.v(Log.TAG_SYNC, "contentTypeHeader = %s",
-                                            contentTypeHeader.getValue());
-                                    _topReader = new MultipartReader(contentTypeHeader.getValue(), this);
-                                    byte[] buffer = new byte[BUF_LEN];
-                                    int numBytesRead = 0;
-                                    while ((numBytesRead = inputStream.read(buffer)) != -1) {
-                                        _topReader.appendData(buffer, 0, numBytesRead);
-                                    }
-                                    _topReader.finished();
-                                    respondWithResult(fullBody, error, response);
-                                }
-                                // non-multipart
-                                else {
-                                    Log.v(Log.TAG_SYNC, "contentTypeHeader is not multipart = %s",
-                                            contentTypeHeader.getValue());
-                                    GZIPInputStream gzipStream = null;
-                                    try {
-                                        // decompress if contentEncoding is gzip
-                                        if (Utils.isGzip(entity)) {
-                                            gzipStream = new GZIPInputStream(inputStream);
-                                            fullBody = Manager.getObjectMapper().readValue(
-                                                    gzipStream, Object.class);
-                                        } else {
-                                            fullBody = Manager.getObjectMapper().readValue(
-                                                    inputStream, Object.class);
+                                    // multipart
+                                    if (contentTypeHeader.getValue().contains("multipart/")) {
+                                        Log.v(TAG, "contentTypeHeader = %s",
+                                                contentTypeHeader.getValue());
+                                        _topReader = new MultipartReader(
+                                                contentTypeHeader.getValue(), this);
+                                        byte[] buffer = new byte[BUF_LEN];
+                                        int nBytesRead = 0;
+                                        while ((nBytesRead = inputStream.read(buffer)) != -1) {
+                                            _topReader.appendData(buffer, 0, nBytesRead);
                                         }
+                                        _topReader.finished();
                                         respondWithResult(fullBody, error, response);
-                                    } finally {
-                                        try {
-                                            if (gzipStream != null) {
-                                                gzipStream.close();
-                                            }
-                                        } catch (IOException e) {
-                                        }
-                                        gzipStream = null;
                                     }
+                                    // non-multipart
+                                    else {
+                                        Log.v(TAG, "contentTypeHeader is not multipart = %s",
+                                                contentTypeHeader.getValue());
+                                        fullBody = Manager.getObjectMapper().readValue(
+                                                inputStream, Object.class);
+                                        respondWithResult(fullBody, error, response);
+                                    }
+                                }
+                            } finally {
+                                try {
+                                    if (gzipStream != null) {
+                                        gzipStream.close();
+                                    }
+                                } catch (IOException e) {
                                 }
                             }
                         } finally {
@@ -184,7 +184,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                 }
                             } catch (IOException e) {
                             }
-                            inputStream = null;
                         }
                     }
                 } finally {
@@ -204,23 +203,23 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             error = e;
         } finally {
-            Log.v(Log.TAG_SYNC, "%s: BulkDownloader finally block.  url: %s", this, url);
+            Log.v(TAG, "%s: BulkDownloader finally block.  url: %s", this, url);
         }
 
-        Log.v(Log.TAG_SYNC, "%s: BulkDownloader calling respondWithResult.  url: %s, error: %s", this, url, error);
+        Log.v(TAG, "%s: BulkDownloader calling respondWithResult.  url: %s, error: %s", this, url, error);
         respondWithResult(fullBody, error, response);
     }
 
     /**
      * This method is called when a part's headers have been parsed, before its data is parsed.
      */
-
+    @Override
     public void startedPart(Map headers) {
         if (_docReader != null) {
             throw new IllegalStateException("_docReader is already defined");
         }
-        Log.v(Log.TAG_SYNC, "%s: Starting new document; headers =%s", this, headers);
-        Log.v(Log.TAG_SYNC, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
+        Log.v(TAG, "%s: Starting new document; headers =%s", this, headers);
+        Log.v(TAG, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
         _docReader = new MultipartDocumentReader(_db);
         _docReader.setHeaders(headers);
         _docReader.startedPart(headers);
@@ -229,11 +228,12 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     /**
      * This method is called to append data to a part's body.
      */
-
+    @Override
     public void appendToPart(byte[] data) {
         appendToPart(data, 0, data.length);
     }
 
+    @Override
     public void appendToPart(final byte[] data, int off, int len) {
         if (_docReader == null) {
             throw new IllegalStateException("_docReader is not defined");
@@ -244,8 +244,9 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     /**
      * This method is called when a part is complete.
      */
+    @Override
     public void finishedPart() {
-        Log.v(Log.TAG_SYNC, "%s: Finished document", this);
+        Log.v(TAG, "%s: Finished document", this);
         if (_docReader == null) {
             throw new IllegalStateException("_docReader is not defined");
         }
