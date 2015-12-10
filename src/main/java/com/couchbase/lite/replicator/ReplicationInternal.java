@@ -843,6 +843,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         lastSequenceChanged = false;
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
+
+        if (localLastSequence == null) {
+            maybeCreateRemoteDB();
+            beginReplicating();
+            return;
+        }
+
         boolean dontLog404 = true;
         Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletionBlock() {
 
