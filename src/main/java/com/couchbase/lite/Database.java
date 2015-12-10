@@ -48,7 +48,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -60,7 +59,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Exchanger;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -1443,10 +1441,80 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public Map<String, Object> getAllDocs(QueryOptions options) throws CouchbaseLiteException {
 
-        // TODO - This method is not fully implemented. Further work will be required.
-        //        https://github.com/couchbase/couchbase-lite-ios/blob/master/Source/CBLDatabase%2BInternal.m#L676-L739
+        // For regular all-docs, let storage do it all:
+        if (options == null || options.getAllDocsMode() != Query.AllDocsMode.BY_SEQUENCE)
+            return store.getAllDocs(options);
 
-        return store.getAllDocs(options);
+        // For changes feed mode (kCBLBySequence) do more work here:
+        if (options.isDescending()) {
+            throw new CouchbaseLiteException(Status.NOT_IMPLEMENTED); //FIX: Implement descending order
+        }
+
+        ChangesOptions changesOpts = new ChangesOptions(
+                options.getLimit(),
+                options.isIncludeDocs(),
+                true, true);
+
+        long startSeq = keyToSequence(options.getStartKey(), 1);
+        long endSeq = keyToSequence(options.getEndKey(), Long.MAX_VALUE);
+        if (!options.isInclusiveStart())
+            ++startSeq;
+        if (!options.isInclusiveEnd())
+            --endSeq;
+        long minSeq = startSeq;
+        long maxSeq = endSeq;
+        if (minSeq > maxSeq) {
+            return null; // empty result
+        }
+
+        RevisionList revs = store.changesSince(minSeq - 1, changesOpts, null, null);
+        if (revs == null)
+            return null;
+
+        Map<String, Object> result = new HashMap<String, Object>();
+        List<QueryRow> rows = new ArrayList<QueryRow>();
+
+        Predicate<QueryRow> filter = options.getPostFilter();
+
+        // reverse order
+        if (options.isDescending()) {
+            for (int i = revs.size() - 1; i >= 0; i--) {
+                QueryRow row = getQueryRow(revs.get(i), minSeq, maxSeq, options.getPostFilter());
+                if (row != null)
+                    rows.add(row);
+            }
+        } else {
+            for (int i = 0; i < revs.size(); i++) {
+                QueryRow row = getQueryRow(revs.get(i), minSeq, maxSeq, options.getPostFilter());
+                if (row != null)
+                    rows.add(row);
+            }
+        }
+        result.put("rows", rows);
+        result.put("total_rows", rows.size());
+        result.put("offset", options.getSkip());
+        return result;
+    }
+
+    private QueryRow getQueryRow(RevisionInternal rev, long minSeq, long maxSeq, Predicate<QueryRow> filter) {
+        if (rev == null)
+            return null;
+        long seq = rev.getSequence();
+        if (seq < minSeq || seq > maxSeq)
+            return null;
+        Map<String, Object> value = new HashMap<String, Object>();
+        value.put("rev", rev.getRevID());
+        if (rev.isDeleted())
+            value.put("deleted", (rev.isDeleted() ? true : null));
+        QueryRow row = new QueryRow(rev.getDocID(), seq, rev.getDocID(), value, rev, null);
+        if (filter == null) {
+            return row;
+        }
+        row.setDatabase(this);
+        if (filter.apply(row)) {
+            return row;
+        }
+        return null;
     }
 
     public AttachmentInternal getAttachment(Map info, String filename)
@@ -2347,5 +2415,9 @@ public class Database implements StoreDelegate {
      */
     protected Map<String, Object> getLocalCheckpointDocument(){
         return getExistingLocalDocument(kLocalCheckpointDocId);
+    }
+
+    private static long keyToSequence(Object key, long dflt){
+        return key instanceof Number ? ((Number)key).longValue() : dflt;
     }
 }

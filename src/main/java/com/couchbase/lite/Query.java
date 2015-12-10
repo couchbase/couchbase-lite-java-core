@@ -29,7 +29,8 @@ public class Query {
         ALL_DOCS,          // (the default), the query simply returns all non-deleted documents.
         INCLUDE_DELETED,   // in this mode it also returns deleted documents.
         SHOW_CONFLICTS,    // the .conflictingRevisions property of each row will return the conflicting revisions, if any, of that document.
-        ONLY_CONFLICTS     // _only_ documents in conflict will be returned. (This mode is especially useful for use with a CBLLiveQuery, so you can be notified of conflicts as they happen, i.e. when they're pulled in by a replication.)
+        ONLY_CONFLICTS,    // _only_ documents in conflict will be returned. (This mode is especially useful for use with a CBLLiveQuery, so you can be notified of conflicts as they happen, i.e. when they're pulled in by a replication.)
+        BY_SEQUENCE        // Order by sequence number (i.e. chronologically)
     }
 
     /**
@@ -79,6 +80,11 @@ public class Query {
      * (Useful if the view contains multiple identical keys, making .endKey ambiguous.)
      */
     private String endKeyDocId;
+
+    /**
+     * If YES (the default) the startKey (or startKeyDocID) comparison uses ">=". Else it uses ">".
+     */
+    private boolean inclusiveStart;
 
     /**
      * If YES (the default) the endKey (or endKeyDocID) comparison uses "<=". Else it uses "<".
@@ -174,6 +180,7 @@ public class Query {
         this.database = database;
         this.view = view;
         limit = Integer.MAX_VALUE;
+        inclusiveStart = true;
         inclusiveEnd = true;
         mapOnly = (view != null && view.getReduce() == null);
         indexUpdateMode = IndexUpdateMode.BEFORE;
@@ -187,6 +194,7 @@ public class Query {
     /* package */ Query(Database database, Mapper mapFunction) {
         this(database, database.makeAnonymousView());
         temporaryView = true;
+        inclusiveStart = true;
         inclusiveEnd = true;
         view.setMap(mapFunction, "");
     }
@@ -211,6 +219,7 @@ public class Query {
         endKeyDocId = query.endKeyDocId;
         indexUpdateMode = query.indexUpdateMode;
         allDocsMode = query.allDocsMode;
+        inclusiveStart = query.inclusiveStart;
         inclusiveEnd = query.inclusiveEnd;
         postFilter = query.postFilter;
     }
@@ -355,6 +364,26 @@ public class Query {
     }
 
     @InterfaceAudience.Public
+    public boolean isInclusiveStart() {
+        return inclusiveStart;
+    }
+
+    @InterfaceAudience.Public
+    public void setInclusiveStart(boolean inclusiveStart) {
+        this.inclusiveStart = inclusiveStart;
+    }
+
+    @InterfaceAudience.Public
+    public boolean isInclusiveEnd() {
+        return inclusiveEnd;
+    }
+
+    @InterfaceAudience.Public
+    public void setInclusiveEnd(boolean inclusiveEnd) {
+        this.inclusiveEnd = inclusiveEnd;
+    }
+
+    @InterfaceAudience.Public
     public Predicate<QueryRow> getPostFilter() {
         return postFilter;
     }
@@ -489,6 +518,7 @@ public class Query {
         queryOptions.setDescending(isDescending());
         queryOptions.setIncludeDocs(shouldPrefetch());
         queryOptions.setUpdateSeq(true);
+        queryOptions.setInclusiveStart(inclusiveStart);
         queryOptions.setInclusiveEnd(inclusiveEnd);
         queryOptions.setStale(getIndexUpdateMode());
         queryOptions.setAllDocsMode(getAllDocsMode());
