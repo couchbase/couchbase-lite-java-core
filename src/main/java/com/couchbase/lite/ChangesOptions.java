@@ -12,6 +12,16 @@ public class ChangesOptions {
     private boolean includeConflicts = false;
     private boolean sortBySequence = true;
 
+    public ChangesOptions() {
+    }
+
+    public ChangesOptions(int limit, boolean includeDocs, boolean includeConflicts, boolean sortBySequence) {
+        this.limit = limit;
+        this.includeDocs = includeDocs;
+        this.includeConflicts = includeConflicts;
+        this.sortBySequence = sortBySequence;
+    }
+
     public int getLimit() {
         return limit;
     }
