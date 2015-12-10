@@ -102,16 +102,13 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
-
         try {
             if (request.isAborted()) {
                 respondWithResult(fullBody, new Exception(
                         String.format("%s: Request %s has been aborted", this, request)), response);
                 return;
             }
-
             response = httpClient.execute(request);
-
             try {
                 // add in cookies to global store
                 if (httpClient instanceof DefaultHttpClient) {
@@ -121,7 +118,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
             } catch (Exception e) {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Unable to add in cookies to global store", e);
             }
-
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
@@ -135,46 +131,34 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                     if (entity != null) {
                         InputStream inputStream = null;
                         try {
-                            inputStream = entity.getContent();
-                            GZIPInputStream gzipStream = null;
-                            try {
-                                Header contentTypeHeader = entity.getContentType();
-                                if (contentTypeHeader != null) {
-                                    // decompress if contentEncoding is gzip
-                                    if (Utils.isGzip(entity)) {
-                                        gzipStream = new GZIPInputStream(inputStream);
-                                        inputStream = gzipStream;
-                                    }
-
-                                    // multipart
-                                    if (contentTypeHeader.getValue().contains("multipart/")) {
-                                        Log.v(TAG, "contentTypeHeader = %s",
-                                                contentTypeHeader.getValue());
-                                        _topReader = new MultipartReader(
-                                                contentTypeHeader.getValue(), this);
-                                        byte[] buffer = new byte[BUF_LEN];
-                                        int nBytesRead = 0;
-                                        while ((nBytesRead = inputStream.read(buffer)) != -1) {
-                                            _topReader.appendData(buffer, 0, nBytesRead);
-                                        }
-                                        _topReader.finished();
-                                        respondWithResult(fullBody, error, response);
-                                    }
-                                    // non-multipart
-                                    else {
-                                        Log.v(TAG, "contentTypeHeader is not multipart = %s",
-                                                contentTypeHeader.getValue());
-                                        fullBody = Manager.getObjectMapper().readValue(
-                                                inputStream, Object.class);
-                                        respondWithResult(fullBody, error, response);
-                                    }
+                            Header contentTypeHeader = entity.getContentType();
+                            if (contentTypeHeader != null) {
+                                inputStream = entity.getContent();
+                                // decompress if contentEncoding is gzip
+                                if (Utils.isGzip(entity)) {
+                                    inputStream = new GZIPInputStream(inputStream);
                                 }
-                            } finally {
-                                try {
-                                    if (gzipStream != null) {
-                                        gzipStream.close();
+                                // multipart
+                                if (contentTypeHeader.getValue().contains("multipart/")) {
+                                    Log.v(TAG, "contentTypeHeader = %s",
+                                            contentTypeHeader.getValue());
+                                    _topReader = new MultipartReader(
+                                            contentTypeHeader.getValue(), this);
+                                    byte[] buffer = new byte[BUF_LEN];
+                                    int nBytesRead = 0;
+                                    while ((nBytesRead = inputStream.read(buffer)) != -1) {
+                                        _topReader.appendData(buffer, 0, nBytesRead);
                                     }
-                                } catch (IOException e) {
+                                    _topReader.finished();
+                                    respondWithResult(fullBody, error, response);
+                                }
+                                // non-multipart
+                                else {
+                                    Log.v(TAG, "contentTypeHeader is not multipart = %s",
+                                            contentTypeHeader.getValue());
+                                    fullBody = Manager.getObjectMapper().readValue(
+                                            inputStream, Object.class);
+                                    respondWithResult(fullBody, error, response);
                                 }
                             }
                         } finally {
@@ -193,7 +177,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                         } catch (IOException e) {
                         }
                     }
-                    entity = null;
                 }
             }
         } catch (IOException e) {
@@ -205,7 +188,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         } finally {
             Log.v(TAG, "%s: BulkDownloader finally block.  url: %s", this, url);
         }
-
         Log.v(TAG, "%s: BulkDownloader calling respondWithResult.  url: %s, error: %s", this, url, error);
         respondWithResult(fullBody, error, response);
     }
