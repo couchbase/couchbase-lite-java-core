@@ -91,9 +91,9 @@ public class MultipartReader {
                 if (!header.contains(":")) {
                     throw new IllegalArgumentException("Missing ':' in header line: " + header);
                 }
-                StringTokenizer headerTokenizer = new StringTokenizer(header, ":");
-                String key = headerTokenizer.nextToken().trim();
-                String value = headerTokenizer.nextToken().trim();
+                int colon = header.indexOf(":");
+                String key = header.substring(0, colon).trim();
+                String value = header.substring(colon+1).trim();
                 headers.put(key, value);
             }
         }
