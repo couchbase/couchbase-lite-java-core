@@ -49,6 +49,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @InterfaceAudience.Private
 public class PullerInternal extends ReplicationInternal implements ChangeTrackerClient {
 
+    private static final String TAG = Log.TAG_SYNC;
+
     private static final int MAX_OPEN_HTTP_CONNECTIONS = 16;
 
     // Maximum number of revs to fetch in a single bulk request
@@ -90,7 +92,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      * Actual work of starting the replication process.
      */
     protected void beginReplicating() {
-        Log.d(Log.TAG_SYNC, "startReplicating()");
+        Log.d(TAG, "startReplicating()");
 
         initPendingSequences();
 
@@ -131,11 +133,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // it will switch to longpoll later.
         changeTrackerMode = ChangeTracker.ChangeTrackerMode.OneShot;
 
-        Log.d(Log.TAG_SYNC, "%s: starting ChangeTracker with since=%s mode=%s",
+        Log.d(TAG, "%s: starting ChangeTracker with since=%s mode=%s",
                 this, lastSequence, changeTrackerMode);
         changeTracker = new ChangeTracker(remote, changeTrackerMode, true, lastSequence, this);
         changeTracker.setAuthenticator(getAuthenticator());
-        Log.d(Log.TAG_SYNC, "%s: started ChangeTracker %s", this, changeTracker);
+        Log.d(TAG, "%s: started ChangeTracker %s", this, changeTracker);
 
         if (filterName != null) {
             changeTracker.setFilterName(filterName);
@@ -157,7 +159,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @Override
     @InterfaceAudience.Private
     protected void processInbox(RevisionList inbox) {
-        Log.d(Log.TAG_SYNC, "processInbox called");
+        Log.d(TAG, "processInbox called");
 
         if (canBulkGet == null) {
             canBulkGet = serverIsSyncGatewayVersion("0.81");
@@ -174,7 +176,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             // afterwards are the revisions that need to be downloaded.
             numRevisionsRemoved = db.findMissingRevisions(inbox);
         } catch (SQLException e) {
-            Log.e(Log.TAG_SYNC, String.format("%s failed to look up local revs", this), e);
+            Log.e(TAG, String.format("%s failed to look up local revs", this), e);
             inbox = null;
         }
 
@@ -185,7 +187,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         if (numRevisionsRemoved > 0) {
-            Log.v(Log.TAG_SYNC, "%s: processInbox() setting changesCount to: %s",
+            Log.v(TAG, "%s: processInbox() setting changesCount to: %s",
                     this, getChangesCount().get() - numRevisionsRemoved);
             // May decrease the changesCount, to account for the revisions we just found out we don't need to get.
             addToChangesCount(-1 * numRevisionsRemoved);
@@ -193,7 +195,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         if (inboxCount == 0) {
             // Nothing to do. Just bump the lastSequence.
-            Log.d(Log.TAG_SYNC,
+            Log.d(TAG,
                     "%s no new remote revisions to fetch.  add lastInboxSequence (%s) to pendingSequences (%s)",
                     this, lastInboxSequence, pendingSequences);
             long seq = pendingSequences.addValue(lastInboxSequence);
@@ -203,7 +205,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             return;
         }
 
-        Log.v(Log.TAG_SYNC, "%s: fetching %s remote revisions...", this, inboxCount);
+        Log.v(TAG, "%s: fetching %s remote revisions...", this, inboxCount);
 
         // Dump the revs into the queue of revs to pull from the remote db:
         for (int i = 0; i < inbox.size(); i++) {
@@ -275,15 +277,15 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (nRevs == 0) {
             return;
         }
-        Log.v(Log.TAG_SYNC, "%s bulk-fetching %d remote revisions...", this, nRevs);
-        Log.v(Log.TAG_SYNC, "%s bulk-fetching remote revisions: %s", this, bulkRevs);
+        Log.e(TAG, "%s bulk-fetching %d remote revisions...", this, nRevs);
+        Log.e(TAG, "%s bulk-fetching remote revisions: %s", this, bulkRevs);
 
         if (!canBulkGet) {
             pullBulkWithAllDocs(bulkRevs);
             return;
         }
 
-        Log.v(Log.TAG_SYNC, "%s: POST _bulk_get", this);
+        Log.v(TAG, "%s: POST _bulk_get", this);
         final List<RevisionInternal> remainingRevs = new ArrayList<RevisionInternal>(bulkRevs);
 
         ++httpConnectionCount;
@@ -314,7 +316,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                                 rev.setSequence(remainingRevs.get(pos).getSequence());
                                 remainingRevs.remove(pos);
                             } else {
-                                Log.w(Log.TAG_SYNC, "%s : Received unexpected rev rev", this);
+                                Log.w(TAG, "%s : Received unexpected rev rev", this);
                             }
 
                             if (props.get("_id") != null) {
@@ -334,7 +336,17 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
-                                completedChangesCount.addAndGet(remainingRevs.size());
+                                Log.e(TAG, "RemoteRequestCompletionBlock: remainingRevs.size()=" + remainingRevs.size());
+                                //completedChangesCount.addAndGet(remainingRevs.size());
+                                for (int i = 0; i < remainingRevs.size(); i++) {
+                                    RevisionInternal rev = remainingRevs.get(i);
+                                    Log.e(TAG, "RemoteRequestCompletionBlock: rev="+rev);
+                                    if (shouldRetryDownload(rev.getDocID())) {
+                                        bulkRevsToPull.add(rev);
+                                    } else {
+                                        completedChangesCount.addAndGet(1);
+                                    }
+                                }
                             }
 
                             --httpConnectionCount;
@@ -344,7 +356,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     }
             );
         } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "%s: pullBulkRevisions Exception: %s", this, e);
+            Log.e(TAG, "%s: pullBulkRevisions Exception: %s", this, e);
             return;
         }
 
@@ -358,6 +370,48 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 Future future = remoteRequestExecutor.submit(dl);
                 pendingFutures.add(future);
             }
+        }
+    }
+
+    /**
+     * BulkDownloader HTTP request timeouts not properly handled
+     * https://github.com/couchbase/couchbase-lite-net/issues/356
+     */
+    private boolean shouldRetryDownload(String docId) {
+        Log.e(TAG, "shouldRetryDownload: " + docId);
+        Map<String, Object> localDoc = getLocalDatabase().getExistingLocalDocument(docId);
+        if (localDoc == null) {
+            Map<String, Object> props = new HashMap<String, Object>();
+            props.put("retryCount", 1L);
+            try {
+                getLocalDatabase().putLocalDocument(docId, props);
+            } catch (CouchbaseLiteException e) {
+                Log.w(TAG, "Failed to store retryCount value for docId: " + docId, e);
+            }
+            return true;
+        }
+
+        long retryCount = ((Number) localDoc.get("retryCount")).longValue();
+        if (retryCount >= MAX_RETRIES) {
+            pruneFailedDownload(docId);
+            return false;
+        }
+
+        localDoc.put("retryCount", retryCount + 1);
+        try {
+            getLocalDatabase().putLocalDocument(docId, localDoc);
+        } catch (CouchbaseLiteException e) {
+            Log.w(TAG, "Failed to store retryCount value for docId: " + docId, e);
+        }
+        return true;
+    }
+
+    private void pruneFailedDownload(String docId) {
+        Log.e(TAG, "pruneFailedDownload: " + docId);
+        try {
+            getLocalDatabase().deleteLocalDocument(docId);
+        } catch (CouchbaseLiteException e) {
+            Log.w(TAG, "Failed to delete local document: " + docId, e);
         }
     }
 
@@ -381,7 +435,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
             RevisionInternal xformed = transformRevision(rev);
             if (xformed == null) {
-                Log.v(Log.TAG_SYNC, "%s: Transformer rejected revision %s", this, rev);
+                Log.v(TAG, "%s: Transformer rejected revision %s", this, rev);
                 pendingSequences.removeSequence(rev.getSequence());
                 lastSequence = pendingSequences.getCheckpointedValue();
                 pauseOrResume();
@@ -449,7 +503,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // We only add a document if it doesn't have attachments, and if its
                             // revID matches the one we asked for.
                             List<Map<String, Object>> rows = (List<Map<String, Object>>) res.get("rows");
-                            Log.v(Log.TAG_SYNC, "%s checking %d bulk-fetched remote revisions", this, rows.size());
+                            Log.v(TAG, "%s checking %d bulk-fetched remote revisions", this, rows.size());
                             for (Map<String, Object> row : rows) {
                                 Map<String, Object> doc = (Map<String, Object>) row.get("doc");
                                 if (doc != null && doc.get("_attachments") == null) {
@@ -475,7 +529,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                         // Any leftover revisions that didn't get matched will be fetched individually:
                         if (remainingRevs.size() > 0) {
-                            Log.v(Log.TAG_SYNC,
+                            Log.v(TAG,
                                     "%s bulk-fetch didn't work for %d of %d revs; getting individually",
                                     this, remainingRevs.size(), bulkRevs.size());
                             for (RevisionInternal rev : remainingRevs) {
@@ -498,7 +552,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @InterfaceAudience.Private
     public void insertDownloads(final List<RevisionInternal> downloads) {
 
-        Log.d(Log.TAG_SYNC, this + " inserting " + downloads.size() + " revisions...");
+        Log.d(TAG, this + " inserting " + downloads.size() + " revisions...");
         final long time = System.currentTimeMillis();
         Collections.sort(downloads, getRevisionListComparator());
 
@@ -511,21 +565,21 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         long fakeSequence = rev.getSequence();
                         List<String> history = db.parseCouchDBRevisionHistory(rev.getProperties());
                         if (history.isEmpty() && rev.getGeneration() > 1) {
-                            Log.w(Log.TAG_SYNC, "%s: Missing revision history in response for: %s", this, rev);
+                            Log.w(TAG, "%s: Missing revision history in response for: %s", this, rev);
                             setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));
                             continue;
                         }
 
-                        Log.v(Log.TAG_SYNC, "%s: inserting %s %s", this, rev.getDocID(), history);
+                        Log.v(TAG, "%s: inserting %s %s", this, rev.getDocID(), history);
 
                         // Insert the revision
                         try {
                             db.forceInsert(rev, history, remote);
                         } catch (CouchbaseLiteException e) {
                             if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
-                                Log.i(Log.TAG_SYNC, "%s: Remote rev failed validation: %s", this, rev);
+                                Log.i(TAG, "%s: Remote rev failed validation: %s", this, rev);
                             } else {
-                                Log.w(Log.TAG_SYNC, "%s: failed to write %s: status=%s",
+                                Log.w(TAG, "%s: failed to write %s: status=%s",
                                         this, rev, e.getCBLStatus().getCode());
                                 setError(new HttpResponseException(e.getCBLStatus().getCode(), null));
                                 continue;
@@ -539,11 +593,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         pendingSequences.removeSequence(fakeSequence);
                     }
 
-                    Log.v(Log.TAG_SYNC, "%s: finished inserting %d revisions", this, downloads.size());
+                    Log.v(TAG, "%s: finished inserting %d revisions", this, downloads.size());
                     success = true;
 
                 } catch (SQLException e) {
-                    Log.e(Log.TAG_SYNC, this + ": Exception inserting revisions", e);
+                    Log.e(TAG, this + ": Exception inserting revisions", e);
                 } finally {
                     if (success) {
 
@@ -551,12 +605,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         setLastSequence(pendingSequences.getCheckpointedValue());
 
                         long delta = System.currentTimeMillis() - time;
-                        Log.v(Log.TAG_SYNC,
+                        Log.v(TAG,
                                 "%s: inserted %d revs in %d milliseconds",
                                 this, downloads.size(), delta);
 
                         int newCompletedChangesCount = getCompletedChangesCount().get() + downloads.size();
-                        Log.d(Log.TAG_SYNC,
+                        Log.d(TAG,
                                 "%s insertDownloads() updating completedChangesCount from %d -> %d ",
                                 this, getCompletedChangesCount().get(), newCompletedChangesCount);
 
@@ -583,7 +637,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     private void revisionFailed(RevisionInternal rev, Throwable throwable) {
         if (!Utils.isTransientError(throwable)) {
-            Log.v(Log.TAG_SYNC, "%s: giving up on %s: %s", this, rev, throwable);
+            Log.v(TAG, "%s: giving up on %s: %s", this, rev, throwable);
             pendingSequences.removeSequence(rev.getSequence());
             pauseOrResume();
         }
@@ -597,7 +651,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @InterfaceAudience.Private
     public void pullRemoteRevision(final RevisionInternal rev) {
 
-        Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision with rev: %s", this, rev);
+        Log.d(TAG, "%s: pullRemoteRevision with rev: %s", this, rev);
 
         ++httpConnectionCount;
 
@@ -629,7 +683,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                 if (e != null) {
-                    Log.e(Log.TAG_SYNC, "Error pulling remote revision", e);
+                    Log.e(TAG, "Error pulling remote revision", e);
                     if(Utils.isDocumentError(e)){
                         // Revision is missing or not accessible:
                         revisionFailed(rev, e);
@@ -643,7 +697,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     PulledRevision gotRev = new PulledRevision(properties);
                     gotRev.setSequence(rev.getSequence());
 
-                    Log.d(Log.TAG_SYNC, "%s: pullRemoteRevision add rev: %s to batcher: %s",
+                    Log.d(TAG, "%s: pullRemoteRevision add rev: %s to batcher: %s",
                             PullerInternal.this, gotRev, downloadsToInsert);
 
                     if (gotRev.getBody() != null)
@@ -722,10 +776,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @Override
     public void changeTrackerReceivedChange(final Map<String, Object> change) {
         try {
-            Log.d(Log.TAG_SYNC, "changeTrackerReceivedChange: %s", change);
+            Log.d(TAG, "changeTrackerReceivedChange: %s", change);
             processChangeTrackerChange(change);
         } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "Error processChangeTrackerChange(): %s", e);
+            Log.e(TAG, "Error processChangeTrackerChange(): %s", e);
             throw new RuntimeException(e);
         }
     }
@@ -745,7 +799,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         if (!Document.isValidDocumentId(docID)) {
-            Log.w(Log.TAG_SYNC, "%s: Received invalid doc ID from _changes: %s", this, change);
+            Log.w(TAG, "%s: Received invalid doc ID from _changes: %s", this, change);
             return;
         }
         boolean deleted = (change.containsKey("deleted") &&
@@ -766,9 +820,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if(changes.size() > 1)
                 rev.setConflicted(true);
 
-            Log.d(Log.TAG_SYNC, "%s: adding rev to inbox %s", this, rev);
+            Log.d(TAG, "%s: adding rev to inbox %s", this, rev);
 
-            Log.v(Log.TAG_SYNC,
+            Log.v(TAG,
                     "%s: changeTrackerReceivedChange() incrementing changesCount by 1", this);
 
             // this is purposefully done slightly different than the ios version
@@ -802,7 +856,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void processChangeTrackerStopped(ChangeTracker tracker) {
-        Log.d(Log.TAG_SYNC, "changeTrackerStopped.  lifecycle: %s", lifecycle);
+        Log.d(TAG, "changeTrackerStopped.  lifecycle: %s", lifecycle);
         switch (lifecycle) {
             case ONESHOT:
                 if (tracker.getLastError() != null) {
@@ -815,41 +869,41 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 if (stateMachine.isInState(ReplicationState.OFFLINE)) {
                     // in this case, we don't want to do anything here, since
                     // we told the change tracker to go offline ..
-                    Log.d(Log.TAG_SYNC, "Change tracker stopped because we are going offline");
+                    Log.d(TAG, "Change tracker stopped because we are going offline");
                 } else if (stateMachine.isInState(ReplicationState.STOPPING) ||
                         stateMachine.isInState(ReplicationState.STOPPED)) {
-                    Log.d(Log.TAG_SYNC, "Change tracker stopped because replicator is stopping or stopped.");
+                    Log.d(TAG, "Change tracker stopped because replicator is stopping or stopped.");
                 } else {
                     // otherwise, try to restart the change tracker, since it should
                     // always be running in continuous replications
                     String msg = String.format("Change tracker stopped during continuous replication");
-                    Log.e(Log.TAG_SYNC, msg);
+                    Log.e(TAG, msg);
                     parentReplication.setLastError(new Exception(msg));
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                    Log.d(Log.TAG_SYNC, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);
+                    Log.d(TAG, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);
                     workExecutor.schedule(new Runnable() {
                         @Override
                         public void run() {
                             // the replication may have been stopped by the time this scheduled fires
                             // so we need to check the state here.
                             if (stateMachine.isInState(ReplicationState.RUNNING)) {
-                                Log.d(Log.TAG_SYNC, "%s still running, restarting change tracker", this);
+                                Log.d(TAG, "%s still running, restarting change tracker", this);
                                 startChangeTracker();
                             } else {
-                                Log.d(Log.TAG_SYNC, "%s still no longer running, not restarting change tracker", this);
+                                Log.d(TAG, "%s still no longer running, not restarting change tracker", this);
                             }
                         }
                     }, CHANGE_TRACKER_RESTART_DELAY_MS, TimeUnit.MILLISECONDS);
                 }
                 break;
             default:
-                Log.e(Log.TAG_SYNC, "Unknown lifecycle: %s", lifecycle);
+                Log.e(TAG, "Unknown lifecycle: %s", lifecycle);
         }
     }
 
     @Override
     public void changeTrackerFinished(ChangeTracker tracker) {
-        Log.d(Log.TAG_SYNC, "changeTrackerFinished");
+        Log.d(TAG, "changeTrackerFinished");
     }
 
     private void waitForPendingFuturesWithNewThread() {
@@ -863,7 +917,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     @Override
     public void changeTrackerCaughtUp() {
-        Log.d(Log.TAG_SYNC, "changeTrackerCaughtUp");
+        Log.d(TAG, "changeTrackerCaughtUp");
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
@@ -899,7 +953,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (stateMachine.isInState(ReplicationState.STOPPED))
             return;
 
-        Log.d(Log.TAG_SYNC, "%s STOPPING...", toString());
+        Log.d(TAG, "%s STOPPING...", toString());
 
         // stop change tracker
         if (changeTracker != null)
@@ -921,11 +975,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     // wait for all tasks completed
                     waitForAllTasksCompleted();
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "stop.run() had exception: %s", e);
+                    Log.e(TAG, "stop.run() had exception: %s", e);
                 } finally {
                     // stop replicator immediate
                     triggerStopImmediate();
-                    Log.d(Log.TAG_SYNC, "PullerInternal stop.run() finished");
+                    Log.d(TAG, "PullerInternal stop.run() finished");
                 }
             }
         }).start();
@@ -939,12 +993,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             waitingForPendingFutures = true;
         }
 
-        Log.d(Log.TAG_SYNC, "[PullerInternal.waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
+        Log.d(TAG, "[PullerInternal.waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
 
         try {
             waitForAllTasksCompleted();
         } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+            Log.e(TAG, "Exception waiting for pending futures: %s", e);
         }
 
         // continuous mode, make state IDLE
@@ -956,7 +1010,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             triggerStopGraceful();
         }
 
-        Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
+        Log.d(TAG, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
 
         synchronized (lockWaitForPendingFutures) {
             waitingForPendingFutures = false;
@@ -976,12 +1030,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     Thread.sleep(batcher.getDelay());
                 } catch (Exception e) {
                 }
-                Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
+                Log.d(TAG, "batcher.waitForPendingFutures()");
                 batcher.waitForPendingFutures();
             }
 
             // wait for pending featurs completed
-            Log.d(Log.TAG_SYNC, "waitPendingFuturesCompleted()");
+            Log.d(TAG, "waitPendingFuturesCompleted()");
             waitPendingFuturesCompleted();
 
             // wait for downloadToInsert batcher completed
@@ -991,7 +1045,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     Thread.sleep(downloadsToInsert.getDelay());
                 } catch (Exception e) {
                 }
-                Log.d(Log.TAG_SYNC, "downloadsToInsert.waitForPendingFutures()");
+                Log.d(TAG, "downloadsToInsert.waitForPendingFutures()");
                 downloadsToInsert.waitForPendingFutures();
             }
         }
@@ -1002,9 +1056,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             while (!pendingFutures.isEmpty()) {
                 Future future = pendingFutures.take();
                 try {
-                    Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
+                    Log.d(TAG, "calling future.get() on %s", future);
                     future.get();
-                    Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
+                    Log.d(TAG, "done calling future.get() on %s", future);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 } catch (ExecutionException e) {
@@ -1012,7 +1066,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 }
             }
         } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
+            Log.e(TAG, "Exception waiting for pending futures: %s", e);
         }
     }
 

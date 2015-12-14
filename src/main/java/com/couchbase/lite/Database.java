@@ -361,7 +361,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public boolean deleteLocalDocument(String localDocID) throws CouchbaseLiteException {
-        return this.putLocalDocument(localDocID, null);
+        return putLocalDocument(localDocID, null);
     }
 
     /**

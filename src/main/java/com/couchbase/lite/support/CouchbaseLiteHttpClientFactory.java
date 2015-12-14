@@ -41,9 +41,9 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     private SSLSocketFactory sslSocketFactory;
 
     private BasicHttpParams basicHttpParams;
-
-    public static final int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 60;
-    public static final int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
+    
+    public static int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 60;
+    public static int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
 
     /**
      * Constructor
