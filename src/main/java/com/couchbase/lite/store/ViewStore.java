@@ -67,11 +67,11 @@ public interface ViewStore {
     /**
      * Updates the indexes of one or more views in parallel.
      *
-     * @param views An array of CBL_ViewStorage instances, always including the receiver.
+     * @param views An array of ViewStore instances, always including the receiver.
+     * @return Status OK if updated or NOT_MODIFIED if already up-to-date.
      * @throws CouchbaseLiteException
      */
-    //void updateIndexes(List<ViewStorage> views) throws CouchbaseLiteException;
-    void updateIndex() throws CouchbaseLiteException;
+    Status updateIndexes(List<ViewStore> views) throws CouchbaseLiteException;
 
     /**
      * Queries the view without performing any reducing or grouping.
