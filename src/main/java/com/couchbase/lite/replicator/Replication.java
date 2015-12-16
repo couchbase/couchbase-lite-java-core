@@ -87,7 +87,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         DOC_IDS,
         REQUEST_HEADERS,
         AUTHENTICATOR,
-        CREATE_TARGET
+        CREATE_TARGET,
+        REMOTE_UUID
     }
 
     /**
@@ -700,6 +701,31 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         replicationInternal.deleteCookie(name);
     }
 
+    /**
+     * Get the remote UUID representing the remote server.
+     */
+    @InterfaceAudience.Public
+    public String getRemoteUUID() {
+        return replicationInternal.getRemoteUUID();
+    }
+
+    /**
+     * Set the remote UUID representing the remote server.
+     *
+     * In some cases, especially Peer-to-peer replication, the remote or target database
+     * might not have a fixed URL - The hostname or IP address or port could change.
+     * As a result, URL couldn't be used to represent the remote database when persistently
+     * identifying the replication. In such cases, set a remote unique identifier to represent
+     * the remote database.
+     *
+     * @param remoteUUID remote unique identifier
+     */
+    @InterfaceAudience.Public
+    public void setRemoteUUID(String remoteUUID) {
+        properties.put(ReplicationField.REMOTE_UUID, remoteUUID);
+        replicationInternal.setRemoteUUID(remoteUUID);
+    }
+
     @InterfaceAudience.Private
     protected HttpClientFactory getClientFactory() {
         return replicationInternal.getClientFactory();
@@ -827,11 +853,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * @param replicationInternal
      */
     private void addProperties(ReplicationInternal replicationInternal) {
-
         for (ReplicationField key : properties.keySet()) {
-
             Object value = properties.get(key);
-
             switch (key) {
                 case FILTER_NAME:
                     replicationInternal.setFilter((String)value);
@@ -851,6 +874,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 case REQUEST_HEADERS:
                     replicationInternal.setHeaders((Map)value);
                     break;
+                case REMOTE_UUID:
+                    replicationInternal.setRemoteUUID((String)value);
             }
         }
     }

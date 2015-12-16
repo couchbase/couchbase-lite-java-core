@@ -678,6 +678,11 @@ public final class Manager {
                 }
             }
 
+            String remoteUUID = (String) properties.get("remoteUUID");
+            if (remoteUUID != null) {
+                repl.setRemoteUUID(remoteUUID);
+            }
+
             if (push) {
                 repl.setCreateTarget(createTarget);
             }
