@@ -325,7 +325,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             } else {
                                 Status status = statusFromBulkDocsResponseItem(props);
                                 Throwable err = new CouchbaseLiteException(status);
-                                setError(err);
                                 revisionFailed(rev, err);
                             }
                         }
