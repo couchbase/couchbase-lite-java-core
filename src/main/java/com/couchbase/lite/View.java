@@ -177,6 +177,20 @@ public final class View implements ViewStoreDelegate {
     }
 
     /**
+     * Get total number of rows in the view. The view's index will be updated if needed
+     * before returning the value.
+     */
+    @InterfaceAudience.Public
+    public int getTotalRows() {
+        try {
+            updateIndex();
+        } catch (CouchbaseLiteException e) {
+            Log.e(Log.TAG_VIEW, "Update index failed when getting the total rows", e);
+        }
+        return getCurrentTotalRows();
+    }
+
+    /**
      * Get the last sequence number indexed so far.
      */
     @InterfaceAudience.Public
@@ -252,7 +266,7 @@ public final class View implements ViewStoreDelegate {
     ///////////////////////////////////////////////////////////////////////////
 
     @InterfaceAudience.Private
-    public int getTotalRows() {
+    public int getCurrentTotalRows() {
         return viewStore.getTotalRows();
     }
 
