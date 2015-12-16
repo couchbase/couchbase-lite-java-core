@@ -54,7 +54,6 @@ public class RemoteRequest implements Runnable {
     protected RemoteRequestCompletionBlock onPreCompletion;
     protected RemoteRequestCompletionBlock onCompletion;
     protected RemoteRequestCompletionBlock onPostCompletion;
-    private int retryCount;
     private Database db;
     protected HttpUriRequest request;
 
@@ -164,7 +163,6 @@ public class RemoteRequest implements Runnable {
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
-        retryCount = 0;
 
         try {
             fullBody = null;

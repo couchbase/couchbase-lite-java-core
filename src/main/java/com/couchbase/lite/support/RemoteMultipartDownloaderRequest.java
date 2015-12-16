@@ -135,11 +135,9 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
             }
         } catch (IOException e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: io exception", e, this);
-            error = e;
             respondWithResult(fullBody, e, response);
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
-            error = e;
             respondWithResult(fullBody, e, response);
         } finally {
             Log.d(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
