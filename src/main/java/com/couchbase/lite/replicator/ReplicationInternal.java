@@ -86,6 +86,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected String filterName;
     protected Map<String, Object> filterParams;
     protected List<String> documentIDs;
+    private String remoteUUID;
     protected Map<String, Object> requestHeaders;
     private String serverType;
     protected Batcher<RevisionInternal> batcher;
@@ -907,7 +908,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     public String remoteCheckpointDocID(String localUUID) {
-
         // canonicalization: make sure it produces the same checkpoint id regardless of
         // ordering of filterparams / docids
         Map<String, Object> filterParamsCanonical = null;
@@ -924,7 +924,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         // use a treemap rather than a dictionary for purposes of canonicalization
         Map<String, Object> spec = new TreeMap<String, Object>();
         spec.put("localUUID", localUUID);
-        spec.put("remoteURL", remote.toExternalForm());
         spec.put("push", !isPull());
         spec.put("continuous", isContinuous());
         if (getFilter() != null) {
@@ -935,6 +934,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
         if (docIdsSorted != null) {
             spec.put("docids", docIdsSorted);
+        }
+        if (remoteUUID != null) {
+            spec.put("remoteUUID", remoteUUID);
+        } else {
+            spec.put("remoteURL", remote.toExternalForm());
         }
 
         byte[] inputBytes = null;
@@ -1003,6 +1007,19 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.filterParams = filterParams;
     }
 
+    /**
+     * Get the remoteUUID representing the remote server.
+     */
+    public String getRemoteUUID() {
+        return remoteUUID;
+    }
+
+    /**
+     * Set the remoteUUID representing the remote server.
+     */
+    public void setRemoteUUID(String remoteUUID) {
+        this.remoteUUID = remoteUUID;
+    }
 
     abstract protected void processInbox(RevisionList inbox);
 
