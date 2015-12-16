@@ -336,11 +336,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
-                                Log.e(TAG, "RemoteRequestCompletionBlock: remainingRevs.size()=" + remainingRevs.size());
-                                //completedChangesCount.addAndGet(remainingRevs.size());
                                 for (int i = 0; i < remainingRevs.size(); i++) {
                                     RevisionInternal rev = remainingRevs.get(i);
-                                    Log.e(TAG, "RemoteRequestCompletionBlock: rev="+rev);
                                     if (shouldRetryDownload(rev.getDocID())) {
                                         bulkRevsToPull.add(rev);
                                     } else {
@@ -378,7 +375,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      * https://github.com/couchbase/couchbase-lite-net/issues/356
      */
     private boolean shouldRetryDownload(String docId) {
-        Log.e(TAG, "shouldRetryDownload: " + docId);
         Map<String, Object> localDoc = getLocalDatabase().getExistingLocalDocument(docId);
         if (localDoc == null) {
             Map<String, Object> props = new HashMap<String, Object>();
@@ -407,7 +403,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void pruneFailedDownload(String docId) {
-        Log.e(TAG, "pruneFailedDownload: " + docId);
         try {
             getLocalDatabase().deleteLocalDocument(docId);
         } catch (CouchbaseLiteException e) {
