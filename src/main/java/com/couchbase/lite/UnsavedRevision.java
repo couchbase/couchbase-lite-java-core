@@ -231,7 +231,6 @@ public final class UnsavedRevision extends Revision {
         properties.put("_attachments", attachments);
         if (attachment != null) {
             attachment.setName(name);
-            attachment.setRevision(this);
         }
     }
 }

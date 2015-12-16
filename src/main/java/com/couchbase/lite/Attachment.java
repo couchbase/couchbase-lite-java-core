@@ -94,7 +94,7 @@ public final class Attachment {
      */
     @InterfaceAudience.Public
     public Document getDocument() {
-        return revision.getDocument();
+        return revision != null ? revision.getDocument() : null;
     }
 
     /**
@@ -115,7 +115,7 @@ public final class Attachment {
 
 
     /**
-     * Get the content (aka 'body') data.
+     * Get the input stream of the content (aka 'body') data.
      * @throws CouchbaseLiteException
      */
     @InterfaceAudience.Public
@@ -128,11 +128,15 @@ public final class Attachment {
     }
 
     /**
-     * This is just for compatibility with iOS implementation.
-     *
-     * @exclude
+     * Get the URL of the file containing the contents.
+     * This property is somewhat deprecated and is made available only for use with platform APIs that
+     * require file paths/URLs, e.g. some media playback APIs. Whenever possible, use the `getContent()`
+     * method to get the input stream of the content instead.
+     * The file must be treated as read-only! DO NOT MODIFY OR DELETE IT.
+     * If the database is encrypted, attachment files are also encrypted and not directly readable,
+     * so this property will return null.
      */
-    @InterfaceAudience.Private
+    @InterfaceAudience.Public
     public URL getContentURL() {
         try {
             return internalAttachment().getContentURL();

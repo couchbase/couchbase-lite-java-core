@@ -299,7 +299,7 @@ public class BlobStore {
         return action;
     }
 
-    private void changeEncryptionKey(SymmetricKey newKey) throws ActionException {
+    public void changeEncryptionKey(SymmetricKey newKey) throws ActionException {
         actionToChangeEncryptionKey(newKey).run();
     }
 
