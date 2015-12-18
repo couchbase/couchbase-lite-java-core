@@ -68,6 +68,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     private int viewID;
     private View.TDViewCollation collation;
     private String _mapTableName;
+    private SQLiteViewStore curView; // Current view used when update index
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructor
@@ -247,8 +248,6 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     @InterfaceAudience.Private
     public Status updateIndexes(List<ViewStore>inputViews) throws CouchbaseLiteException {
         Log.v(Log.TAG_VIEW, "Re-indexing view: %s", name);
-        assert (delegate.getMap() != null);
-
         if (getViewID() <= 0) {
             String msg = String.format("getViewID() < 0");
             throw new CouchbaseLiteException(msg, new Status(Status.NOT_FOUND));
@@ -269,20 +268,21 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             // Check whether we need to update at all,
             // and remove obsolete emitted results from the 'maps' table:
             long minLastSequence = dbMaxSequence;
-            long[] viewLastSequence = new long[inputViews.size()];
+            final long[] viewLastSequence = new long[inputViews.size()];
             int deletedCount = 0;
             int i = 0;
-            HashSet<String> docTypes = new HashSet<String>();
+            final HashSet<String> docTypes = new HashSet<String>();
             HashMap<String, String> viewDocTypes = null;
             boolean allDocTypes = false;
-            HashMap<Integer, Integer> viewTotalRows = new HashMap<Integer, Integer>();
-            ArrayList<SQLiteViewStore> views = new ArrayList<SQLiteViewStore>();
-            ArrayList<Mapper> mapBlocks = new ArrayList<Mapper>();
+            final HashMap<Integer, Integer> viewTotalRows = new HashMap<Integer, Integer>();
+            final ArrayList<SQLiteViewStore> views = new ArrayList<SQLiteViewStore>();
+            final ArrayList<Mapper> mapBlocks = new ArrayList<Mapper>();
 
             for (ViewStore v : inputViews) {
+                assert(v != null);
                 SQLiteViewStore view = (SQLiteViewStore)v;
                 ViewStoreDelegate delegate = view.getDelegate();
-                Mapper map = delegate.getMap();
+                Mapper map = delegate != null ? delegate.getMap() : null;
                 if (map == null) {
                     if (view == this) {
                         String msg = String.format("Cannot index view %s: " +
@@ -311,13 +311,13 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 long last = view == this ? forViewLastSequence : view.getLastSequenceIndexed();
                 viewLastSequence[i++] = last;
                 if (last < 0) {
-                    String msg = String.format("last < 0 (%s)", last);
+                    String msg = String.format("last < 0 (%d)", last);
                     throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
                 } else if (last < dbMaxSequence) {
                     if (last == 0)
                         view.createIndex();
                     minLastSequence = Math.min(minLastSequence, last);
-                    Log.v(Log.TAG_VIEW, "    %s last indexed at #%s", view.getName(), last);
+                    Log.v(Log.TAG_VIEW, "    %s last indexed at #%d", view.getName(), last);
 
                     String docType = delegate.getDocumentType();
                     if (docType != null) {
@@ -352,13 +352,13 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             }
 
             if (minLastSequence == dbMaxSequence) {
-                Log.v(Log.TAG_VIEW, "minLastSequence (%s) == dbMaxSequence (%s), nothing to do",
+                Log.v(Log.TAG_VIEW, "minLastSequence (%d) == dbMaxSequence (%d), nothing to do",
                         minLastSequence, dbMaxSequence);
                 success = true;
                 return new Status(Status.NOT_MODIFIED);
             }
 
-            Log.v(Log.TAG_VIEW, "Updating indexes of (%s) from #%s to #%s ...",
+            Log.v(Log.TAG_VIEW, "Updating indexes of (%s) from #%d to #%d ...",
                     viewNames(views), minLastSequence, dbMaxSequence);
 
             // This is the emit() block, which gets called from within the user-defined map() block
@@ -368,19 +368,9 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 @Override
                 public void emit(Object key, Object value) {
                     try {
-                        String valueJson;
-                        String keyJson = Manager.getObjectMapper().writeValueAsString(key);
-                        if (value == null) {
-                            valueJson = null;
-                        } else {
-                            valueJson = Manager.getObjectMapper().writeValueAsString(value);
-                        }
-
-                        // NOTE: execSQL() is little faster than insert()
-                        String[] args = {Long.toString(sequence), keyJson, valueJson};
-                        store.getStorageEngine().execSQL(queryString(
-                                "INSERT INTO 'maps_#' (sequence, key, value) VALUES(?,?,?)"), args);
-                        insertedCount.incrementAndGet();
+                        curView.emit(key, value, this.sequence); // emit block's sequence
+                        int curViewID = curView.getViewID();
+                        viewTotalRows.put(curViewID, viewTotalRows.get(curViewID) + 1);
                     } catch (Exception e) {
                         Log.e(Log.TAG_VIEW, "Error emitting", e);
                         throw new RuntimeException(e);
@@ -534,6 +524,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 // Call the user-defined map() to emit new key/value pairs from this revision:
                 i = -1;
                 for (SQLiteViewStore view : views) {
+                    curView = view;
                     ++i;
                     if (viewLastSequence[i] < realSequence) {
                         if (checkDocTypes) {
@@ -546,7 +537,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                             sequence, docID, view.getName());
                     try {
                         emitBlock.setSequence(sequence);
-                        delegate.getMap().map(curDoc, emitBlock);
+                        mapBlocks.get(i).map(curDoc, emitBlock);
                     } catch (Throwable e) {
                         String msg = String.format("Error when calling map block of view '%s'",
                                 view.getName());
@@ -566,7 +557,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 String[] whereArgs = {Integer.toString(view.getViewID())};
                 store.getStorageEngine().update("views", updateValues, "view_id=?", whereArgs);
             }
-            Log.v(Log.TAG_VIEW, "...Finished re-indexing (%s) to #%s (deleted %s, added %s)",
+            Log.v(Log.TAG_VIEW, "...Finished re-indexing (%s) to #%d (deleted %d, added %d)",
                     viewNames(views), dbMaxSequence, deletedCount, insertedCount);
 
             success = true;
@@ -574,11 +565,27 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         } catch (SQLException ex) {
             throw new CouchbaseLiteException(ex, new Status(Status.DB_ERROR));
         } finally {
+            curView = null;
             if (cursor != null)
                 cursor.close();
             if (store != null)
                 store.endTransaction(success);
         }
+    }
+
+    protected void emit(Object key, Object value, long sequence) throws JsonProcessingException {
+        String valueJson;
+        String keyJson = Manager.getObjectMapper().writeValueAsString(key);
+        if (value == null) {
+            valueJson = null;
+        } else {
+            valueJson = Manager.getObjectMapper().writeValueAsString(value);
+        }
+
+        // NOTE: execSQL() is little faster than insert()
+        String[] args = {Long.toString(sequence), keyJson, valueJson};
+        store.getStorageEngine().execSQL(queryString(
+                "INSERT INTO 'maps_#' (sequence, key, value) VALUES(?,?,?)"), args);
     }
 
     /**
