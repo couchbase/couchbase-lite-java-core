@@ -19,6 +19,7 @@ package com.couchbase.lite.store;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Emitter;
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.Mapper;
 import com.couchbase.lite.Predicate;
 import com.couchbase.lite.QueryOptions;
 import com.couchbase.lite.QueryRow;
@@ -40,8 +41,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SQLiteViewStore implements ViewStore, QueryRowStore {
     public static String TAG = Log.TAG_VIEW;
@@ -65,6 +68,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     private int viewID;
     private View.TDViewCollation collation;
     private String _mapTableName;
+    private SQLiteViewStore curView; // Current view used when update index
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructor
@@ -234,83 +238,142 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     }
 
     /**
-     * Updates the view's _index (incrementally) if necessary.
+     * Updates the indexes of one or more views in parallel.
      *
-     * @return 200 if updated, 304 if already up-to-date, else an error code
+     * @param inputViews An array of ViewStore instances, always including the receiver.
+     * @return Status OK if updated or NOT_MODIFIED if already up-to-date.
+     * @throws CouchbaseLiteException
      */
     @Override
     @InterfaceAudience.Private
-    public void updateIndex() throws CouchbaseLiteException {
+    public Status updateIndexes(List<ViewStore>inputViews) throws CouchbaseLiteException {
         Log.v(Log.TAG_VIEW, "Re-indexing view: %s", name);
-        assert (delegate.getMap() != null);
-
         if (getViewID() <= 0) {
             String msg = String.format("getViewID() < 0");
             throw new CouchbaseLiteException(msg, new Status(Status.NOT_FOUND));
         }
 
         store.beginTransaction();
-        Status result = new Status(Status.INTERNAL_SERVER_ERROR);
+        boolean success = false;
         Cursor cursor = null;
-
         try {
-            long last = getLastSequenceIndexed();
-            long dbMaxSequence = store.getLastSequence();
+            // If the view the update is for doesn't need any update, don't do anything:
+            final long dbMaxSequence = store.getLastSequence();
+            final long forViewLastSequence = getLastSequenceIndexed();
+            if (forViewLastSequence >= dbMaxSequence) {
+                success = true;
+                return new Status(Status.NOT_MODIFIED);
+            }
+
+            // Check whether we need to update at all,
+            // and remove obsolete emitted results from the 'maps' table:
             long minLastSequence = dbMaxSequence;
+            final long[] viewLastSequence = new long[inputViews.size()];
+            int deletedCount = 0;
+            int i = 0;
+            final HashSet<String> docTypes = new HashSet<String>();
+            HashMap<String, String> viewDocTypes = null;
+            boolean allDocTypes = false;
+            final HashMap<Integer, Integer> viewTotalRows = new HashMap<Integer, Integer>();
+            final ArrayList<SQLiteViewStore> views = new ArrayList<SQLiteViewStore>();
+            final ArrayList<Mapper> mapBlocks = new ArrayList<Mapper>();
 
-            // First remove obsolete emitted results from the 'maps' table:
-            if (last < 0) {
-                String msg = String.format("last < 0 (%s)", last);
-                throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
-            } else if (last < dbMaxSequence) {
+            for (ViewStore v : inputViews) {
+                assert(v != null);
+                SQLiteViewStore view = (SQLiteViewStore)v;
+                ViewStoreDelegate delegate = view.getDelegate();
+                Mapper map = delegate != null ? delegate.getMap() : null;
+                if (map == null) {
+                    if (view == this) {
+                        String msg = String.format("Cannot index view %s: " +
+                                "no map block registered", view.getName());
+                        Log.e(Log.TAG_VIEW, msg);
+                        throw new CouchbaseLiteException(msg, new Status(Status.BAD_REQUEST));
+                    }
+                    Log.v(Log.TAG_VIEW, "    %s has no map block; skipping it", view.getName());
+                    continue;
+                }
 
-                minLastSequence = Math.min(minLastSequence, last);
+                views.add(view);
+                mapBlocks.add(map);
 
-                if (last == 0) {
-                    // If the lastSequence has been reset to 0, make sure to remove any leftover rows:
-                    store.getStorageEngine().execSQL(queryString("DELETE FROM 'maps_#'"));
-                } else {
-                    store.optimizeSQLIndexes();
-                    // Delete all obsolete map results (ones from since-replaced revisions):
-                    String[] args = {Long.toString(last), Long.toString(last)};
-                    store.getStorageEngine().execSQL(
-                            queryString("DELETE FROM 'maps_#' WHERE sequence IN ("
-                                    + "SELECT parent FROM revs WHERE sequence>? "
-                                    + "AND +parent>0 AND +parent<=?)"), args);
+                int viewID = view.getViewID();
+                if (viewID <= 0) {
+                    String message = String.format("View '%s' not found in database",
+                            view.getName());
+                    Log.e(Log.TAG_VIEW, message);
+                    throw new CouchbaseLiteException(message, new Status(Status.NOT_FOUND));
+                }
 
+                int totalRows = view.getTotalRows();
+                viewTotalRows.put(viewID, totalRows);
+
+                long last = view == this ? forViewLastSequence : view.getLastSequenceIndexed();
+                viewLastSequence[i++] = last;
+                if (last < 0) {
+                    String msg = String.format("last < 0 (%d)", last);
+                    throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
+                } else if (last < dbMaxSequence) {
+                    if (last == 0)
+                        view.createIndex();
+                    minLastSequence = Math.min(minLastSequence, last);
+                    Log.v(Log.TAG_VIEW, "    %s last indexed at #%d", view.getName(), last);
+
+                    String docType = delegate.getDocumentType();
+                    if (docType != null) {
+                        docTypes.add(docType);
+                        if (viewDocTypes == null)
+                            viewDocTypes = new HashMap<String, String>();
+                        viewDocTypes.put(view.getName(), docType);
+                    } else {
+                        allDocTypes = true;
+                    }
+
+                    int changes = 0;
+                    if (last == 0) {
+                        changes = store.getStorageEngine().delete(queryString("maps_#"), null, null);
+                    } else {
+                        store.optimizeSQLIndexes();
+                        String[] args = {Long.toString(last), Long.toString(last)};
+                        changes = store.getStorageEngine().delete(queryString("maps_#"),
+                                        "sequence IN (SELECT parent FROM revs " +
+                                        "WHERE sequence>? AND +parent>0 AND +parent<=?)", args);
+                    }
+
+                    // Update #deleted rows:
+                    deletedCount += changes;
+
+                    // Only count these deletes as changes if this isn't a view reset to 0
+                    if (last != 0) {
+                        int newTotalRows = viewTotalRows.get(viewID) - changes;
+                        viewTotalRows.put(viewID, newTotalRows);
+                    }
                 }
             }
 
             if (minLastSequence == dbMaxSequence) {
-                // nothing to do (eg,  kCBLStatusNotModified)
-                Log.v(Log.TAG_VIEW, "minLastSequence (%s) == dbMaxSequence (%s), nothing to do",
+                Log.v(Log.TAG_VIEW, "minLastSequence (%d) == dbMaxSequence (%d), nothing to do",
                         minLastSequence, dbMaxSequence);
-                result.setCode(Status.NOT_MODIFIED);
-                return;
+                success = true;
+                return new Status(Status.NOT_MODIFIED);
             }
 
-            // This is the emit() block, which gets called from within the
-            // user-defined map() block
+            Log.v(Log.TAG_VIEW, "Updating indexes of (%s) from #%d to #%d ...",
+                    viewNames(views), minLastSequence, dbMaxSequence);
+
+            // This is the emit() block, which gets called from within the user-defined map() block
             // that's called down below.
+            final AtomicInteger insertedCount = new AtomicInteger(0);
             AbstractMapEmitBlock emitBlock = new AbstractMapEmitBlock() {
                 @Override
                 public void emit(Object key, Object value) {
                     try {
-                        String valueJson;
-                        String keyJson = Manager.getObjectMapper().writeValueAsString(key);
-                        if (value == null) {
-                            valueJson = null;
-                        } else {
-                            valueJson = Manager.getObjectMapper().writeValueAsString(value);
-                        }
-
-                        // NOTE: execSQL() is little faster than insert()
-                        String[] args = {Long.toString(sequence), keyJson, valueJson};
-                        store.getStorageEngine().execSQL(queryString(
-                                "INSERT INTO 'maps_#' (sequence, key, value) VALUES(?,?,?)"), args);
+                        curView.emit(key, value, this.sequence); // emit block's sequence
+                        int curViewID = curView.getViewID();
+                        viewTotalRows.put(curViewID, viewTotalRows.get(curViewID) + 1);
                     } catch (Exception e) {
                         Log.e(Log.TAG_VIEW, "Error emitting", e);
-                        // find a better way to propagate this back
+                        throw new RuntimeException(e);
                     }
                 }
             };
@@ -325,9 +388,8 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             // StringBuffer sql = new StringBuffer( "SELECT revs.doc_id, sequence, docid, revid,
             // json, no_attachments, deleted FROM revs, docs WHERE sequence>? AND current!=0 ");
 
-            //TODO: boolean checkDocTypes = docTypes.count > 1 || (allDocTypes && docTypes.count > 0);
-            boolean checkDocTypes = false;
-            StringBuffer sql = new StringBuffer(
+            boolean checkDocTypes = docTypes.size() > 1 || (allDocTypes && docTypes.size() > 0);
+            StringBuilder sql = new StringBuilder(
                     "SELECT revs.doc_id, sequence, docid, revid, no_attachments, deleted ");
             if (checkDocTypes)
                 sql.append(", doc_type ");
@@ -335,13 +397,17 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             if (minLastSequence == 0) {
                 sql.append("AND deleted=0 ");
             }
+            if (!allDocTypes && docTypes.size() > 0) {
+                String docTypesString = getJoinedSQLQuotedStrings(
+                        docTypes.toArray(new String[docTypes.size()]));
+                sql.append("AND doc_type IN (").append(docTypesString).append(") ");
+            }
             sql.append("AND revs.doc_id = docs.doc_id ORDER BY revs.doc_id, revid DESC");
             String[] selectArgs = {Long.toString(minLastSequence)};
             cursor = store.getStorageEngine().rawQuery(sql.toString(), selectArgs);
 
-            boolean keepGoing = cursor.moveToNext();
+            boolean keepGoing = cursor.moveToNext(); // Go to first result row
             while (keepGoing) {
-
                 // NOTE: skip row if 1st column is null
                 // https://github.com/couchbase/couchbase-lite-java-core/issues/497
                 if (cursor.isNull(0)) {
@@ -358,45 +424,68 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     keepGoing = cursor.moveToNext();
                     continue;
                 }
-                String revId = cursor.getString(3);
-
-                boolean noAttachments = cursor.getInt(4) > 0;
+                String revID = cursor.getString(3);
                 boolean deleted = cursor.getInt(5) > 0;
                 String docType = checkDocTypes ? cursor.getString(6) : null;
 
+                // Skip rows with the same doc_id -- these are losing conflicts.
+                // NOTE: Or Skip rows if 1st column is null
+                // https://github.com/couchbase/couchbase-lite-java-core/issues/497
+                ArrayList<String> conflicts = null;
+                boolean isNull;
                 while ((keepGoing = cursor.moveToNext()) &&
-                        (cursor.isNull(0) || cursor.getLong(0) == docID)) {
-                    // Skip rows with the same doc_id -- these are losing conflicts.
-                    // NOTE: Or Skip rows if 1st column is null
-                    // https://github.com/couchbase/couchbase-lite-java-core/issues/497
+                        ((isNull = cursor.isNull(0)) || cursor.getLong(0) == docID)) {
+                    if (isNull)
+                        continue;
+                    if (!deleted) {
+                        if (conflicts == null)
+                            conflicts = new ArrayList<String>();
+                        conflicts.add(cursor.getString(3));
+                    }
                 }
 
+                long realSequence = sequence; // because sequence may be changed, below
                 if (minLastSequence > 0) {
                     // Find conflicts with documents from previous indexings.
-                    String[] selectArgs2 = {Long.toString(docID), Long.toString(minLastSequence)};
-
                     Cursor cursor2 = null;
                     try {
+                        String[] selectArgs2 = {Long.toString(docID), Long.toString(minLastSequence)};
                         cursor2 = store.getStorageEngine().rawQuery(
                                 "SELECT revid, sequence FROM revs "
                                         + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
-                                        + "ORDER BY revID DESC "
-                                        + "LIMIT 1", selectArgs2);
+                                        + "ORDER BY revID DESC ", selectArgs2);
 
                         if (cursor2.moveToNext()) {
-                            String oldRevId = cursor2.getString(0);
+                            String oldRevID = cursor2.getString(0);
                             // This is the revision that used to be the 'winner'.
                             // Remove its emitted rows:
                             long oldSequence = cursor2.getLong(1);
                             String[] args = {Long.toString(oldSequence)};
-                            store.getStorageEngine().execSQL(
-                                    queryString("DELETE FROM 'maps_#' WHERE sequence=?"), args);
-                            if (deleted || RevisionInternal.CBLCompareRevIDs(oldRevId, revId) > 0) {
+                            for (SQLiteViewStore view : views) {
+                                int changes = view.store.getStorageEngine().
+                                        delete(view.queryString("maps_#"), "sequence=?", args);
+                                deletedCount += changes;
+                                int thisViewID = view.getViewID();
+                                int newTotalRows = viewTotalRows.get(thisViewID) - changes;
+                                viewTotalRows.put(thisViewID, newTotalRows);
+                            }
+
+                            if (deleted || RevisionInternal.CBLCompareRevIDs(oldRevID, revID) > 0) {
                                 // It still 'wins' the conflict, so it's the one that
                                 // should be mapped [again], not the current revision!
-                                revId = oldRevId;
-                                sequence = oldSequence;
+                                revID = oldRevID;
                                 deleted = false;
+                                sequence = oldSequence;
+                            }
+
+                            if (!deleted) {
+                                // Conflict revisions:
+                                if (conflicts == null)
+                                    conflicts = new ArrayList<String>();
+                                conflicts.add(oldRevID);
+                                while (cursor2.moveToNext()) {
+                                    conflicts.add(cursor2.getString(0));
+                                }
                             }
                         }
                     } finally {
@@ -406,62 +495,97 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     }
                 }
 
-                if (deleted) {
+                if (deleted)
                     continue;
-                }
 
+                // Get json blob:
                 String[] selectArgs3 = {Long.toString(sequence)};
                 byte[] json = SQLiteUtils.byteArrayResultForQuery(store.getStorageEngine(),
                         "SELECT json FROM revs WHERE sequence=?", selectArgs3);
 
                 // Get the document properties, to pass to the map function:
-                Map<String, Object> properties = store.documentPropertiesFromJSON(
+                Map<String, Object> curDoc = store.documentPropertiesFromJSON(
                         json,
                         docId,
-                        revId,
+                        revID,
                         false,
                         sequence
                 );
-                if (properties != null) {
-                    //TODO checkDocTypes here
 
-                    // Call the user-defined map() to emit new key/value
-                    // pairs from this revision:
-                    emitBlock.setSequence(sequence);
-                    delegate.getMap().map(properties, emitBlock);
+                if (curDoc == null) {
+                    Log.w(Log.TAG_VIEW, "Failed to parse JSON of doc %s rev %s", docID, revID);
+                    continue;
+                }
+                curDoc.put("_local_seq", sequence);
 
-                    properties.clear();
+                if (conflicts != null)
+                    curDoc.put("_conflicts", conflicts);
+
+                // Call the user-defined map() to emit new key/value pairs from this revision:
+                i = -1;
+                for (SQLiteViewStore view : views) {
+                    curView = view;
+                    ++i;
+                    if (viewLastSequence[i] < realSequence) {
+                        if (checkDocTypes) {
+                            String viewDocType = viewDocTypes.get(view.getName());
+                            if (viewDocType != null && !viewDocType.equals(docType))
+                                continue; // skip; view's documentType doesn't match this doc
+                        }
+                    }
+                    Log.v(Log.TAG_VIEW, "#%s: map '%s' for view %s...",
+                            sequence, docID, view.getName());
+                    try {
+                        emitBlock.setSequence(sequence);
+                        mapBlocks.get(i).map(curDoc, emitBlock);
+                    } catch (Throwable e) {
+                        String msg = String.format("Error when calling map block of view '%s'",
+                                view.getName());
+                        Log.e(Log.TAG_VIEW, msg, e);
+                        throw new CouchbaseLiteException(msg, e, new Status(Status.CALLBACK_ERROR));
+                    }
                 }
             }
 
             // Finally, record the last revision sequence number that was indexed and update #rows:
-            finishCreatingIndex();
-            int newTotalRows = countTotalRows();
+            for (SQLiteViewStore view : views) {
+                view.finishCreatingIndex();
+                int newTotalRows = viewTotalRows.get(view.getViewID());
+                ContentValues updateValues = new ContentValues();
+                updateValues.put("lastSequence", dbMaxSequence);
+                updateValues.put("total_docs", newTotalRows);
+                String[] whereArgs = {Integer.toString(view.getViewID())};
+                store.getStorageEngine().update("views", updateValues, "view_id=?", whereArgs);
+            }
+            Log.v(Log.TAG_VIEW, "...Finished re-indexing (%s) to #%d (deleted %d, added %d)",
+                    viewNames(views), dbMaxSequence, deletedCount, insertedCount);
 
-            ContentValues updateValues = new ContentValues();
-            updateValues.put("lastSequence", dbMaxSequence);
-            updateValues.put("total_docs", newTotalRows);
-            String[] whereArgs = {Integer.toString(getViewID())};
-            store.getStorageEngine().update("views", updateValues, "view_id=?", whereArgs);
-
-            // FIXME actually count number added :)
-            Log.v(Log.TAG_VIEW, "Finished re-indexing view: %s " + " up to sequence %s",
-                    name, dbMaxSequence);
-            result.setCode(Status.OK);
+            success = true;
+            return new Status(Status.OK);
         } catch (SQLException ex) {
             throw new CouchbaseLiteException(ex, new Status(Status.DB_ERROR));
         } finally {
-            if (cursor != null) {
+            curView = null;
+            if (cursor != null)
                 cursor.close();
-            }
-            if (!result.isSuccessful()) {
-                Log.w(Log.TAG_VIEW, "Failed to rebuild view %s.  Result code: %d",
-                        name, result.getCode());
-            }
-            if (store != null) {
-                store.endTransaction(result.isSuccessful());
-            }
+            if (store != null)
+                store.endTransaction(success);
         }
+    }
+
+    protected void emit(Object key, Object value, long sequence) throws JsonProcessingException {
+        String valueJson;
+        String keyJson = Manager.getObjectMapper().writeValueAsString(key);
+        if (value == null) {
+            valueJson = null;
+        } else {
+            valueJson = Manager.getObjectMapper().writeValueAsString(value);
+        }
+
+        // NOTE: execSQL() is little faster than insert()
+        String[] args = {Long.toString(sequence), keyJson, valueJson};
+        store.getStorageEngine().execSQL(queryString(
+                "INSERT INTO 'maps_#' (sequence, key, value) VALUES(?,?,?)"), args);
     }
 
     /**
@@ -738,6 +862,39 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             }
         }
         return viewID;
+    }
+
+    private static String viewNames(List<SQLiteViewStore>views) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (ViewStore view : views) {
+            if (first)
+                first = false;
+            else
+                sb.append(", ");
+            sb.append(view.getName());
+        }
+        return sb.toString();
+    }
+
+    private static String getJoinedSQLQuotedStrings(String[] strings) {
+        if (strings == null)
+            return null;
+
+        if (strings.length == 0)
+            return "";
+
+        StringBuilder sb = new StringBuilder("'");
+        boolean first = true;
+        for (String s : strings) {
+            if (first)
+                first = false;
+            else
+                sb.append("','");
+            sb.append(s.replace("'", "''"));
+        }
+        sb.append("'");
+        return sb.toString();
     }
 
     // pragma mark - QUERYING:

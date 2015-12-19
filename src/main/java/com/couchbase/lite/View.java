@@ -18,11 +18,13 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.store.SQLiteViewStore;
 import com.couchbase.lite.store.ViewStore;
 import com.couchbase.lite.store.ViewStoreDelegate;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +33,6 @@ import java.util.Map;
  * Represents a view available in a database.
  */
 public final class View implements ViewStoreDelegate {
-
     public enum TDViewCollation {
         TDViewCollationUnicode, TDViewCollationRaw, TDViewCollationASCII
     }
@@ -49,15 +50,6 @@ public final class View implements ViewStoreDelegate {
     // Constructor
     ///////////////////////////////////////////////////////////////////////////
 
-    /*
-    @InterfaceAudience.Private
-    protected View(Database database, String name) {
-        this.database = database;
-        this.name = name;
-        this.viewStore = database.getStore().getViewStorage(name, true);
-        this.viewStore.setDelegate(this);
-    }
-    */
     @InterfaceAudience.Private
     protected View(Database database, String name, boolean create) throws CouchbaseLiteException{
         this.database = database;
@@ -103,6 +95,7 @@ public final class View implements ViewStoreDelegate {
      */
     @Override
     public String getDocumentType() {
+        // https://github.com/couchbase/couchbase-lite-java-core/issues/872:
         return null;
     }
 
@@ -284,12 +277,69 @@ public final class View implements ViewStoreDelegate {
 
     /**
      * Updates the view's index (incrementally) if necessary.
+     * Multiple views whose name starts with the same prefix before the slash as the view's
+     * will be indexed together at once.
      *
-     * @return 200 if updated, 304 if already up-to-date, else an error code
+     * @return Status OK if updated or NOT_MODIFIED if already up-to-date.
+     * @throws CouchbaseLiteException
      */
     @InterfaceAudience.Private
-    public void updateIndex() throws CouchbaseLiteException {
-        viewStore.updateIndex();
+    public Status updateIndex() throws CouchbaseLiteException {
+        if (viewStore instanceof SQLiteViewStore)
+            return updateIndexes(getViewsInGroup());
+        else {
+            // Disable group view indexing until #873 is fixed.
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/873:
+            return updateIndexAlone();
+        }
+    }
+
+    /**
+     * Updates the view's index (incrementally) if necessary.
+     * Only the view's index alone will be updated.
+     *
+     * @return Status OK if updated or NOT_MODIFIED if already up-to-date.
+     * @throws CouchbaseLiteException
+     */
+    @InterfaceAudience.Private
+    public Status updateIndexAlone() throws CouchbaseLiteException {
+        return updateIndexes(Arrays.asList(new View[] {this}));
+    }
+
+    /**
+     * Update multiple view indexes at once.
+     *
+     * @param views a list of views whose index will be updated.
+     * @throws CouchbaseLiteException
+     */
+    @InterfaceAudience.Private
+    protected Status updateIndexes(List<View> views) throws CouchbaseLiteException {
+        List<ViewStore> storages = new ArrayList<ViewStore>();
+        for (View view : views) {
+            storages.add(view.viewStore);
+        }
+        return viewStore.updateIndexes(storages);
+    }
+
+    /**
+     * Get all views that have the same prefix if specified.
+     * The prefix ends with slash '/' character.
+     *
+     * @return An array of all views with the same prefix.
+     */
+    @InterfaceAudience.Private
+    protected List<View> getViewsInGroup() {
+        List<View> views = new ArrayList<View>();
+        int slash = name.indexOf("/");
+        if (slash > 0) {
+            String prefix = name.substring(0, slash + 1);
+            for (View view : database.getAllViews()) {
+                if (view.name.startsWith(prefix))
+                    views.add(view);
+            }
+        } else
+            views.add(this);
+        return views;
     }
 
     /**
