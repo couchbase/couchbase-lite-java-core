@@ -81,6 +81,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private URLConnection connection;
     private Map<String, String> queries;
     private boolean changesIncludesDocs = false;
+    private boolean changesIncludesConflicts = false;
     private RouterCallbackBlock callbackBlock;
     private boolean responseSent = false;
     private ReplicationFilter changesFilter;
@@ -1466,11 +1467,24 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      */
     @Override
     public void changed(Database.ChangeEvent event) {
-
         List<DocumentChange> changes = event.getChanges();
         for (DocumentChange change : changes) {
-
             RevisionInternal rev = change.getAddedRevision();
+
+            String winningRevID = change.getWinningRevisionID();
+            if (!this.changesIncludesConflicts) {
+                if (winningRevID == null)
+                    continue; // // this change doesn't affect the winning rev ID, no need to send it
+                else if (!winningRevID.equals(rev.getRevID())) {
+                    // This rev made a _different_ rev current, so substitute that one.
+                    // We need to emit the current sequence # in the feed, so put it in the rev.
+                    // This isn't correct internally (this is an old rev so it has an older sequence)
+                    // but consumers of the _changes feed don't care about the internal state.
+                    RevisionInternal mRev = db.getDocument(rev.getDocID(), winningRevID, changesIncludesDocs);
+                    mRev.setSequence(rev.getSequence());
+                    rev = mRev;
+                }
+            }
 
             final boolean allowRevision = event.getSource().runFilter(changesFilter, changesFilterParams, rev);
             if (!allowRevision) {
@@ -1507,15 +1521,18 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public Status do_GET_Document_changes(Database _db, String docID, String _attachmentName) {
         // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
-        ChangesOptions options = new ChangesOptions();
+
+        // Get options:
         changesIncludesDocs = getBooleanQuery("include_docs");
-        options.setIncludeDocs(changesIncludesDocs);
         String style = getQuery("style");
-        if (style != null && style.equals("all_docs")) {
-            options.setIncludeConflicts(true);
-        }
-        //options.setContentOptions(getContentOptions());
+        if (style != null && style.equals("all_docs"))
+            changesIncludesConflicts = true;
+
+        ChangesOptions options = new ChangesOptions();
+        options.setIncludeDocs(changesIncludesDocs);
+        options.setIncludeConflicts(changesIncludesConflicts);
         options.setSortBySequence(!options.isIncludeConflicts());
+        // TODO: descending option is not supported by ChangesOptions
         options.setLimit(getIntQuery("limit", options.getLimit()));
 
         int since = getIntQuery("since", 0);
@@ -1800,18 +1817,18 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     /**
      * NOTE this departs from the iOS version, returning revision, passing status back by reference
-     *
+     * <p/>
      * - (CBLStatus) update: (CBLDatabase*)db
-     *                docID: (NSString*)docID
-     *                 body: (CBL_Body*)body
-     *             deleting: (BOOL)deleting
-     *        allowConflict: (BOOL)allowConflict
-     *           createdRev: (CBL_Revision**)outRev
-     *                error: (NSError**)outError
+     * docID: (NSString*)docID
+     * body: (CBL_Body*)body
+     * deleting: (BOOL)deleting
+     * allowConflict: (BOOL)allowConflict
+     * createdRev: (CBL_Revision**)outRev
+     * error: (NSError**)outError
      */
     private RevisionInternal update(Database _db, String docID, Body body, boolean deleting, boolean allowConflict, Status outStatus) {
 
-        if(body != null && !body.isValidJSON()){
+        if (body != null && !body.isValidJSON()) {
             outStatus.setCode(Status.BAD_JSON);
             return null;
         }
