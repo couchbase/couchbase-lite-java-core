@@ -285,13 +285,7 @@ public final class View implements ViewStoreDelegate {
      */
     @InterfaceAudience.Private
     public Status updateIndex() throws CouchbaseLiteException {
-        if (viewStore instanceof SQLiteViewStore)
-            return updateIndexes(getViewsInGroup());
-        else {
-            // Disable group view indexing until #873 is fixed.
-            // https://github.com/couchbase/couchbase-lite-java-core/issues/873:
-            return updateIndexAlone();
-        }
+        return updateIndexes(getViewsInGroup());
     }
 
     /**
