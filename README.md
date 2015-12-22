@@ -1,6 +1,6 @@
 # What is it?
 
-[![Join the chat at https://gitter.im/couchbase/mobile](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/couchbase/mobile?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Gitter](https://badges.gitter.im/couchbase/couchbase-lite-java-core.svg)](https://gitter.im/couchbase/couchbase-lite-java-core?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 The [Couchbase Lite Android](https://github.com/couchbase/couchbase-lite-android) library is split into two parts:
 
