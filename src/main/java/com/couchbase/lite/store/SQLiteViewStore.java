@@ -470,9 +470,11 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                                 viewTotalRows.put(thisViewID, newTotalRows);
                             }
 
+                            String conflictRevID = oldRevID;
                             if (deleted || RevisionInternal.CBLCompareRevIDs(oldRevID, revID) > 0) {
                                 // It still 'wins' the conflict, so it's the one that
                                 // should be mapped [again], not the current revision!
+                                conflictRevID = revID;
                                 revID = oldRevID;
                                 deleted = false;
                                 sequence = oldSequence;
@@ -482,7 +484,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                                 // Conflict revisions:
                                 if (conflicts == null)
                                     conflicts = new ArrayList<String>();
-                                conflicts.add(oldRevID);
+                                conflicts.add(conflictRevID);
                                 while (cursor2.moveToNext()) {
                                     conflicts.add(cursor2.getString(0));
                                 }
