@@ -18,7 +18,6 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.store.SQLiteViewStore;
 import com.couchbase.lite.store.ViewStore;
 import com.couchbase.lite.store.ViewStoreDelegate;
 import com.couchbase.lite.util.Log;
@@ -88,15 +87,21 @@ public final class View implements ViewStoreDelegate {
     }
 
     /**
-     * If this property is set, only documents whose "type" property is equal to its value will be
-     * passed to the map block and indexed. This can speed up indexing.
-     * Just like the map block, this property is not persistent; it needs to be set at runtime before
-     * the view is queried. And if its value changes, the view's version also needs to change.
+     * Get document type.
      */
     @Override
     public String getDocumentType() {
-        // https://github.com/couchbase/couchbase-lite-java-core/issues/872:
-        return null;
+        return database.getViewDocumentType(name);
+    }
+
+    /**
+     * Set document type. If the document type is set, only documents whose "type" property
+     * is equal to its value will be passed to the map block and indexed. This can speed up indexing.
+     * Just like the map block, this property is not persistent; it needs to be set at runtime before
+     * the view is queried. And if its value changes, the view's version also needs to change.
+     */
+    public void setDocumentType(String docType) {
+        database.setViewDocumentType(docType, name);
     }
 
     ///////////////////////////////////////////////////////////////////////////

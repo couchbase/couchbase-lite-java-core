@@ -95,6 +95,7 @@ public class Database implements StoreDelegate {
     private boolean open = false;
 
     private Map<String, View> views;
+    private Map<String, String> viewDocTypes;
     private Map<String, ReplicationFilter> filters;
     private Map<String, Validator> validations;
 
@@ -2044,11 +2045,45 @@ public class Database implements StoreDelegate {
     }
 
     /**
+     * Set the document type for the given view name.
+     * @param docType document type
+     * @param viewName view name
+     */
+    @InterfaceAudience.Private
+    protected void setViewDocumentType(String docType, String viewName) {
+        if (viewDocTypes == null)
+            viewDocTypes = new HashMap<String, String>();
+        viewDocTypes.put(viewName, docType);
+    }
+
+    /**
+     * Get the document type for the given view name.
+     * @param viewName view name
+     * @return document type if available, otherwise returns null.
+     */
+    @InterfaceAudience.Private
+    protected String getViewDocumentType(String viewName) {
+        if (viewDocTypes == null)
+            return null;
+        return viewDocTypes.get(viewName);
+    }
+
+    /**
+     * Remove document type for the given view name.
+     * @param viewName view name
+     */
+    private void removeViewDocumentType(String viewName) {
+        if (viewDocTypes != null)
+            viewDocTypes.remove(viewName);
+    }
+
+    /**
      * in CBLDatabase+Internal.m
      * - (void) forgetViewNamed: (NSString*)name
      */
     protected void forgetView(String name) {
         views.remove(name);
+        removeViewDocumentType(name);
     }
 
     private View registerView(View view) {
