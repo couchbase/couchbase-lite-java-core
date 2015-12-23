@@ -218,6 +218,15 @@ public class SQLiteStore implements Store, EncryptableStore {
             throw new CouchbaseLiteException(message, Status.NOT_ACCEPTABLE);
         }
 
+        // Enable Write-Ahead Log (WAL)
+        try {
+            initialize("PRAGMA journal_mode=WAL;");
+        } catch (SQLException e) {
+            String message = "Cannot set journal_mode=WAL";
+            Log.e(TAG, message, e);
+            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
+        }
+
         // BEGIN TRANSACTION
         boolean isSuccessful = false;
         if (!beginTransaction()) {
@@ -631,6 +640,14 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.v(TAG, "... deleted %d revisions", changes);
         } catch (SQLException e) {
             Log.e(TAG, "Error compacting", e);
+            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+        }
+
+        Log.v(TAG, "Flushing SQLite WAL...");
+        try {
+            storageEngine.execSQL("PRAGMA wal_checkpoint(RESTART)");
+        } catch (SQLException e) {
+            Log.e(TAG, "Error PRAGMA wal_checkpoint(RESTART)", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         }
 
