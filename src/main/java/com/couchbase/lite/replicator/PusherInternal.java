@@ -254,9 +254,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             maxPendingSequence = new Long(0);
         }
 
-        if (filterName != null) {
-            filter = db.getFilter(filterName);
-        }
+        filter = compilePushReplicationFilter();
         if (filterName != null && filter == null) {
             Log.w(Log.TAG_SYNC, "%s: No ReplicationFilter registered for filter '%s'; ignoring",
                     this, filterName);

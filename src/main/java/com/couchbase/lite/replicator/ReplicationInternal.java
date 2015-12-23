@@ -3,7 +3,9 @@ package com.couchbase.lite.replicator;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Misc;
+import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
+import com.couchbase.lite.SavedRevision;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
@@ -965,6 +967,29 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.filterName = filterName;
     }
 
+    /**
+     * Get replicator filter. If the replicator is a pull replicator,
+     * calling this method will return null.
+     *
+     * This is equivalent to CBL_ReplicatorSettings's compilePushFilterForDatabase:status:.
+     */
+    public ReplicationFilter compilePushReplicationFilter() {
+        if (isPull())
+            return null;
+
+        if (filterName != null)
+            return db.getFilter(filterName);
+        else if (documentIDs != null && documentIDs.size() > 0) {
+            final List<String> docIDs = documentIDs;
+            return new ReplicationFilter() {
+                @Override
+                public boolean filter(SavedRevision revision, Map<String, Object> params) {
+                    return docIDs.contains(revision.getDocument().getId());
+                }
+            };
+        }
+        return null;
+    }
 
     /**
      * Is this a pull replication?  (Eg, it pulls data from Sync Gateway -> Device running CBL?)
