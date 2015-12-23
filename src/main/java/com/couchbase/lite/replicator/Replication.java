@@ -32,7 +32,6 @@ import java.util.concurrent.TimeUnit;
  * The external facade for the Replication API
  */
 public class Replication implements ReplicationInternal.ChangeListener, NetworkReachabilityListener {
-
     /**
      * Enum to specify which direction this replication is going (eg, push vs pull)
      *
@@ -172,7 +171,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Public
     public void start() {
-
         if (replicationInternal == null) {
             initReplicationInternal();
         } else {
@@ -199,7 +197,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 }
             });
         }
-
 
         replicationInternal.triggerStart();
     }
@@ -380,7 +377,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @Override
     public void changed(ChangeEvent event) {
-
         // forget cached IDs (Should be executed in workExecutor)
         if (pendingDocIDs != null) {
             db.runAsync(new AsyncTask() {
@@ -451,13 +447,10 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 @Override
                 public void run() {
                     try {
-                        String filterName = (String) properties.get("filter");
-                        Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
-                        ReplicationFilter filter = null;
-                        if (filterName != null) {
-                            filter = db.getFilter(filterName);
-                        }
-
+                        Map<String, Object> filterParams =
+                                (Map<String, Object>) properties.get("query_params");
+                        ReplicationFilter filter =
+                                replicationInternal.compilePushReplicationFilter();
                         String lastSequence = replicationInternal.lastSequence;
                         if (lastSequence == null)
                             lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
@@ -641,16 +634,16 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * Sets the documents to specify as part of the replication.
      */
     @InterfaceAudience.Public
-    public void setDocIds(List<String> docIds) {
+    public void setDocumentIDs(List<String> docIds) {
         properties.put(ReplicationField.DOC_IDS, docIds);
-        replicationInternal.setDocIds(docIds);
+        replicationInternal.setDocumentIDs(docIds);
     }
 
     /**
      * Gets the documents to specify as part of the replication.
      */
-    public List<String> getDocIds() {
-        return replicationInternal.getDocIds();
+    public List<String> getDocumentIDs() {
+        return replicationInternal.getDocumentIDs();
     }
 
     /**
@@ -863,7 +856,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                     replicationInternal.setFilterParams((Map)value);
                     break;
                 case DOC_IDS:
-                    replicationInternal.setDocIds((List)value);
+                    replicationInternal.setDocumentIDs((List)value);
                     break;
                 case AUTHENTICATOR:
                     replicationInternal.setAuthenticator((Authenticator)value);
