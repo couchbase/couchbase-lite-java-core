@@ -41,6 +41,7 @@ import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Reads the continuous-mode _changes feed of a database, and sends the
@@ -50,7 +51,6 @@ import java.util.Map;
  */
 @InterfaceAudience.Private
 public class ChangeTracker implements Runnable {
-
     private URL databaseURL;
     private Object lastSequenceID;
     private boolean continuous = false;  // is enclosing replication continuous?
@@ -147,7 +147,6 @@ public class ChangeTracker implements Runnable {
     }
 
     public String getChangesFeedPath() {
-
         if (usePOST) {
             return "_changes";
         }
@@ -229,7 +228,6 @@ public class ChangeTracker implements Runnable {
     }
 
     protected void runLoop() {
-
         paused = false;
         running = true;
         HttpClient httpClient;
@@ -253,7 +251,6 @@ public class ChangeTracker implements Runnable {
         backoff = new ChangeTrackerBackoff();
 
         while (running) {
-
             startTime = System.currentTimeMillis();
 
             URL url = getChangesFeedURL();
@@ -261,7 +258,7 @@ public class ChangeTracker implements Runnable {
                 HttpPost postRequest = new HttpPost(url.toString());
                 postRequest.setHeader("Content-Type", "application/json");
                 postRequest.addHeader("User-Agent", Manager.USER_AGENT);
-                // TODO: why not apply gzip? iOS also does not apply gizp for /{db}/_changes
+                postRequest.addHeader("Accept-Encoding", "gzip");
 
                 StringEntity entity;
                 try {
@@ -271,7 +268,6 @@ public class ChangeTracker implements Runnable {
                 }
                 postRequest.setEntity(entity);
                 request = postRequest;
-
             } else {
                 request = new HttpGet(url.toString());
             }
@@ -338,8 +334,10 @@ public class ChangeTracker implements Runnable {
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
                         inputStream = entity.getContent();
-                        if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
+                        if (Utils.isGzip(entity))
+                            inputStream = new GZIPInputStream(inputStream);
 
+                        if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             // NOTE: 1. check content length, ObjectMapper().readValue() throws Exception if size is 0.
                             // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
                             boolean responseOK = false; // default value
@@ -380,7 +378,6 @@ public class ChangeTracker implements Runnable {
                                 }
                             }
                         } else {  // one-shot replications
-
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
                             JsonFactory factory = new JsonFactory();
                             JsonParser jp = factory.createParser(inputStream);
@@ -423,8 +420,7 @@ public class ChangeTracker implements Runnable {
                         if (entity != null) {
                             try {
                                 entity.consumeContent();
-                            } catch (IOException e) {
-                            }
+                            } catch (IOException e) { }
                         }
                     }
                 }
@@ -563,7 +559,6 @@ public class ChangeTracker implements Runnable {
     }
 
     public Map<String, Object> changesFeedPOSTBodyMap() {
-
         if (!usePOST) {
             return null;
         }
@@ -602,9 +597,7 @@ public class ChangeTracker implements Runnable {
         }
 
         return post;
-
     }
-
 
     public void setPaused(boolean paused) {
         Log.v(Log.TAG, "setPaused: " + paused);
@@ -622,8 +615,7 @@ public class ChangeTracker implements Runnable {
             synchronized (pausedObj) {
                 try {
                     pausedObj.wait();
-                } catch (InterruptedException e) {
-                }
+                } catch (InterruptedException e) { }
             }
         }
     }
