@@ -918,8 +918,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
 
         List<String> docIdsSorted = null;
-        if (getDocumentIDs() != null) {
-            docIdsSorted = new ArrayList<String>(getDocumentIDs());
+        if (getDocIds() != null) {
+            docIdsSorted = new ArrayList<String>(getDocIds());
             Collections.sort(docIdsSorted);
         }
 
@@ -999,14 +999,14 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     /**
      * Gets the documents to specify as part of the replication.
      */
-    public List<String> getDocumentIDs() {
+    public List<String> getDocIds() {
         return documentIDs;
     }
 
     /**
      * Sets the documents to specify as part of the replication.
      */
-    public void setDocumentIDs(List<String> docIds) {
+    public void setDocIds(List<String> docIds) {
         documentIDs = docIds;
     }
 

@@ -634,16 +634,16 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * Sets the documents to specify as part of the replication.
      */
     @InterfaceAudience.Public
-    public void setDocumentIDs(List<String> docIds) {
+    public void setDocIds(List<String> docIds) {
         properties.put(ReplicationField.DOC_IDS, docIds);
-        replicationInternal.setDocumentIDs(docIds);
+        replicationInternal.setDocIds(docIds);
     }
 
     /**
      * Gets the documents to specify as part of the replication.
      */
-    public List<String> getDocumentIDs() {
-        return replicationInternal.getDocumentIDs();
+    public List<String> getDocIds() {
+        return replicationInternal.getDocIds();
     }
 
     /**
@@ -856,7 +856,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                     replicationInternal.setFilterParams((Map)value);
                     break;
                 case DOC_IDS:
-                    replicationInternal.setDocumentIDs((List)value);
+                    replicationInternal.setDocIds((List)value);
                     break;
                 case AUTHENTICATOR:
                     replicationInternal.setAuthenticator((Authenticator)value);
