@@ -534,17 +534,17 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                             if (viewDocType != null && !viewDocType.equals(docType))
                                 continue; // skip; view's documentType doesn't match this doc
                         }
-                    }
-                    Log.v(Log.TAG_VIEW, "#%s: map '%s' for view %s...",
-                            sequence, docID, view.getName());
-                    try {
-                        emitBlock.setSequence(sequence);
-                        mapBlocks.get(i).map(curDoc, emitBlock);
-                    } catch (Throwable e) {
-                        String msg = String.format("Error when calling map block of view '%s'",
-                                view.getName());
-                        Log.e(Log.TAG_VIEW, msg, e);
-                        throw new CouchbaseLiteException(msg, e, new Status(Status.CALLBACK_ERROR));
+                        Log.v(Log.TAG_VIEW, "#%d: map '%s' for view %s...",
+                                sequence, docID, view.getName());
+                        try {
+                            emitBlock.setSequence(sequence);
+                            mapBlocks.get(i).map(curDoc, emitBlock);
+                        } catch (Throwable e) {
+                            String msg = String.format("Error when calling map block of view '%s'",
+                                    view.getName());
+                            Log.e(Log.TAG_VIEW, msg, e);
+                            throw new CouchbaseLiteException(msg, e, new Status(Status.CALLBACK_ERROR));
+                        }
                     }
                 }
             }
