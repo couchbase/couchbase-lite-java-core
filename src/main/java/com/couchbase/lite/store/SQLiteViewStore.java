@@ -534,7 +534,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                             if (viewDocType != null && !viewDocType.equals(docType))
                                 continue; // skip; view's documentType doesn't match this doc
                         }
-                        Log.v(Log.TAG_VIEW, "#%s: map '%s' for view %s...",
+                        Log.v(Log.TAG_VIEW, "#%d: map '%s' for view %s...",
                                 sequence, docID, view.getName());
                         try {
                             emitBlock.setSequence(sequence);
