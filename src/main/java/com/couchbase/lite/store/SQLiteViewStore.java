@@ -560,7 +560,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 store.getStorageEngine().update("views", updateValues, "view_id=?", whereArgs);
             }
             Log.v(Log.TAG_VIEW, "...Finished re-indexing (%s) to #%d (deleted %d, added %d)",
-                    viewNames(views), dbMaxSequence, deletedCount, insertedCount);
+                    viewNames(views), dbMaxSequence, deletedCount, insertedCount.intValue());
 
             success = true;
             return new Status(Status.OK);
