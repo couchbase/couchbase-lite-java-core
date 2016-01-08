@@ -610,9 +610,9 @@ public class ChangeTracker implements Runnable {
     }
 
     protected void waitIfPaused(){
-        while (paused) {
-            Log.v(Log.TAG, "Waiting: " + paused);
-            synchronized (pausedObj) {
+        synchronized (pausedObj) {
+            while (paused) {
+                Log.v(Log.TAG, "Waiting: " + paused);
                 try {
                     pausedObj.wait();
                 } catch (InterruptedException e) { }
