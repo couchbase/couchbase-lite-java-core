@@ -376,11 +376,14 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     private boolean shouldRetryDownload(String docId) {
         Map<String, Object> localDoc = getLocalDatabase().getExistingLocalDocument(docId);
-
         if (localDoc == null) {
-            final Map<String, Object> props = new HashMap<String, Object>();
+            Map<String, Object> props = new HashMap<String, Object>();
             props.put("retryCount", 1L);
-            putLocalDocument(docId, props);
+            try {
+                getLocalDatabase().putLocalDocument(docId, props);
+            } catch (CouchbaseLiteException e) {
+                Log.w(TAG, "Failed to store retryCount value for docId: " + docId, e);
+            }
             return true;
         }
 
@@ -391,34 +394,20 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         localDoc.put("retryCount", retryCount + 1);
-        putLocalDocument(docId, localDoc);
+        try {
+            getLocalDatabase().putLocalDocument(docId, localDoc);
+        } catch (CouchbaseLiteException e) {
+            Log.w(TAG, "Failed to store retryCount value for docId: " + docId, e);
+        }
         return true;
     }
 
-    private void putLocalDocument(final String docId, final Map<String, Object> localDoc) {
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    getLocalDatabase().putLocalDocument(docId, localDoc);
-                } catch (CouchbaseLiteException e) {
-                    Log.w(TAG, "Failed to store retryCount value for docId: " + docId, e);
-                }
-            }
-        });
-    }
-
-    private void pruneFailedDownload(final String docId) {
-        workExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    getLocalDatabase().deleteLocalDocument(docId);
-                } catch (CouchbaseLiteException e) {
-                    Log.w(TAG, "Failed to delete local document: " + docId, e);
-                }
-            }
-        });
+    private void pruneFailedDownload(String docId) {
+        try {
+            getLocalDatabase().deleteLocalDocument(docId);
+        } catch (CouchbaseLiteException e) {
+            Log.w(TAG, "Failed to delete local document: " + docId, e);
+        }
     }
 
     // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
