@@ -28,12 +28,16 @@ public class Batcher<T> {
     private int capacity = 0;
     private long delay = 0;
     private List<T> inbox;
+
     private boolean scheduled = false;
     private long scheduledDelay = 0;
+    private ScheduledFuture pendingFuture = null;
+
     private BatchProcessor<T> processor;
     private long lastProcessedTime = 0;
-    private ScheduledFuture pendingFuture = null;
-    private Object mutex = new Object();
+
+    private final Object mutex = new Object();
+    private final Object processMutex = new Object();
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructors
@@ -103,8 +107,9 @@ public class Batcher<T> {
      */
     public void queueObjects(List<T> objects) {
         if (objects == null || objects.size() == 0)
-                return;
+            return;
 
+        boolean readyToProcess = false;
         synchronized (mutex) {
             Log.v(Log.TAG_BATCHER, "%s: queueObjects called with %d objects (current inbox size = %d)",
                     this, objects.size(), inbox.size());
@@ -112,12 +117,16 @@ public class Batcher<T> {
             mutex.notify();
             scheduleBatchProcess(false);
 
-            if (isPendingFutureReadyOrInProcessing()) {
+            if (inbox.size() >= capacity && isPendingFutureReadyOrInProcessing())
+                readyToProcess = true;
+        }
+
+        if (readyToProcess) {
+            // Give work executor chance to work on a scheduled task and to obtain the
+            // mutex lock when another thread keeps adding objects to the queue fast:
+            synchronized (processMutex) {
                 try {
-                    // Give work executor more chance to work on a
-                    // scheduled task and to obtain mutex lock when
-                    // another thread keeps adding objects to the queue fast:
-                    mutex.wait(10);
+                    processMutex.wait(5);
                 } catch (InterruptedException e) { }
             }
         }
@@ -336,20 +345,22 @@ public class Batcher<T> {
             mutex.notify();
         }
 
-        if (toProcess != null && toProcess.size() > 0) {
-            Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items",
-                    this, processor, toProcess.size());
-            processor.process(toProcess);
-        } else {
-            Log.v(Log.TAG_BATCHER, "%s: nothing to process", this);
-        }
+        synchronized (processMutex) {
+            if (toProcess != null && toProcess.size() > 0) {
+                Log.v(Log.TAG_BATCHER, "%s: invoking processor %s with %d items",
+                        this, processor, toProcess.size());
+                processor.process(toProcess);
+            } else
+                Log.v(Log.TAG_BATCHER, "%s: nothing to process", this);
 
-        synchronized (mutex) {
-            lastProcessedTime = System.currentTimeMillis();
-            scheduled = false;
-            scheduleBatchProcess(scheduleNextBatchImmediately);
-            Log.v(Log.TAG_BATCHER, "%s: invoking processor done",
-                    this, processor, toProcess.size());
+            synchronized (mutex) {
+                lastProcessedTime = System.currentTimeMillis();
+                scheduled = false;
+                scheduleBatchProcess(scheduleNextBatchImmediately);
+                Log.v(Log.TAG_BATCHER, "%s: invoking processor done",
+                        this, processor, toProcess.size());
+            }
+            processMutex.notify();
         }
     }
 }
