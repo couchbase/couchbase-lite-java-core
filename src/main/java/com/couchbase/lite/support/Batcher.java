@@ -27,7 +27,7 @@ public class Batcher<T> {
     private ScheduledExecutorService workExecutor;
     private int capacity = 0;
     private long delay = 0;
-    private List<T> inbox;
+    private List<T> inbox = new ArrayList<T>();
 
     private boolean scheduled = false;
     private long scheduledDelay = 0;
@@ -35,6 +35,8 @@ public class Batcher<T> {
 
     private BatchProcessor<T> processor;
     private long lastProcessedTime = 0;
+
+    private boolean isFlushing = false;
 
     private final Object mutex = new Object();
     private final Object processMutex = new Object();
@@ -63,9 +65,6 @@ public class Batcher<T> {
         this.capacity = capacity;
         this.delay = delay;
         this.processor = processor;
-        this.inbox = new ArrayList<T>();
-        this.scheduled = false;
-        this.lastProcessedTime = 0;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -115,6 +114,12 @@ public class Batcher<T> {
                     this, objects.size(), inbox.size());
             inbox.addAll(objects);
             mutex.notify();
+
+            if (isFlushing) {
+                // Skip scheduling as flushing is processing all the queue objects:
+                return;
+            }
+
             scheduleBatchProcess(false);
 
             if (inbox.size() >= capacity && isPendingFutureReadyOrInProcessing())
@@ -134,12 +139,18 @@ public class Batcher<T> {
 
     /**
      * Sends _all_ the queued objects at once to the processor block.
-     * After this method returns, all **current** inbox items will be processed.
-     * Note that this method schedules all items in the inbox and blocks until all items
-     * are processed.
+     * After this method returns, all inbox objects will be processed.
+     *
+     * @param waitForAllToFinish wait until all objects are processed. If set to True,
+     *                           need to make sure not to call flushAll in the same
+     *                           WorkExecutor used by the batcher as it will result to
+     *                           deadlock.
      */
-    public void flushAll() {
+    public void flushAll(boolean waitForAllToFinish) {
+        Log.e(Log.TAG_BATCHER, "%s: flushing all objects (wait=%b)", this, waitForAllToFinish);
+
         synchronized (mutex) {
+            isFlushing = true;
             unschedule();
         }
 
@@ -164,14 +175,20 @@ public class Batcher<T> {
                 }, 0, TimeUnit.MILLISECONDS);
             }
 
-            if (future != null && !future.isDone() && !future.isCancelled()) {
-                try {
-                    future.get();
-                } catch (Exception e) {
-                    Log.e(Log.TAG_BATCHER, "%s: Error while waiting for pending future " +
-                            "when flushing all items", e, this);
+            if (waitForAllToFinish) {
+                if (future != null && !future.isDone() && !future.isCancelled()) {
+                    try {
+                        future.get();
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_BATCHER, "%s: Error while waiting for pending future " +
+                                "when flushing all items", e, this);
+                    }
                 }
             }
+        }
+
+        synchronized (mutex) {
+            isFlushing = false;
         }
     }
 
@@ -188,6 +205,9 @@ public class Batcher<T> {
 
     /**
      * Wait for the **current** items in the queue to be all processed.
+     *
+     * Note: Calling this method on the same thread as the WorkExecutor set to the batcher
+     * will result to deadlock.
      */
     public void waitForPendingFutures() {
         // Wait inbox to become empty:

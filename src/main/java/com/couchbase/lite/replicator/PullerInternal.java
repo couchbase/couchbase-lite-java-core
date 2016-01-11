@@ -966,8 +966,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             changeTracker.stop();
 
         // clear downloadsToInsert batcher.
-        if (downloadsToInsert != null)
-            downloadsToInsert.flushAll();
+        if (downloadsToInsert != null) {
+            // Not waiting here to avoid deadlock as this method is executed
+            // inside the same WorkExecutor as the downloadsToInsert batcher.
+            // All scheduled objects will be waited to completed by calling
+            // waitForAllTasksCompleted() below.
+            downloadsToInsert.flushAll(false);
+        }
 
         super.stop();
 
