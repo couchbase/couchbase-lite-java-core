@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
@@ -253,7 +254,7 @@ public class Utils {
     }
 
     public static Map<String, String> headersToMap(Header[] headers) {
-        Map<String, String> map = new HashMap<String, String>();
+        Map<String, String> map = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
         for (int i = 0; i < headers.length; i++) {
             map.put(headers[i].getName(), headers[i].getValue());
         }

@@ -73,7 +73,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
 
     public void setHeaders(Map<String, String> headers) {
         String contentType = headers.get("Content-Type");
-        if (contentType.startsWith("multipart/")) {
+        if (contentType != null && contentType.startsWith("multipart/")) {
             // Multipart, so initialize the parser:
             multipartReader = new MultipartReader(contentType, this);
             attachmentsByName = new HashMap<String, BlobStoreWriter>();
