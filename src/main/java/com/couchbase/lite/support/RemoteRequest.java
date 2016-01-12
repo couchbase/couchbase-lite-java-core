@@ -92,7 +92,7 @@ public class RemoteRequest implements Runnable {
             preemptivelySetAuthCredentials(httpClient);
 
             request.addHeader("Accept", "multipart/related, application/json");
-            request.addHeader("User-Agent", Manager.USER_AGENT);
+            request.addHeader("User-Agent", db.getManager().getUserAgent());
             request.addHeader("Accept-Encoding", "gzip, deflate");
 
             addRequestHeaders(request);

@@ -44,7 +44,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
     public static final String TAG = Log.TAG_SYNC;
 
-    private Database _db;
+    private Database db;
     private MultipartReader _topReader;
     private MultipartDocumentReader _docReader;
     private BulkDownloaderDocumentBlock _onDocument;
@@ -67,7 +67,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 requestHeaders,
                 onCompletion);
 
-        _db = database;
+        db = database;
         _onDocument = onDocument;
 
     }
@@ -80,7 +80,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");
-        request.addHeader("User-Agent", Manager.USER_AGENT);
+        request.addHeader("User-Agent", db.getManager().getUserAgent());
         request.addHeader("X-Accept-Part-Encoding", "gzip");
         request.addHeader("Accept-Encoding", "gzip, deflate");
 
@@ -202,7 +202,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         }
         Log.v(TAG, "%s: Starting new document; headers =%s", this, headers);
         Log.v(TAG, "%s: Starting new document; ID=%s", this, headers.get("X-Doc-Id"));
-        _docReader = new MultipartDocumentReader(_db);
+        _docReader = new MultipartDocumentReader(db);
         _docReader.setHeaders(headers);
         _docReader.startedPart(headers);
     }
