@@ -257,7 +257,7 @@ public class ChangeTracker implements Runnable {
             if (usePOST) {
                 HttpPost postRequest = new HttpPost(url.toString());
                 postRequest.setHeader("Content-Type", "application/json");
-                postRequest.addHeader("User-Agent", Manager.USER_AGENT);
+                postRequest.addHeader("User-Agent", client.getUserAgent());
                 postRequest.addHeader("Accept-Encoding", "gzip");
 
                 StringEntity entity;

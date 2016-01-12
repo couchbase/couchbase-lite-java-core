@@ -57,12 +57,14 @@ import java.util.regex.Pattern;
  */
 public final class Manager {
 
+    public static final String PRODUCT_NAME = "CouchbaseLite";
+
     protected static final String kV1DBExtension = ".cblite";  // Couchbase Lite 1.0
     protected static final String kDBExtension   = ".cblite2"; // Couchbase Lite 1.2 or later (for iOS 1.1 or later)
 
     public static final ManagerOptions DEFAULT_OPTIONS = new ManagerOptions();
     public static final String LEGAL_CHARACTERS = "[^a-z]{1,}[^a-z0-9_$()/+-]*$";
-    public static final String USER_AGENT = "CouchbaseLite/" + Version.getVersionName();
+    public static String USER_AGENT = null;
 
     public static final String SQLITE_STORAGE = "SQLite";
     public static final String FORESTDB_STORAGE = "ForestDB";
@@ -957,5 +959,23 @@ public final class Manager {
     @InterfaceAudience.Private
     private static boolean isWindows() {
         return (OS.indexOf("win") >= 0);
+    }
+
+
+    /**
+     * Return User-Agent value
+     * Format: ex: CouchbaseLite/1.2 (Java Linux/MIPS 1.2.1/3382EFA)
+     */
+    public String getUserAgent() {
+        if (USER_AGENT == null) {
+            USER_AGENT = context != null ?
+                    context.getUserAgent() :
+                    String.format("%s/%s (%s/%s)",
+                            PRODUCT_NAME,
+                            Version.SYNC_PROTOCOL_VERSION,
+                            Version.getVersionName(),
+                            Version.getCommitHash());
+        }
+        return USER_AGENT;
     }
 }

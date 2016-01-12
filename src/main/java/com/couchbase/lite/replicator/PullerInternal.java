@@ -1111,4 +1111,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         int pending = batcher.count() + pendingSequences.count();
         changeTracker.setPaused(pending >= MAX_PENDING_DOCS);
     }
+
+    @Override
+    public String getUserAgent() {
+        return db.getManager().getUserAgent();
+    }
 }

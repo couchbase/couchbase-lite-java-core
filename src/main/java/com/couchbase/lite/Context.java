@@ -49,4 +49,8 @@ public interface Context {
      */
     SQLiteStorageEngineFactory getSQLiteStorageEngineFactory();
 
+    /**
+     * Return User-Agent value
+     */
+    String getUserAgent();
 }
