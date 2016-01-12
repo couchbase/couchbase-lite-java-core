@@ -1337,12 +1337,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected boolean serverIsSyncGatewayVersion(String minVersion) {
+        return serverIsSyncGatewayVersion(serverType, minVersion);
+    }
+    
+    @InterfaceAudience.Private
+    protected static boolean serverIsSyncGatewayVersion(String serverName, String minVersion) {
         String prefix = "Couchbase Sync Gateway/";
-        if (serverType == null) {
+        if (serverName == null) {
             return false;
         } else {
-            if (serverType.startsWith(prefix)) {
-                String versionString = serverType.substring(prefix.length());
+            if (serverName.startsWith(prefix)) {
+                String versionString = serverName.substring(prefix.length());
+                // NOTE: If version number is higher than 10.xx, this comprison does not work eg. "10.0" < "2.0"
                 return versionString.compareTo(minVersion) >= 0;
             }
         }
