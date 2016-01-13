@@ -16,7 +16,7 @@
 
 package com.couchbase.lite.storage;
 
-import com.couchbase.lite.database.ContentValues;
+import com.couchbase.lite.internal.database.ContentValues;
 import com.couchbase.lite.support.security.SymmetricKey;
 
 public interface SQLiteStorageEngine {

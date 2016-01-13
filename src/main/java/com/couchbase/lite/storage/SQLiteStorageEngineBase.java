@@ -16,13 +16,14 @@
 
 package com.couchbase.lite.storage;
 
-import com.couchbase.lite.database.ContentValues;
-import com.couchbase.lite.database.DatabasePlatformSupport;
-import com.couchbase.lite.database.security.Key;
-import com.couchbase.lite.database.sqlite.SQLiteConnection;
-import com.couchbase.lite.database.sqlite.SQLiteConnectionListener;
-import com.couchbase.lite.database.sqlite.SQLiteDatabase;
-import com.couchbase.lite.database.sqlite.exception.SQLiteDatabaseCorruptException;
+import com.couchbase.lite.internal.database.ContentValues;
+import com.couchbase.lite.internal.database.DatabasePlatformSupport;
+import com.couchbase.lite.internal.database.security.Key;
+import com.couchbase.lite.internal.database.sqlite.SQLiteConnection;
+import com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener;
+import com.couchbase.lite.internal.database.sqlite.SQLiteDatabase;
+import com.couchbase.lite.internal.database.sqlite.exception.SQLiteConstraintException;
+import com.couchbase.lite.internal.database.sqlite.exception.SQLiteDatabaseCorruptException;
 import com.couchbase.lite.support.security.SymmetricKey;
 import com.couchbase.lite.util.Log;
 
@@ -66,7 +67,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
             Log.e(Log.TAG_DATABASE, "Unauthorize to open the SQLite database", e);
             throw new SQLException(SQLException.SQLITE_ENCRYPTION_UNAUTHORIZED,
                     "Cannot decrypt or access the database");
-        } catch(com.couchbase.lite.database.SQLException e) {
+        } catch(com.couchbase.lite.internal.database.SQLException e) {
             hasError = true;
             Log.e(Log.TAG_DATABASE, "Unable to open the SQLite database", e);
             throw new SQLException(e);
@@ -100,7 +101,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     ///////////////////////////////////////////////////////////////////////////
 
     private void decrypt(SQLiteConnection connection, SymmetricKey key)
-            throws com.couchbase.lite.database.SQLException {
+            throws com.couchbase.lite.internal.database.SQLException {
         if (key != null) {
             try {
                 connection.execute("PRAGMA key = \"x'" + key.getHexData() + "'\"", null, null);
@@ -112,7 +113,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
 
         try {
             connection.executeForLong("SELECT count(*) FROM sqlite_master", null, null);
-        } catch (com.couchbase.lite.database.SQLException e) {
+        } catch (com.couchbase.lite.internal.database.SQLException e) {
             Log.w(TAG, "Decrypting database failed", e);
             throw e;
         }
@@ -152,7 +153,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     public void execSQL(String sql) throws SQLException {
         try {
             database.execSQL(sql);
-        } catch (com.couchbase.lite.database.SQLException e) {
+        } catch (com.couchbase.lite.internal.database.SQLException e) {
             throw new SQLException(e);
         }
     }
@@ -161,7 +162,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     public void execSQL(String sql, Object[] bindArgs) throws SQLException {
         try {
             database.execSQL(sql, bindArgs);
-        } catch (com.couchbase.lite.database.SQLException e) {
+        } catch (com.couchbase.lite.internal.database.SQLException e) {
             throw new SQLException(e);
         }
     }
@@ -181,8 +182,8 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
             throws SQLException {
         try {
             return database.insertOrThrow(table, nullColumnHack, values);
-        } catch (com.couchbase.lite.database.SQLException e) {
-            if(e instanceof com.couchbase.lite.database.sqlite.exception.SQLiteConstraintException)
+        } catch (com.couchbase.lite.internal.database.SQLException e) {
+            if(e instanceof SQLiteConstraintException)
                 throw new SQLException(SQLException.SQLITE_CONSTRAINT, e);
             else
                 throw new SQLException(e);
@@ -234,9 +235,9 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     }
 
     private class SQLiteCursor implements Cursor {
-        private com.couchbase.lite.database.cursor.Cursor cursor;
+        private com.couchbase.lite.internal.database.cursor.Cursor cursor;
 
-        public SQLiteCursor(com.couchbase.lite.database.cursor.Cursor cursor) {
+        public SQLiteCursor(com.couchbase.lite.internal.database.cursor.Cursor cursor) {
             this.cursor = cursor;
         }
 
