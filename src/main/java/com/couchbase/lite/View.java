@@ -50,14 +50,15 @@ public final class View implements ViewStoreDelegate {
     ///////////////////////////////////////////////////////////////////////////
 
     @InterfaceAudience.Private
-    protected View(Database database, String name, boolean create) throws CouchbaseLiteException{
+    protected View(Database database, String name, boolean create) throws CouchbaseLiteException {
         this.database = database;
         this.name = name;
         this.viewStore = database.getStore().getViewStorage(name, create);
-        if(this.viewStore == null)
+        if (this.viewStore == null)
             throw new CouchbaseLiteException(Status.NOT_FOUND);
         this.viewStore.setDelegate(this);
     }
+
     ///////////////////////////////////////////////////////////////////////////
     // Implementation of ViewStorageDelegate
     ///////////////////////////////////////////////////////////////////////////

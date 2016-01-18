@@ -74,13 +74,12 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     // Constructor
     ///////////////////////////////////////////////////////////////////////////
 
-    protected SQLiteViewStore(SQLiteStore store, String name, boolean create) throws CouchbaseLiteException{
+    protected SQLiteViewStore(SQLiteStore store, String name, boolean create) throws CouchbaseLiteException {
         this.store = store;
         this.name = name;
         this.viewID = -1; // means 'unknown'
         this.collation = View.TDViewCollation.TDViewCollationUnicode;
-
-        if(!create && getViewID() <= 0)
+        if (!create && getViewID() <= 0)
             throw new CouchbaseLiteException(Status.NOT_FOUND);
     }
 

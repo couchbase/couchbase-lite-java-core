@@ -1787,12 +1787,8 @@ public class SQLiteStore implements Store, EncryptableStore {
      * @param create If YES, the view should be created; otherwise it must already exist
      * @return Storage for the view, or nil if create=NO and it doesn't exist.
      */
-    public ViewStore getViewStorage(String name, boolean create) {
-        try {
-            return new SQLiteViewStore(this, name, create);
-        }catch(CouchbaseLiteException ex){
-            return null;
-        }
+    public ViewStore getViewStorage(String name, boolean create) throws CouchbaseLiteException {
+        return new SQLiteViewStore(this, name, create);
     }
 
     @Override

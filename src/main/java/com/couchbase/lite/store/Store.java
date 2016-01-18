@@ -298,7 +298,7 @@ public interface Store {
      * @param create If YES, the view should be created; otherwise it must already exist
      * @return Storage for the view, or nil if create=NO and it doesn't exist.
      */
-    ViewStore getViewStorage(String name, boolean create);
+    ViewStore getViewStorage(String name, boolean create) throws CouchbaseLiteException;
 
     /**
      * Returns the names of all existing views in the database.
