@@ -762,7 +762,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                             Log.d(Log.TAG_SYNC,
                                     "%s: saved remote checkpoint, updating local checkpoint. RemoteCheckpoint: %s",
                                     this, remoteCheckpoint);
-                            db.setLastSequence(lastSequence, checkpointID);
+                            setLastSequenceFromWorkExecutor(lastSequence, checkpointID);
                         } else {
                             Log.w(Log.TAG_SYNC, "%s: Database is null or closed, not calling db.setLastSequence() ", this);
                         }
@@ -778,6 +778,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             }
         });
         pendingFutures.add(future);
+    }
+
+    protected void setLastSequenceFromWorkExecutor(final String lastSequence, final String checkpointId) {
+        // write access to database from workExecutor
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                if(db != null && db.isOpen())
+                    db.setLastSequence(lastSequence, checkpointId);
+            }
+        });
+        // no wait...
     }
 
     /**
@@ -1565,6 +1577,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     private void clearDbRef() {
+        // NOTE: clearDbRef() is called from only from StateMachine with ReplicationState.STOPPED
+        //       which is executed with WorkExecutor Thread
 
         // TODO: there was some logic here that was NOT saving the checkpoint to
         // TODO: the DB if: (savingCheckpoint && lastSequence != null && db != null)
