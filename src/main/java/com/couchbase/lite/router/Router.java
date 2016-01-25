@@ -1199,7 +1199,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         if (status.isSuccessful()) {
                             result = new HashMap<String, Object>();
                             result.put("ok", true);
-                            result.put("id", docID);
+                            result.put("id", rev.getDocID());
                             if (rev != null) {
                                 result.put("rev", rev.getRevID());
                             }
@@ -1209,11 +1209,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         } else if (status.getCode() == Status.FORBIDDEN) {
                             result = new HashMap<String, Object>();
                             result.put("error", "validation failed");
-                            result.put("id", docID);
+                            result.put("id", rev.getDocID());
                         } else if (status.getCode() == Status.CONFLICT) {
                             result = new HashMap<String, Object>();
                             result.put("error", "conflict");
-                            result.put("id", docID);
+                            result.put("id", rev.getDocID());
                         } else {
                             //return status;  // abort the whole thing if something goes badly wrong
                             return false;
