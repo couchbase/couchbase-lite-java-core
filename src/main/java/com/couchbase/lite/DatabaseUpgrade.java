@@ -392,6 +392,9 @@ final public class DatabaseUpgrade {
             cursor.moveToNext();
             while (!cursor.isAfterLast()) {
                 String docID = cursor.getString(0);
+                // Remove "_local/" prefix:
+                if(docID.startsWith("_local/"))
+                    docID = docID.substring(7);
                 byte[] json = cursor.getBlob(1);
                 Log.v(TAG, "Upgrading local doc '%s'", docID);
                 try {
