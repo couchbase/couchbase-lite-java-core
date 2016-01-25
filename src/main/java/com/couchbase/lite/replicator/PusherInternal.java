@@ -450,6 +450,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             Map<String, Object> properties = null;
                             Map<String, Object> revResults = (Map<String, Object>) results.get(rev.getDocID());
                             if (revResults == null) {
+                                removePending(rev);
                                 continue;
                             }
                             List<String> revs = (List<String>) revResults.get("missing");
@@ -813,9 +814,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     private void waitIfPaused(){
-        while (paused) {
-            Log.v(Log.TAG, "Waiting: " + paused);
-            synchronized (pausedObj) {
+        synchronized (pausedObj) {
+            while (paused) {
+                Log.v(Log.TAG, "Waiting: " + paused);
                 try {
                     pausedObj.wait();
                 } catch (InterruptedException e) {
