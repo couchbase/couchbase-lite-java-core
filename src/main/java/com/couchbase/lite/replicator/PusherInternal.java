@@ -21,14 +21,14 @@ import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
-import com.couchbase.org.apache.http.entity.mime.content.FileBody;
+import com.couchbase.org.apache.http.entity.mime.content.InputStreamBody;
 import com.couchbase.org.apache.http.entity.mime.content.StringBody;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 
-import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -646,10 +646,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 BlobStore blobStore = this.db.getAttachmentStore();
                 String base64Digest = (String) attachment.get("digest");
                 BlobKey blobKey = new BlobKey(base64Digest);
-                String path = blobStore.getRawPathForKey(blobKey);
-                File file = new File(path);
-                if (!file.exists()) {
-                    Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
+                InputStream blobStream = blobStore.blobStreamForKey(blobKey);
+                if (blobStream == null) {
+                    Log.w(Log.TAG_SYNC, "Unable to load the blob stream for blobKey: %s - Skipping upload of multipart revision.", blobKey);
                     return false;
                 } else {
                     String contentType = null;
@@ -675,8 +674,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         contentEncoding = (String) attachment.get("encoding");
                     }
 
-                    FileBody fileBody = new CustomFileBody(file, attachmentKey, contentType, contentEncoding);
-                    multiPart.addPart(attachmentKey, fileBody);
+                    InputStreamBody inputStreamBody =
+                            new CustomStreamBody(blobStream, contentType,
+                                    attachmentKey, contentEncoding);
+                    multiPart.addPart(attachmentKey, inputStreamBody);
                 }
 
             }
@@ -783,11 +784,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     // CustomFileBody to support contentEncoding. FileBody returns always null for getContentEncoding()
-    private static class CustomFileBody extends FileBody {
+    private static class CustomStreamBody extends InputStreamBody {
         private String contentEncoding = null;
 
-        public CustomFileBody(File file, String filename, String mimeType, String contentEncoding) {
-            super(file, filename, mimeType, null);
+        public CustomStreamBody(final InputStream in, final String mimeType,
+                                final String filename, String contentEncoding) {
+            super(in, mimeType, filename);
             this.contentEncoding = contentEncoding;
         }
 
