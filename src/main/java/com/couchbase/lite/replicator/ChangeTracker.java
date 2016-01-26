@@ -162,8 +162,11 @@ public class ChangeTracker implements Runnable {
             path += "&style=all_docs";
         }
 
-        if(lastSequenceID != null) {
+        if (lastSequenceID != null) {
             path += "&since=" + URLEncoder.encode(lastSequenceID.toString());
+        } else {
+            // On first replication we can skip getting deleted docs. (SG enhancement in ver. 1.2)
+            path += "&active_only=true";
         }
 
         if (docIDs != null && docIDs.size() > 0) {
@@ -577,12 +580,16 @@ public class ChangeTracker implements Runnable {
         } else {
             post.put("style", null);
         }
+        
         if (lastSequenceID != null) {
             try {
                 post.put("since", Long.parseLong(lastSequenceID.toString()));
             } catch (NumberFormatException e) {
                 post.put("since", lastSequenceID.toString());
             }
+            post.put("active_only", null);
+        } else {
+            post.put("active_only", true);
         }
 
         if (mode == ChangeTrackerMode.LongPoll && limit > 0) {
