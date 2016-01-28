@@ -643,6 +643,10 @@ public final class Manager {
             }
         }
 
+        // Can't specify both a filter and doc IDs
+        if (properties.get("filter") != null && properties.get("doc_ids") != null)
+            throw new CouchbaseLiteException("Can't specify both a filter and doc IDs", new Status(Status.BAD_REQUEST));
+
         try {
             remote = new URL(remoteStr);
         } catch (MalformedURLException e) {
@@ -677,6 +681,14 @@ public final class Manager {
                 Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
                 if (filterParams != null) {
                     repl.setFilterParams(filterParams);
+                }
+            }
+
+            // docIDs
+            if(properties.get("doc_ids") != null) {
+                if(properties.get("doc_ids") instanceof List){
+                    List<String> docIds = (List<String>)properties.get("doc_ids");
+                    repl.setDocIds(docIds);
                 }
             }
 
