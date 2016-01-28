@@ -99,7 +99,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     /**
      * Currently only used for test
      */
-    public Map<String, Object> getProperties() {
+    Map<String, Object> getProperties() {
         // This is basically the inverse of -[CBLManager parseReplicatorProperties:...]
         Map<String, Object> props = new HashMap<String, Object>();
         props.put("continuous", isContinuous());
@@ -123,10 +123,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             props.put("source", db.getName());
             props.put("target", remote);
         }
-
-        // TODO: customProperties are not implimented for CBL Android/Java
-        // if (_customProperties)
-        //  [props addEntriesFromDictionary: _customProperties];
 
         return props;
     }
