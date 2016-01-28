@@ -1865,8 +1865,9 @@ public class SQLiteStore implements Store, EncryptableStore {
         if (!docID.startsWith("_local/")) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
-
-        if (!revision.isDeleted()) {
+        if (!obeyMVCC) {
+            return putLocalRevisionNoMVCC(revision);
+        } else if (!revision.isDeleted()) {
             // PUT:
             byte[] json = RevisionUtils.asCanonicalJSON(revision);
             String newRevID;
@@ -1906,6 +1907,25 @@ public class SQLiteStore implements Store, EncryptableStore {
             deleteLocalDocument(docID, prevRevID);
             return revision;
         }
+    }
+
+    /**
+     * - (CBL_Revision*) putLocalRevisionNoMVCC: (CBL_Revision*)revision
+     * status: (CBLStatus*)outStatus
+     */
+    protected RevisionInternal putLocalRevisionNoMVCC(final RevisionInternal revision)
+            throws CouchbaseLiteException {
+        RevisionInternal result = null;
+        boolean commit = false;
+        beginTransaction();
+        try {
+            RevisionInternal prevRev = getLocalDocument(revision.getDocID(), null);
+            result = putLocalRevision(revision, prevRev == null ? null : prevRev.getRevID(), true);
+            commit = true;
+        } finally {
+            endTransaction(commit);
+        }
+        return result;
     }
 
     @Override

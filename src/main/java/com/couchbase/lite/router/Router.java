@@ -1872,7 +1872,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         RevisionInternal result = null;
         try {
             if (isLocalDoc) {
-                result = _db.putLocalRevision(rev, prevRevID);
+                result = _db.getStore().putLocalRevision(rev, prevRevID, true);
             } else {
                 result = _db.putRevision(rev, prevRevID, allowConflict);
             }
