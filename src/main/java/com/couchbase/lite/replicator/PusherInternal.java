@@ -666,7 +666,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     }
 
                     // contentType = null causes Exception from FileBody of apache.
-                    if(contentType == null)
+                    if (contentType == null)
                         contentType = "application/octet-stream"; // default
 
                     // NOTE: Content-Encoding might not be necessary to set. Apache FileBody does not set Content-Encoding.
@@ -717,7 +717,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     }
                 } finally {
                     // close all inputStreams for Blob
-                    for(InputStream stream: streamList){
+                    for (InputStream stream : streamList) {
                         try {
                             stream.close();
                         } catch (IOException ioe) {
@@ -804,10 +804,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         protected void finalize() throws Throwable {
             // close inputStream after used.
             InputStream stream = getInputStream();
-            if(stream != null){
+            if (stream != null) {
                 try {
                     stream.close();
-                }catch(IOException ioe){
+                } catch (IOException ioe) {
                 }
             }
             super.finalize();
