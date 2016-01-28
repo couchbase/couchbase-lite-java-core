@@ -17,6 +17,7 @@ import com.couchbase.lite.util.Log;
 import java.net.URL;
 import java.util.Date;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +94,42 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     /**
      * Properties of the replicator that are saved across restarts
      */
-    protected Map<ReplicationField, Object> properties;
+    private Map<ReplicationField, Object> properties;
+
+    /**
+     * Currently only used for test
+     */
+    public Map<String, Object> getProperties() {
+        // This is basically the inverse of -[CBLManager parseReplicatorProperties:...]
+        Map<String, Object> props = new HashMap<String, Object>();
+        props.put("continuous", isContinuous());
+        props.put("create_target", shouldCreateTarget());
+        props.put("filter", getFilter());
+        props.put("query_params", getFilterParams());
+        props.put("doc_ids", getDocIds());
+
+        URL remoteURL = this.getRemoteUrl();
+        // TODO: authenticator is little different from iOS. need to update
+
+        Map<String, Object> remote = new HashMap<String, Object>();
+        remote.put("url", remoteURL.toString());
+        remote.put("headers", getHeaders());
+        //remote.put("auth", authMap);
+        if(isPull()){
+            props.put("source", remote);
+            props.put("target", db.getName());
+        }
+        else{
+            props.put("source", db.getName());
+            props.put("target", remote);
+        }
+
+        // TODO: customProperties are not implimented for CBL Android/Java
+        // if (_customProperties)
+        //  [props addEntriesFromDictionary: _customProperties];
+
+        return props;
+    }
 
     /**
      * Constructor
@@ -364,7 +400,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             return ReplicationStatus.REPLICATION_OFFLINE;
         } else if (replicationInternal.stateMachine.isInState(ReplicationState.IDLE)) {
             return ReplicationStatus.REPLICATION_IDLE;
-        } else if (replicationInternal.stateMachine.isInState(ReplicationState.STOPPED)) {
+        } else if (replicationInternal.stateMachine.isInState(ReplicationState.INITIAL) ||
+                replicationInternal.stateMachine.isInState(ReplicationState.STOPPED)) {
             return ReplicationStatus.REPLICATION_STOPPED;
         } else {
             return ReplicationStatus.REPLICATION_ACTIVE;
