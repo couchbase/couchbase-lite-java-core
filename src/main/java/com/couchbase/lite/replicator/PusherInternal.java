@@ -608,6 +608,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     private boolean uploadMultipartRevision(final RevisionInternal revision) {
 
+        // holds inputStream for blob to close after using
+        final List<InputStream> streamList = new ArrayList<InputStream>();
+
         MultipartEntity multiPart = null;
 
         Map<String, Object> revProps = revision.getProperties();
@@ -650,6 +653,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     Log.w(Log.TAG_SYNC, "Unable to load the blob stream for blobKey: %s - Skipping upload of multipart revision.", blobKey);
                     return false;
                 } else {
+                    streamList.add(blobStream);
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
@@ -678,7 +682,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                     attachmentKey, contentEncoding);
                     multiPart.addPart(attachmentKey, inputStreamBody);
                 }
-
             }
         }
 
@@ -713,9 +716,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         removePending(revision);
                     }
                 } finally {
-
+                    // close all inputStreams for Blob
+                    for(InputStream stream: streamList){
+                        try {
+                            stream.close();
+                        } catch (IOException ioe) {
+                        }
+                    }
                     addToCompletedChangesCount(1);
-
                 }
             }
         });
@@ -793,11 +801,23 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
 
         @Override
+        protected void finalize() throws Throwable {
+            // close inputStream after used.
+            InputStream stream = getInputStream();
+            if(stream != null){
+                try {
+                    stream.close();
+                }catch(IOException ioe){
+                }
+            }
+            super.finalize();
+        }
+
+        @Override
         public String getContentEncoding() {
             return contentEncoding;
         }
     }
-
 
     private void pauseOrResume() {
         int pending = batcher.count() + pendingSequences.size();
