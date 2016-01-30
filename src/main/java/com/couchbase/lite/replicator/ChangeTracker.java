@@ -326,13 +326,17 @@ public class ChangeTracker implements Runnable {
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
-                if ((status.getStatusCode() >= 300 && !Utils.isTransientError(status)) ||
-                        status.getStatusCode() >= 300 && mode != ChangeTrackerMode.LongPoll) {
+                // In case response status is Error, ChangeTracker stops here
+                // except mode is LongPoll and error is transient.
+                if (status.getStatusCode() >= 300 &&
+                        ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
+                                mode != ChangeTrackerMode.LongPoll)) {
                     Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
                     this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     break;
                 }
 
+                // Parse response body
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 if (entity != null) {
@@ -346,8 +350,9 @@ public class ChangeTracker implements Runnable {
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             // NOTE: 1. check content length, ObjectMapper().readValue() throws Exception if size is 0.
                             // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
+                            // NOTE: 3. If Http Status is error, not parse response body
                             boolean responseOK = false; // default value
-                            if (entity.getContentLength() != 0) {
+                            if (entity.getContentLength() != 0 && status.getStatusCode() < 300) {
                                 try {
                                     Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                     Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
@@ -387,7 +392,10 @@ public class ChangeTracker implements Runnable {
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
                             JsonFactory factory = new JsonFactory();
                             JsonParser jp = factory.createParser(inputStream);
-                            while (jp.nextToken() != JsonToken.START_ARRAY) {
+                            JsonToken token;
+                            // nextToken() is null => no more token
+                            while (((token = jp.nextToken()) != JsonToken.START_ARRAY) &&
+                                    (token != null)) {
                                 // ignore these tokens
                             }
 
