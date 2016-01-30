@@ -238,7 +238,8 @@ public class Document {
      */
     @InterfaceAudience.Public
     public Object getProperty(String key) {
-        if (getCurrentRevision().getProperties().containsKey(key)) {
+        if (getCurrentRevision() != null &&
+                getCurrentRevision().getProperties().containsKey(key)) {
             return getCurrentRevision().getProperties().get(key);
         }
         return null;
