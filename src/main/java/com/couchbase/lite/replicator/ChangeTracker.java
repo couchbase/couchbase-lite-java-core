@@ -326,7 +326,8 @@ public class ChangeTracker implements Runnable {
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
-                if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
+                if ((status.getStatusCode() >= 300 && !Utils.isTransientError(status)) ||
+                        status.getStatusCode() >= 300 && mode != ChangeTrackerMode.LongPoll) {
                     Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
                     this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     break;
@@ -425,7 +426,8 @@ public class ChangeTracker implements Runnable {
                         if (entity != null) {
                             try {
                                 entity.consumeContent();
-                            } catch (IOException e) { }
+                            } catch (IOException e) {
+                            }
                         }
                     }
                 }
