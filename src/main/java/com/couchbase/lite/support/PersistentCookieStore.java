@@ -164,8 +164,7 @@ public class PersistentCookieStore implements CookieStore {
         try {
             getDb().putLocalDocument(COOKIE_LOCAL_DOC_NAME, null);
         } catch (CouchbaseLiteException e) {
-            Log.e(Log.TAG_SYNC, "Exception saving local doc", e);
-            throw new RuntimeException(e);
+            Log.i(Log.TAG_SYNC, "Unable to clear Cookies: Status=" + e.getCause(), e);
         }
 
         // Clear cookies from local store
