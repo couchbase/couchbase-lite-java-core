@@ -168,7 +168,7 @@ public class Batcher<T> {
                     @Override
                     public void run() {
                         processor.process(toProcess);
-                        synchronized (Batcher.this) {
+                        synchronized (mutex) {
                             lastProcessedTime = System.currentTimeMillis();
                         }
                     }
