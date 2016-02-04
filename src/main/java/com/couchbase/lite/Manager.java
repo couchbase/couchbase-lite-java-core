@@ -978,15 +978,13 @@ public final class Manager {
      * Return User-Agent value
      * Format: ex: CouchbaseLite/1.2 (Java Linux/MIPS 1.2.1/3382EFA)
      */
-    public String getUserAgent() {
+    public static String getUserAgent() {
         if (USER_AGENT == null) {
-            USER_AGENT = context != null ?
-                    context.getUserAgent() :
-                    String.format("%s/%s (%s/%s)",
-                            PRODUCT_NAME,
-                            Version.SYNC_PROTOCOL_VERSION,
-                            Version.getVersionName(),
-                            Version.getCommitHash());
+            USER_AGENT = String.format("%s/%s (%s/%s)",
+                    PRODUCT_NAME,
+                    Version.SYNC_PROTOCOL_VERSION,
+                    Version.getVersionName(),
+                    Version.getCommitHash());
         }
         return USER_AGENT;
     }

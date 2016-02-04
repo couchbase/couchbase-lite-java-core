@@ -40,7 +40,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
         request.addHeader("Accept", "multipart/related, application/json");
         request.addHeader("X-Accept-Part-Encoding", "gzip");
-        request.addHeader("User-Agent", db.getManager().getUserAgent());
+        request.addHeader("User-Agent", Manager.getUserAgent());
         request.addHeader("Accept-Encoding", "gzip, deflate");
 
         addRequestHeaders(request);

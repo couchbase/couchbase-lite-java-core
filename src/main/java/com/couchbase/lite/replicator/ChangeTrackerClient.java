@@ -11,7 +11,6 @@ import java.util.Map;
  */
 @InterfaceAudience.Private
 public interface ChangeTrackerClient {
-
     HttpClient getHttpClient();
 
     void changeTrackerReceivedChange(Map<String,Object> change);
@@ -21,7 +20,4 @@ public interface ChangeTrackerClient {
     void changeTrackerFinished(ChangeTracker tracker);
 
     void changeTrackerCaughtUp();
-
-    String getUserAgent();
-
 }

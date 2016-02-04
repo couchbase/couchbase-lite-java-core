@@ -80,7 +80,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
         request.addHeader("Content-Type", "application/json");
         request.addHeader("Accept", "multipart/related");
-        request.addHeader("User-Agent", db.getManager().getUserAgent());
+        request.addHeader("User-Agent", Manager.getUserAgent());
         request.addHeader("X-Accept-Part-Encoding", "gzip");
         request.addHeader("Accept-Encoding", "gzip, deflate");
 
