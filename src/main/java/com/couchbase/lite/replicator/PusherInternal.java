@@ -21,14 +21,14 @@ import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
-import com.couchbase.org.apache.http.entity.mime.content.FileBody;
+import com.couchbase.org.apache.http.entity.mime.content.InputStreamBody;
 import com.couchbase.org.apache.http.entity.mime.content.StringBody;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 
-import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -389,9 +389,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         for (DocumentChange change : changes) {
             // Skip revisions that originally came from the database I'm syncing to:
             URL source = change.getSource();
-            if (source != null && source.equals(remote)) {
+            if (source != null && source.equals(remote))
                 return;
-            }
             RevisionInternal rev = change.getAddedRevision();
             if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
                 pauseOrResume();
@@ -450,6 +449,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             Map<String, Object> properties = null;
                             Map<String, Object> revResults = (Map<String, Object>) results.get(rev.getDocID());
                             if (revResults == null) {
+                                removePending(rev);
                                 continue;
                             }
                             List<String> revs = (List<String>) revResults.get("missing");
@@ -608,6 +608,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     private boolean uploadMultipartRevision(final RevisionInternal revision) {
 
+        // holds inputStream for blob to close after using
+        final List<InputStream> streamList = new ArrayList<InputStream>();
+
         MultipartEntity multiPart = null;
 
         Map<String, Object> revProps = revision.getProperties();
@@ -645,12 +648,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 BlobStore blobStore = this.db.getAttachmentStore();
                 String base64Digest = (String) attachment.get("digest");
                 BlobKey blobKey = new BlobKey(base64Digest);
-                String path = blobStore.getRawPathForKey(blobKey);
-                File file = new File(path);
-                if (!file.exists()) {
-                    Log.w(Log.TAG_SYNC, "Unable to find blob file for blobKey: %s - Skipping upload of multipart revision.", blobKey);
+                InputStream blobStream = blobStore.blobStreamForKey(blobKey);
+                if (blobStream == null) {
+                    Log.w(Log.TAG_SYNC, "Unable to load the blob stream for blobKey: %s - Skipping upload of multipart revision.", blobKey);
                     return false;
                 } else {
+                    streamList.add(blobStream);
                     String contentType = null;
                     if (attachment.containsKey("content_type")) {
                         contentType = (String) attachment.get("content_type");
@@ -663,7 +666,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     }
 
                     // contentType = null causes Exception from FileBody of apache.
-                    if(contentType == null)
+                    if (contentType == null)
                         contentType = "application/octet-stream"; // default
 
                     // NOTE: Content-Encoding might not be necessary to set. Apache FileBody does not set Content-Encoding.
@@ -674,10 +677,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         contentEncoding = (String) attachment.get("encoding");
                     }
 
-                    FileBody fileBody = new CustomFileBody(file, attachmentKey, contentType, contentEncoding);
-                    multiPart.addPart(attachmentKey, fileBody);
+                    InputStreamBody inputStreamBody =
+                            new CustomStreamBody(blobStream, contentType,
+                                    attachmentKey, contentEncoding);
+                    multiPart.addPart(attachmentKey, inputStreamBody);
                 }
-
             }
         }
 
@@ -712,9 +716,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         removePending(revision);
                     }
                 } finally {
-
+                    // close all inputStreams for Blob
+                    for (InputStream stream : streamList) {
+                        try {
+                            stream.close();
+                        } catch (IOException ioe) {
+                        }
+                    }
                     addToCompletedChangesCount(1);
-
                 }
             }
         });
@@ -782,12 +791,26 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     // CustomFileBody to support contentEncoding. FileBody returns always null for getContentEncoding()
-    private static class CustomFileBody extends FileBody {
+    private static class CustomStreamBody extends InputStreamBody {
         private String contentEncoding = null;
 
-        public CustomFileBody(File file, String filename, String mimeType, String contentEncoding) {
-            super(file, filename, mimeType, null);
+        public CustomStreamBody(final InputStream in, final String mimeType,
+                                final String filename, String contentEncoding) {
+            super(in, mimeType, filename);
             this.contentEncoding = contentEncoding;
+        }
+
+        @Override
+        protected void finalize() throws Throwable {
+            // close inputStream after used.
+            InputStream stream = getInputStream();
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException ioe) {
+                }
+            }
+            super.finalize();
         }
 
         @Override
@@ -795,7 +818,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return contentEncoding;
         }
     }
-
 
     private void pauseOrResume() {
         int pending = batcher.count() + pendingSequences.size();
@@ -813,9 +835,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     private void waitIfPaused(){
-        while (paused) {
-            Log.v(Log.TAG, "Waiting: " + paused);
-            synchronized (pausedObj) {
+        synchronized (pausedObj) {
+            while (paused) {
+                Log.v(Log.TAG, "Waiting: " + paused);
                 try {
                     pausedObj.wait();
                 } catch (InterruptedException e) {

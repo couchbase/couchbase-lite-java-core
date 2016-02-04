@@ -146,6 +146,10 @@ public class ChangeTracker implements Runnable {
         return heartBeatSeconds * 1000;
     }
 
+    /**
+     * - (NSString*) changesFeedPath
+     * in CBLChangeTracker.m
+     */
     public String getChangesFeedPath() {
         if (usePOST) {
             return "_changes";
@@ -162,22 +166,24 @@ public class ChangeTracker implements Runnable {
             path += "&style=all_docs";
         }
 
-        if(lastSequenceID != null) {
+        if (lastSequenceID != null) {
             path += "&since=" + URLEncoder.encode(lastSequenceID.toString());
+        } else {
+            // On first replication we can skip getting deleted docs. (SG enhancement in ver. 1.2)
+            path += "&active_only=true";
         }
 
+        // Add filter or doc_ids:
         if (docIDs != null && docIDs.size() > 0) {
             filterName = "_doc_ids";
             filterParams = new HashMap<String, Object>();
             filterParams.put("doc_ids", docIDs);
         }
-
-        if(filterName != null) {
+        if (filterName != null) {
             path += "&filter=" + URLEncoder.encode(filterName);
-            if(filterParams != null) {
-                for (String filterParamKey : filterParams.keySet()) {
-
-                    Object value = filterParams.get(filterParamKey);
+            if (filterParams != null) {
+                for (String key : filterParams.keySet()) {
+                    Object value = filterParams.get(key);
                     if (!(value instanceof String)) {
                         try {
                             value = Manager.getObjectMapper().writeValueAsString(value);
@@ -185,8 +191,7 @@ public class ChangeTracker implements Runnable {
                             throw new IllegalArgumentException(e);
                         }
                     }
-                    path += "&" + URLEncoder.encode(filterParamKey) + "=" + URLEncoder.encode(value.toString());
-
+                    path += "&" + URLEncoder.encode(key) + "=" + URLEncoder.encode(value.toString());
                 }
             }
         }
@@ -257,7 +262,7 @@ public class ChangeTracker implements Runnable {
             if (usePOST) {
                 HttpPost postRequest = new HttpPost(url.toString());
                 postRequest.setHeader("Content-Type", "application/json");
-                postRequest.addHeader("User-Agent", client.getUserAgent());
+                postRequest.addHeader("User-Agent", Manager.getUserAgent());
                 postRequest.addHeader("Accept-Encoding", "gzip");
 
                 StringEntity entity;
@@ -321,12 +326,17 @@ public class ChangeTracker implements Runnable {
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                 HttpResponse response = httpClient.execute(request);
                 StatusLine status = response.getStatusLine();
-                if (status.getStatusCode() >= 300 && !Utils.isTransientError(status)) {
+                // In case response status is Error, ChangeTracker stops here
+                // except mode is LongPoll and error is transient.
+                if (status.getStatusCode() >= 300 &&
+                        ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
+                                mode != ChangeTrackerMode.LongPoll)) {
                     Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
                     this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     break;
                 }
 
+                // Parse response body
                 HttpEntity entity = response.getEntity();
                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                 if (entity != null) {
@@ -340,8 +350,9 @@ public class ChangeTracker implements Runnable {
                         if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
                             // NOTE: 1. check content length, ObjectMapper().readValue() throws Exception if size is 0.
                             // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
+                            // NOTE: 3. If Http Status is error, not parse response body
                             boolean responseOK = false; // default value
-                            if (entity.getContentLength() != 0) {
+                            if (entity.getContentLength() != 0 && status.getStatusCode() < 300) {
                                 try {
                                     Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
                                     Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
@@ -381,7 +392,10 @@ public class ChangeTracker implements Runnable {
                             Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
                             JsonFactory factory = new JsonFactory();
                             JsonParser jp = factory.createParser(inputStream);
-                            while (jp.nextToken() != JsonToken.START_ARRAY) {
+                            JsonToken token;
+                            // nextToken() is null => no more token
+                            while (((token = jp.nextToken()) != JsonToken.START_ARRAY) &&
+                                    (token != null)) {
                                 // ignore these tokens
                             }
 
@@ -420,7 +434,8 @@ public class ChangeTracker implements Runnable {
                         if (entity != null) {
                             try {
                                 entity.consumeContent();
-                            } catch (IOException e) { }
+                            } catch (IOException e) {
+                            }
                         }
                     }
                 }
@@ -577,12 +592,16 @@ public class ChangeTracker implements Runnable {
         } else {
             post.put("style", null);
         }
+        
         if (lastSequenceID != null) {
             try {
                 post.put("since", Long.parseLong(lastSequenceID.toString()));
             } catch (NumberFormatException e) {
                 post.put("since", lastSequenceID.toString());
             }
+            post.put("active_only", null);
+        } else {
+            post.put("active_only", true);
         }
 
         if (mode == ChangeTrackerMode.LongPoll && limit > 0) {

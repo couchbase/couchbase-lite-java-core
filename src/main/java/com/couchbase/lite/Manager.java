@@ -643,6 +643,10 @@ public final class Manager {
             }
         }
 
+        // Can't specify both a filter and doc IDs
+        if (properties.get("filter") != null && properties.get("doc_ids") != null)
+            throw new CouchbaseLiteException("Can't specify both a filter and doc IDs", new Status(Status.BAD_REQUEST));
+
         try {
             remote = new URL(remoteStr);
         } catch (MalformedURLException e) {
@@ -677,6 +681,14 @@ public final class Manager {
                 Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
                 if (filterParams != null) {
                     repl.setFilterParams(filterParams);
+                }
+            }
+
+            // docIDs
+            if(properties.get("doc_ids") != null) {
+                if(properties.get("doc_ids") instanceof List){
+                    List<String> docIds = (List<String>)properties.get("doc_ids");
+                    repl.setDocIds(docIds);
                 }
             }
 
@@ -966,15 +978,13 @@ public final class Manager {
      * Return User-Agent value
      * Format: ex: CouchbaseLite/1.2 (Java Linux/MIPS 1.2.1/3382EFA)
      */
-    public String getUserAgent() {
+    public static String getUserAgent() {
         if (USER_AGENT == null) {
-            USER_AGENT = context != null ?
-                    context.getUserAgent() :
-                    String.format("%s/%s (%s/%s)",
-                            PRODUCT_NAME,
-                            Version.SYNC_PROTOCOL_VERSION,
-                            Version.getVersionName(),
-                            Version.getCommitHash());
+            USER_AGENT = String.format("%s/%s (%s/%s)",
+                    PRODUCT_NAME,
+                    Version.SYNC_PROTOCOL_VERSION,
+                    Version.getVersionName(),
+                    Version.getCommitHash());
         }
         return USER_AGENT;
     }

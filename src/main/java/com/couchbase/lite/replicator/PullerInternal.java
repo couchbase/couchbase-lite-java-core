@@ -278,8 +278,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (nRevs == 0) {
             return;
         }
-        Log.e(TAG, "%s bulk-fetching %d remote revisions...", this, nRevs);
-        Log.e(TAG, "%s bulk-fetching remote revisions: %s", this, bulkRevs);
+        Log.d(TAG, "%s bulk-fetching %d remote revisions...", this, nRevs);
+        Log.d(TAG, "%s bulk-fetching remote revisions: %s", this, bulkRevs);
 
         if (!canBulkGet) {
             pullBulkWithAllDocs(bulkRevs);
@@ -1115,10 +1115,5 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected void pauseOrResume() {
         int pending = batcher.count() + pendingSequences.count();
         changeTracker.setPaused(pending >= MAX_PENDING_DOCS);
-    }
-
-    @Override
-    public String getUserAgent() {
-        return db.getManager().getUserAgent();
     }
 }
