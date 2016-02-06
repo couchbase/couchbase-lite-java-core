@@ -620,7 +620,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             public Status onRow(byte[] keyData, byte[] valueData, String docID, Cursor cursor) {
                 JsonDocument keyDoc = new JsonDocument(keyData);
                 JsonDocument valueDoc = new JsonDocument(valueData);
-                long sequence = Long.valueOf(cursor.getString(3));
+                long sequence = Long.parseLong(cursor.getString(3));
                 RevisionInternal docRevision = null;
                 if (options.isIncludeDocs()) {
                     Object valueObject = valueDoc.jsonObject();
