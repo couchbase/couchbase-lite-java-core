@@ -599,7 +599,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         }
 
         public String toString() {
-            StringBuffer sb = new StringBuffer();
+            StringBuilder sb = new StringBuilder();
             sb.append(getSource().direction);
             sb.append(" replication event. Source: ");
             sb.append(getSource());
