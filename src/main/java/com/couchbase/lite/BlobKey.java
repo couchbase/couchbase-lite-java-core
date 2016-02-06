@@ -67,7 +67,7 @@ public class BlobKey {
         try {
             bytes = Base64.decode(base64Digest);
         } catch (IOException e) {
-            new IllegalArgumentException(e);
+            throw new IllegalArgumentException(e);
         }
         return bytes;
     }
