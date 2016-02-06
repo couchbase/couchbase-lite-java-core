@@ -386,20 +386,29 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     public void changed(Database.ChangeEvent event) {
         List<DocumentChange> changes = event.getChanges();
-        for (DocumentChange change : changes) {
-            // Skip revisions that originally came from the database I'm syncing to:
-            URL source = change.getSource();
-            if (source != null && source.toURI().equals(remote.toURI()))
-                return;
-            RevisionInternal rev = change.getAddedRevision();
-            if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
-                pauseOrResume();
-                waitIfPaused();
-                RevisionInternal nuRev = rev.copy();
-                nuRev.setBody(null); //save memory
-                addToInbox(nuRev);
+        try {
+            java.net.URI remoteUri = remote.toURI();
+            for (DocumentChange change : changes) {
+                // Skip revisions that originally came from the database I'm syncing to:
+                URL source = change.getSource();
+                if (source != null && source.toURI().equals(remoteUri))
+                    return;
+                RevisionInternal rev = change.getAddedRevision();
+                if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
+                    pauseOrResume();
+                    waitIfPaused();
+                    RevisionInternal nuRev = rev.copy();
+                    nuRev.setBody(null); //save memory
+                    addToInbox(nuRev);
+                }
             }
+        } catch (java.net.URISyntaxException uriException) {
+            // Not possible since it would not be an active replicator.
+            // However, until we refactor everything to use java.net,
+            // I'm not sure we have a choice but to swallow this.
+            Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
         }
+
     }
 
     /**
