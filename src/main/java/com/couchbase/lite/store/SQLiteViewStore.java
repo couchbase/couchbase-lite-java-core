@@ -918,7 +918,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             collationStr += " COLLATE JSON_RAW";
 
 
-        StringBuffer sql = new StringBuffer("SELECT key, value, docid, revs.sequence");
+        StringBuilder sql = new StringBuilder("SELECT key, value, docid, revs.sequence");
         if (options.isIncludeDocs()) {
             sql.append(", revid, json");
         }
