@@ -2281,7 +2281,7 @@ public class Database implements StoreDelegate {
         if (activeReplicators != null) {
             synchronized (activeReplicators) {
                 for (Replication replicator : activeReplicators) {
-                    if (replicator.getRemoteUrl().equals(remote) &&
+                    if (replicator.getRemoteUrl().toURI().equals(remote.toURI()) &&
                             replicator.isPull() == !push && replicator.isRunning()) {
                         return replicator;
                     }
