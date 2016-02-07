@@ -1467,10 +1467,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      */
     @Override
     public void changed(Database.ChangeEvent event) {
+        List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
         List<DocumentChange> changes = event.getChanges();
         for (DocumentChange change : changes) {
             RevisionInternal rev = change.getAddedRevision();
-
             String winningRevID = change.getWinningRevisionID();
             if (!this.changesIncludesConflicts) {
                 if (winningRevID == null)
@@ -1486,16 +1486,22 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 }
             }
 
-            final boolean allowRevision = event.getSource().runFilter(changesFilter, changesFilterParams, rev);
-            if (!allowRevision) {
-                return;
-            }
+            if (!event.getSource().runFilter(changesFilter, changesFilterParams, rev))
+                continue;
 
             if (longpoll) {
-                Log.w(Log.TAG_ROUTER, "Router: Sending longpoll response");
-                sendResponse();
-                List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
                 revs.add(rev);
+            } else {
+                Log.i(Log.TAG_ROUTER, "Router: Sending continous change chunk");
+                sendContinuousChange(rev);
+            }
+        }
+
+        if (longpoll && revs.size() > 0) {
+            Log.i(Log.TAG_ROUTER, "Router: Sending longpoll response");
+            sendResponse();
+            OutputStream os = connection.getResponseOutputStream();
+            try {
                 Map<String, Object> body = responseBodyForChanges(revs, 0);
                 if (callbackBlock != null) {
                     byte[] data = null;
@@ -1504,17 +1510,19 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     } catch (Exception e) {
                         Log.w(Log.TAG_ROUTER, "Error serializing JSON", e);
                     }
-                    OutputStream os = connection.getResponseOutputStream();
-                    try {
-                        os.write(data);
-                        os.close();
-                    } catch (IOException e) {
-                        Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
-                    }
+                    os.write(data);
+                    os.flush();
                 }
-            } else {
-                Log.w(Log.TAG_ROUTER, "Router: Sending continous change chunk");
-                sendContinuousChange(rev);
+            } catch (IOException e) {
+                Log.w(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+            } finally {
+                try {
+                    if (os != null) {
+                        os.close();
+                    }
+                } catch (IOException e) {
+                    Log.w(Log.TAG_ROUTER, "Failed to close connection: " + e.getMessage());
+                }
             }
         }
     }
