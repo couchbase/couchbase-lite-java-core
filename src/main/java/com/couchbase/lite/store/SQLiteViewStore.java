@@ -401,7 +401,10 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                         docTypes.toArray(new String[docTypes.size()]));
                 sql.append("AND doc_type IN (").append(docTypesString).append(") ");
             }
-            sql.append("AND revs.doc_id = docs.doc_id ORDER BY revs.doc_id, revid DESC");
+            // order result by deleted ASC so if multiple revs returned the non deleted are the first
+            // NOTE: Views broken with concurrent update and delete
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/952
+            sql.append("AND revs.doc_id = docs.doc_id ORDER BY revs.doc_id, deleted ASC, revid DESC");
             String[] selectArgs = {Long.toString(minLastSequence)};
             cursor = store.getStorageEngine().rawQuery(sql.toString(), selectArgs);
 
