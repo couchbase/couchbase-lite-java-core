@@ -1061,7 +1061,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
 
         // Generate the SELECT statement, based on the options:
-        StringBuffer sql = new StringBuffer("SELECT revs.doc_id, docid, revid, sequence");
+        StringBuilder sql = new StringBuilder("SELECT revs.doc_id, docid, revid, sequence");
         if (options.isIncludeDocs()) {
             sql.append(", json, no_attachments");
         }
