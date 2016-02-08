@@ -2280,11 +2280,19 @@ public class Database implements StoreDelegate {
     protected Replication getActiveReplicator(URL remote, boolean push) {
         if (activeReplicators != null) {
             synchronized (activeReplicators) {
-                for (Replication replicator : activeReplicators) {
-                    if (replicator.getRemoteUrl().equals(remote) &&
-                            replicator.isPull() == !push && replicator.isRunning()) {
-                        return replicator;
+                try {
+                    java.net.URI remoteUri = remote.toURI();
+                    for (Replication replicator : activeReplicators) {
+                            if (replicator.getRemoteUrl().toURI().equals(remoteUri) &&
+                                    replicator.isPull() == !push && replicator.isRunning()) {
+                                return replicator;
+                            }
                     }
+                } catch (java.net.URISyntaxException uriException) {
+                    // Not possible since it would not be an active replicator.
+                    // However, until we refactor everything to use java.net,
+                    // I'm not sure we have a choice but to swallow this.
+                    Log.e(Log.TAG_DATABASE, "Active replicator found with invalid URI", uriException);
                 }
             }
         }
