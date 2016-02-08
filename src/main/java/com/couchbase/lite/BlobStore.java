@@ -121,7 +121,7 @@ public class BlobStore {
                 try {
                     changeEncryptionKey(encKey);
                 } catch (ActionException e) {
-                    new CouchbaseLiteException("Cannot change the attachment encryption key", e,
+                    throw new CouchbaseLiteException("Cannot change the attachment encryption key", e,
                             Status.ATTACHMENT_ERROR);
                 }
             }
@@ -186,7 +186,7 @@ public class BlobStore {
                         try {
                             markEncrypted(newKey != null);
                         } catch (CouchbaseLiteException e) {
-                            new ActionException(e);
+                            throw new ActionException(e);
                         }
                     }
                 },
