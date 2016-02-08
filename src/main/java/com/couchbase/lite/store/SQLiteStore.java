@@ -49,6 +49,7 @@ import com.couchbase.lite.util.TextUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -66,6 +67,8 @@ public class SQLiteStore implements Store, EncryptableStore {
 
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
+
+    private static final byte[] EMPTY_JSON_OBJECT_CHARS = new byte[] { (byte)0x007B, (byte)0x007D }; // Empty JSON string: "{}"
 
     // First-time initialization:
     // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
@@ -2154,7 +2157,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         rev.setSequence(sequence);
         rev.setMissing(json == null);
         Map<String, Object> docProperties = null;
-        if (json == null || json.length == 0 || (json.length == 2 && json.equals("{}"))) {
+        if (json == null || json.length == 0 || (json.length == 2 && java.util.Arrays.equals(json, EMPTY_JSON_OBJECT_CHARS))) {
             docProperties = new HashMap<String, Object>();
         } else {
             try {
