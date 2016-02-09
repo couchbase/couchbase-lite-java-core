@@ -294,7 +294,7 @@ public class ChangeTracker implements Runnable {
             }
 
             if (userInfo != null) {
-                if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
+                if (userInfo.contains(":") && !":".equals(userInfo.trim())) {
                     String[] userInfoElements = userInfo.split(":");
                     String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
                     String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];

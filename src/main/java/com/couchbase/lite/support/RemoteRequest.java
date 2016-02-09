@@ -141,11 +141,11 @@ public class RemoteRequest implements Runnable {
 
     protected HttpUriRequest createConcreteRequest() {
         HttpUriRequest request = null;
-        if (method.equalsIgnoreCase("GET")) {
+        if ("GET".equalsIgnoreCase(method)) {
             request = new HttpGet(url.toExternalForm());
-        } else if (method.equalsIgnoreCase("PUT")) {
+        } else if ("PUT".equalsIgnoreCase(method)) {
             request = new HttpPut(url.toExternalForm());
-        } else if (method.equalsIgnoreCase("POST")) {
+        } else if ("POST".equalsIgnoreCase(method)) {
             request = new HttpPost(url.toExternalForm());
         }
         return request;
@@ -263,7 +263,7 @@ public class RemoteRequest implements Runnable {
         }
 
         if (userInfo != null) {
-            if (userInfo.contains(":") && !userInfo.trim().equals(":")) {
+            if (userInfo.contains(":") && !":".equals(userInfo.trim())) {
                 String[] userInfoElements = userInfo.split(":");
                 String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
                 String password = "";

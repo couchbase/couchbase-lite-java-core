@@ -379,7 +379,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         // If not at /db/_session, try CouchDB location /_session
                         if (err instanceof HttpResponseException &&
                                 ((HttpResponseException) err).getStatusCode() == 404 &&
-                                sessionPath.equalsIgnoreCase("/_session")) {
+                                "/_session".equalsIgnoreCase(sessionPath)) {
 
                             checkSessionAtPath("_session");
                             return;
@@ -834,7 +834,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
 
         // workaround for https://github.com/couchbase/couchbase-lite-java-core/issues/208
-        if (relativePath.equals("_session")) {
+        if ("_session".equals(relativePath)) {
             try {
                 URL remoteUrl = new URL(remoteUrlString);
                 String relativePathWithLeadingSlash = String.format("/%s", relativePath);  // required on couchbase-lite-java
@@ -1554,15 +1554,15 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 }
             }
             // If no 'status' present, interpret magic hardcoded CouchDB error strings:
-            if (errorStr.equalsIgnoreCase("unauthorized")) {
+            if ("unauthorized".equalsIgnoreCase(errorStr)) {
                 return new Status(Status.UNAUTHORIZED);
-            } else if (errorStr.equalsIgnoreCase("forbidden")) {
+            } else if ("forbidden".equalsIgnoreCase(errorStr)) {
                 return new Status(Status.FORBIDDEN);
-            } else if (errorStr.equalsIgnoreCase("conflict")) {
+            } else if ("conflict".equalsIgnoreCase(errorStr)) {
                 return new Status(Status.CONFLICT);
-            } else if (errorStr.equalsIgnoreCase("missing")) {
+            } else if ("missing".equalsIgnoreCase(errorStr)) {
                 return new Status(Status.NOT_FOUND);
-            } else if (errorStr.equalsIgnoreCase("not_found")) {
+            } else if ("not_found".equalsIgnoreCase(errorStr)) {
                 return new Status(Status.NOT_FOUND);
             } else {
                 return new Status(Status.UPSTREAM_ERROR);
@@ -1650,7 +1650,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             return new ArrayList<String>();
         }
         String params = (String) filterParams.get(CHANNELS_QUERY_PARAM);
-        if (!isPull() || getFilter() == null || !getFilter().equals(BY_CHANNEL_FILTER_NAME) || params == null || params.isEmpty()) {
+        if (!isPull() || getFilter() == null || !BY_CHANNEL_FILTER_NAME.equals(getFilter()) || params == null || params.isEmpty()) {
             return new ArrayList<String>();
         }
         String[] paramsArray = params.split(",");
@@ -1670,7 +1670,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             Map<String, Object> filterParams = new HashMap<String, Object>();
             filterParams.put(CHANNELS_QUERY_PARAM, TextUtils.join(",", channels));
             setFilterParams(filterParams);
-        } else if (getFilter().equals(BY_CHANNEL_FILTER_NAME)) {
+        } else if (BY_CHANNEL_FILTER_NAME.equals(getFilter())) {
             setFilter(null);
             setFilterParams(null);
         }

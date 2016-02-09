@@ -430,7 +430,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             } else if (name.startsWith("_design") || name.startsWith("_local")) {
                 // This is also a document, just with a URL-encoded "/"
                 docID = name;
-            } else if (name.equals("_session")) {
+            } else if ("_session".equals(name)) {
                 // There are two possible uri to get a session, /<db>/_session or /_session.
                 // This is for /<db>/_session.
                 message = message.replaceFirst("_Document", name);
@@ -1533,7 +1533,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Get options:
         changesIncludesDocs = getBooleanQuery("include_docs");
         String style = getQuery("style");
-        if (style != null && style.equals("all_docs"))
+        if (style != null && "all_docs".equals(style))
             changesIncludesConflicts = true;
 
         ChangesOptions options = new ChangesOptions();
@@ -1655,7 +1655,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.setResponseBody(rev.getBody());
             } else {
                 List<Map<String, Object>> result = null;
-                if (openRevsParam.equals("all")) {
+                if ("all".equals(openRevsParam)) {
                     // Get all conflicting revisions:
                     RevisionList allRevs = db.getStore().getAllRevisions(docID, true);
                     result = new ArrayList<Map<String, Object>>(allRevs.size());
