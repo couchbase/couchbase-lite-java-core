@@ -1503,12 +1503,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 if (xformed == null)
                     return null;
                 if (xformed != rev) {
+                    final Map<String, Object> xformedProps = xformed.getProperties();
                     assert (xformed.getDocID().equals(rev.getDocID()));
                     assert (xformed.getRevID().equals(rev.getRevID()));
-                    assert (xformed.getProperties().get("_revisions").equals(rev.getProperties().get("_revisions")));
-                    if (xformed.getProperties().get("_attachments") != null) {
+                    assert (xformedProps.get("_revisions").equals(rev.getProperties().get("_revisions")));
+                    if (xformedProps.get("_attachments") != null) {
                         // Insert 'revpos' properties into any attachments added by the callback:
-                        RevisionInternal mx = new RevisionInternal(xformed.getProperties());
+                        RevisionInternal mx = new RevisionInternal(xformedProps);
                         xformed = mx;
                         mx.mutateAttachments(new CollectionUtils.Functor<Map<String, Object>, Map<String, Object>>() {
                             public Map<String, Object> invoke(Map<String, Object> info) {
