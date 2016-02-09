@@ -59,6 +59,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     // Maximum number of revision IDs to pass in an "?atts_since=" query param
     public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
 
+    // Tune this parameter based on application needs.
     public static int CHANGE_TRACKER_RESTART_DELAY_MS = 10 * 1000;
 
     public static final int MAX_PENDING_DOCS = 200;

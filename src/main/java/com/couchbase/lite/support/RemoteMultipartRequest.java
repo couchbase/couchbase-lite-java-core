@@ -30,11 +30,11 @@ public class RemoteMultipartRequest extends RemoteRequest {
         preemptivelySetAuthCredentials(httpClient);
 
         HttpUriRequest request = null;
-        if (method.equalsIgnoreCase("PUT")) {
+        if ("PUT".equalsIgnoreCase(method)) {
             HttpPut putRequest = new HttpPut(url.toExternalForm());
             putRequest.setEntity(multiPart);
             request = putRequest;
-        } else if (method.equalsIgnoreCase("POST")) {
+        } else if ("POST".equalsIgnoreCase(method)) {
             HttpPost postRequest = new HttpPost(url.toExternalForm());
             postRequest.setEntity(multiPart);
             request = postRequest;
