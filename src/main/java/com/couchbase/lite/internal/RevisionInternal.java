@@ -46,7 +46,7 @@ public class RevisionInternal {
     public RevisionInternal(Body body) {
         this((String) body.getPropertyForKey("_id"),
                 (String) body.getPropertyForKey("_rev"),
-                (((Boolean) body.getPropertyForKey("_deleted") != null)
+                ((body.getPropertyForKey("_deleted") != null)
                         && ((Boolean) body.getPropertyForKey("_deleted") == true)));
         this.body = body;
     }

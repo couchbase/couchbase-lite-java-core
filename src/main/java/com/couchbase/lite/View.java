@@ -303,7 +303,7 @@ public final class View implements ViewStoreDelegate {
      */
     @InterfaceAudience.Private
     public Status updateIndexAlone() throws CouchbaseLiteException {
-        return updateIndexes(Arrays.asList(new View[] {this}));
+        return updateIndexes(Arrays.asList(this));
     }
 
     /**
