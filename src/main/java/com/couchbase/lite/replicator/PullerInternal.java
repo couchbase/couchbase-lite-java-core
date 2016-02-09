@@ -450,10 +450,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             rev = xformed;
 
             // Clean up afterwards
-            Map<String, Object> attachments = (Map<String, Object>) rev.getProperties().get("_attachments");
+            Map<String, Map<String, Object>> attachments = (Map<String, Map<String, Object>>) rev.getProperties().get("_attachments");
 
-            for (Map.Entry<String, Map<String, Object>> entry :
-                    ((Map<String, Map<String, Object>>) rev.getProperties().get("_attachments")).entrySet()) {
+            for (Map.Entry<String, Map<String, Object>> entry : attachments.entrySet()) {
                 Map<String, Object> attachment = entry.getValue();
                 attachment.remove("file");
             }
