@@ -926,7 +926,7 @@ public final class Manager {
         Object value = properties.get(key);
 
         if (value instanceof String) {
-            result.put("url", (String) value);
+            result.put("url", value);
         } else if (value instanceof Map) {
             result = (Map<String, Object>) value;
         }

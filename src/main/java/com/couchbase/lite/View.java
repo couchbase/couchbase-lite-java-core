@@ -303,7 +303,7 @@ public final class View implements ViewStoreDelegate {
      */
     @InterfaceAudience.Private
     public Status updateIndexAlone() throws CouchbaseLiteException {
-        return updateIndexes(Arrays.asList(new View[] {this}));
+        return updateIndexes(Arrays.asList(this));
     }
 
     /**
@@ -371,7 +371,7 @@ public final class View implements ViewStoreDelegate {
             return key;
         } else if (key instanceof String) {
             // Kludge: prefix match a string by appending max possible character value to it
-            return (String) key + "\uffff";
+            return key + "\uffff";
         } else if (key instanceof List) {
             List<Object> nuKey = new ArrayList<Object>(((List<Object>) key));
             if (depth == 1) {
