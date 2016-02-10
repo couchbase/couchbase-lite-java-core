@@ -1,7 +1,5 @@
 package com.couchbase.lite.router;
 
-import java.io.IOException;
-
 /**
  * Created by pum on 29.06.2015.
  */
