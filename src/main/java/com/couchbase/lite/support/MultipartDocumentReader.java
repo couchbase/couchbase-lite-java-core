@@ -40,17 +40,11 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             inputStream = new ByteArrayInputStream(jsonBuffer.buffer(), 0, jsonBuffer.length());
             // compressed json
             if (jsonCompressed) {
-                GZIPInputStream gzipStream = null;
+                GZIPInputStream gzipStream = new GZIPInputStream(inputStream);
                 try {
-                    gzipStream = new GZIPInputStream(inputStream);
                     document = Manager.getObjectMapper().readValue(gzipStream, Map.class);
                 } finally {
-                    if (gzipStream != null) {
-                        try {
-                            gzipStream.close();
-                        } catch (IOException e) {
-                        }
-                    }
+                    gzipStream.close();
                 }
             }
             //  plain json

@@ -73,18 +73,26 @@ public class FileDirUtils {
         if (!destFile.exists()) {
             destFile.createNewFile();
         }
-
-        FileChannel source = null;
-        FileChannel destination = null;
+        FileInputStream sourceStream = new FileInputStream(sourceFile);
         try {
-            source = new FileInputStream(sourceFile).getChannel();
-            destination = new FileOutputStream(destFile).getChannel();
-            destination.transferFrom(source, 0, source.size());
+            FileOutputStream destStream = new FileOutputStream(destFile);
+            try {
+                FileChannel source = sourceStream.getChannel();
+                try {
+                    FileChannel destination = destStream.getChannel();
+                    try {
+                        destination.transferFrom(source, 0, source.size());
+                    } finally {
+                        destination.close();
+                    }
+                } finally {
+                    source.close();
+                }
+            } finally {
+                destStream.close();
+            }
         } finally {
-            if (source != null)
-                source.close();
-            if (destination != null)
-                destination.close();
+            sourceStream.close();
         }
     }
 

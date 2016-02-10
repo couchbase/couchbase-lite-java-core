@@ -41,14 +41,19 @@ public class StreamUtils {
     }
 
     public static void copyStreamToFile(InputStream is, File file) throws IOException {
-
-        OutputStream os = new FileOutputStream(file);
-        int n;
-        byte[] buffer = new byte[16384];
-        while ((n = is.read(buffer)) > -1) {
-            os.write(buffer, 0, n);
+        try {
+            OutputStream os = new FileOutputStream(file);
+            try {
+                int n;
+                byte[] buffer = new byte[16384];
+                while ((n = is.read(buffer)) > -1) {
+                    os.write(buffer, 0, n);
+                }
+            } finally {
+                os.close();
+            }
+        } finally {
+            is.close();
         }
-        os.close();
-        is.close();
     }
 }
