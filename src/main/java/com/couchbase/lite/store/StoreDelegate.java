@@ -9,7 +9,6 @@ package com.couchbase.lite.store;
 import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.support.security.SymmetricKey;
 
 import java.util.Map;
 

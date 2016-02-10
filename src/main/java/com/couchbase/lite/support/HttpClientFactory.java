@@ -1,7 +1,5 @@
 package com.couchbase.lite.support;
 
-import com.couchbase.lite.Database;
-
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.HttpClient;
 import org.apache.http.cookie.Cookie;
