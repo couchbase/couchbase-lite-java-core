@@ -809,7 +809,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             return;
         }
         boolean deleted = (change.containsKey("deleted") &&
-                ((Boolean) change.get("deleted")).equals(Boolean.TRUE));
+                change.get("deleted").equals(Boolean.TRUE));
         List<Map<String, Object>> changes = (List<Map<String, Object>>) change.get("changes");
         for (Map<String, Object> changeDict : changes) {
             String revID = (String) changeDict.get("rev");
