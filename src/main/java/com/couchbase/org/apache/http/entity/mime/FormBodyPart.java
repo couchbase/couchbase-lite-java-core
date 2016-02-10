@@ -86,7 +86,7 @@ public class FormBodyPart {
         if (body.getFilename() != null) {
             buffer.append("; filename=\"");
             buffer.append(body.getFilename());
-            buffer.append("\"");
+            buffer.append('"');
         }
         addField(MIME.CONTENT_DISPOSITION, buffer.toString());
     }

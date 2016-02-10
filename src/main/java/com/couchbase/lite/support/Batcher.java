@@ -4,6 +4,7 @@ import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -98,7 +99,7 @@ public class Batcher<T> {
      * Adds an object to the queue.
      */
     public void queueObject(T object) {
-        queueObjects(Arrays.asList(object));
+        queueObjects(Collections.singletonList(object));
     }
 
     /**

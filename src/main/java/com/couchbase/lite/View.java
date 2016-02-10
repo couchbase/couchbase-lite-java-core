@@ -330,7 +330,7 @@ public final class View implements ViewStoreDelegate {
     @InterfaceAudience.Private
     protected List<View> getViewsInGroup() {
         List<View> views = new ArrayList<View>();
-        int slash = name.indexOf("/");
+        int slash = name.indexOf('/');
         if (slash > 0) {
             String prefix = name.substring(0, slash + 1);
             for (View view : database.getAllViews()) {
@@ -371,7 +371,7 @@ public final class View implements ViewStoreDelegate {
             return key;
         } else if (key instanceof String) {
             // Kludge: prefix match a string by appending max possible character value to it
-            return (String) key + "\uffff";
+            return (String) key + '\uffff';
         } else if (key instanceof List) {
             List<Object> nuKey = new ArrayList<Object>(((List<Object>) key));
             if (depth == 1) {

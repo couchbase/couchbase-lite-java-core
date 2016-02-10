@@ -85,7 +85,7 @@ public class Status {
 
         @Override
         public String toString() {
-            return "HTTP " + code + " " + message;
+            return "HTTP " + code + ' ' + message;
         }
     }
 
@@ -162,7 +162,7 @@ public class Status {
 
     @Override
     public String toString() {
-        return "Status: " + code + " (" + getHTTPStatus().toString() + ")";
+        return "Status: " + code + " (" + getHTTPStatus().toString() + ')';
     }
 
     public HTTPStatus getHTTPStatus() {

@@ -68,7 +68,7 @@ public class RevisionUtils {
      */
     public static int parseRevIDNumber(String rev) {
         int result = -1;
-        int dashPos = rev.indexOf("-");
+        int dashPos = rev.indexOf('-');
         if (dashPos >= 0) {
             try {
                 result = Integer.parseInt(rev.substring(0, dashPos));
@@ -84,7 +84,7 @@ public class RevisionUtils {
      */
     public static String parseRevIDSuffix(String rev) {
         String result = null;
-        int dashPos = rev.indexOf("-");
+        int dashPos = rev.indexOf('-');
         if (dashPos >= 0) {
             result = rev.substring(dashPos + 1);
         }

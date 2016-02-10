@@ -254,7 +254,7 @@ public abstract class Revision {
     @Override
     @InterfaceAudience.Public
     public String toString() {
-        return "{" + this.document.getId() + " #" + this.getId() + (isDeletion() ? "DEL" : "") + "}";
+        return '{' + this.document.getId() + " #" + this.getId() + (isDeletion() ? "DEL" : "") + '}';
     }
 
     /**

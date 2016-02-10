@@ -92,7 +92,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     }
 
     public String toString() {
-        return this.getClass().getName() + "[" + url.getPath() + "]";
+        return this.getClass().getName() + '[' + url.getPath() + ']';
     }
 
     private static final int BUF_LEN = 1024;

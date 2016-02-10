@@ -108,7 +108,7 @@ public class BlobStore {
                 throw new CouchbaseLiteException(Status.UNAUTHORIZED);
             } else if (!encryptionAlg.equals(ENCRYPTION_ALGORITHM)) {
                 Log.w(Log.TAG_DATABASE, "BlobStore: Blob store uses unrecognized encryption '" +
-                        encryptionAlg + "'");
+                        encryptionAlg + '\'');
                 throw new CouchbaseLiteException(Status.UNAUTHORIZED);
             }
         } else if (!isMarkerExists) {
@@ -180,7 +180,7 @@ public class BlobStore {
                     @Override
                     public void execute() throws ActionException {
                         Log.i(Log.TAG_DATABASE, "BlobStore: " +
-                                (newKey != null ? "encrypting" : "decrypting") + " " + path);
+                                (newKey != null ? "encrypting" : "decrypting") + ' ' + path);
                         Log.i(Log.TAG_DATABASE, "BlobStore: **No blobs to copy; done.**");
                         encryptionKey = newKey;
                         try {
@@ -216,7 +216,7 @@ public class BlobStore {
                 @Override
                 public void execute() throws ActionException {
                     Log.i(Log.TAG_DATABASE, "BlobStore: " +
-                            (newKey != null ? "encrypting" : "decrypting") + " " + path);
+                            (newKey != null ? "encrypting" : "decrypting") + ' ' + path);
                     if (tempStoreDir == null)
                         throw  new ActionException("Cannot create a temporary directory");
                 }
@@ -315,7 +315,7 @@ public class BlobStore {
         });
 
         for (File file : files) {
-            String name = file.getName().substring(0);
+            String name = file.getName();
             name = name.substring(0, name.indexOf(FILE_EXTENSION));
             File dest = new File(directory, name.toUpperCase() + FILE_EXTENSION);
             file.renameTo(dest);

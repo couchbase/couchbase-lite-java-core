@@ -31,7 +31,7 @@ public class TokenAuthenticator extends AuthenticatorImpl {
     public String loginPathForSite(URL site) {
         String path = loginPath;
         if (path != null && !path.startsWith("/")) {
-            path = "/" + path;
+            path = '/' + path;
         }
         return path;
     }

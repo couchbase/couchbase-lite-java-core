@@ -194,7 +194,7 @@ public class RevisionInternal {
 
     @Override
     public String toString() {
-        return "{" + this.docID + " #" + this.revID + (deleted ? "DEL" : "") + "}";
+        return '{' + this.docID + " #" + this.revID + (deleted ? "DEL" : "") + '}';
     }
 
     /**
@@ -208,7 +208,7 @@ public class RevisionInternal {
     public static int generationFromRevID(String revID) {
         if(revID == null) return 0;
         int generation = 0;
-        int dashPos = revID.indexOf("-");
+        int dashPos = revID.indexOf('-');
         if (dashPos > 0) {
             generation = Integer.parseInt(revID.substring(0, dashPos));
         }
@@ -217,7 +217,7 @@ public class RevisionInternal {
 
     public static String digestFromRevID(String revID) {
         String digest = "error";
-        int dashPos = revID.indexOf("-");
+        int dashPos = revID.indexOf('-');
         if (dashPos > 0) {
             digest = revID.substring(dashPos + 1);
             return digest;

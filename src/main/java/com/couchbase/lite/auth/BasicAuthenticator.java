@@ -25,7 +25,7 @@ public class BasicAuthenticator extends AuthenticatorImpl {
     @Override
     public String authUserInfo() {
         if (this.username != null && this.password != null) {
-            return this.username + ":" + this.password;
+            return this.username + ':' + this.password;
         }
         return super.authUserInfo();
     }

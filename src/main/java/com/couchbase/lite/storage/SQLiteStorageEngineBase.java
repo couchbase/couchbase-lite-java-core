@@ -231,7 +231,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     public String toString() {
         return "SQLiteStorageEngine {" +
                 "database=" + Integer.toHexString(System.identityHashCode(database)) +
-                "}";
+                '}';
     }
 
     private class SQLiteCursor implements Cursor {

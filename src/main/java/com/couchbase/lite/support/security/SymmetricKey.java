@@ -102,7 +102,7 @@ public class SymmetricKey {
      */
     @Override
     public String toString() {
-        return getHexData() + " (" + Arrays.toString(keyData) + ")";
+        return getHexData() + " (" + Arrays.toString(keyData) + ')';
     }
 
     /**

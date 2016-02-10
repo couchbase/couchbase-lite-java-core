@@ -423,7 +423,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     sendResponse();
                     return;
                 }
-                docID = name + "/" + path.get(2);
+                docID = name + '/' + path.get(2);
                 path.set(1, docID);
                 path.remove(2);
                 pathLen--;
@@ -444,7 +444,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     while (iter.hasNext()) {
                         sb.append(iter.next());
                         if (iter.hasNext()) {
-                            sb.append("/");
+                            sb.append('/');
                         }
                     }
                     docID = sb.toString();
@@ -471,7 +471,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         sb.append(iter.next());
                         if (iter.hasNext()) {
                             //sb.append("%2F");
-                            sb.append("/");
+                            sb.append('/');
                         }
                     }
                     attachmentName = sb.toString();
@@ -952,7 +952,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             String jsonString = Manager.getObjectMapper().writeValueAsString(activity);
             if (callbackBlock != null) {
-                byte[] json = (jsonString + "\n").getBytes();
+                byte[] json = (jsonString + '\n').getBytes();
                 OutputStream os = connection.getResponseOutputStream();
                 try {
                     os.write(json);
@@ -1448,7 +1448,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             String jsonString = Manager.getObjectMapper().writeValueAsString(changeDict);
             if (callbackBlock != null) {
-                byte[] json = (jsonString + "\n").getBytes();
+                byte[] json = (jsonString + '\n').getBytes();
                 OutputStream os = connection.getResponseOutputStream();
                 try {
                     os.write(json);
@@ -1935,7 +1935,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 URL url = connection.getURL();
                 String urlString = url.toExternalForm();
                 if (docID != null) {
-                    urlString += "/" + rev.getDocID();
+                    urlString += '/' + rev.getDocID();
                     try {
                         url = new URL(urlString);
                     } catch (MalformedURLException e) {
@@ -1961,7 +1961,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
-        if (getQuery("new_edits") == null || (getQuery("new_edits") != null && (new Boolean(getQuery("new_edits"))))) {
+        if (getQuery("new_edits") == null || (getQuery("new_edits") != null && (Boolean.valueOf(getQuery("new_edits"))))) {
             // Regular PUT
             status = update(_db, docID, new Body(bodyDict), false);
         } else {

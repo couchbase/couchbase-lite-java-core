@@ -21,8 +21,8 @@ public class MultipartReader {
     }
 
     private static final Charset utf8 = Charset.forName("UTF-8");
-    private static final byte[] kCRLFCRLF = new String("\r\n\r\n").getBytes(utf8);
-    private static final byte[] kEOM = new String("--").getBytes(utf8);
+    private static final byte[] kCRLFCRLF = "\r\n\r\n".getBytes(utf8);
+    private static final byte[] kEOM = "--".getBytes(utf8);
 
     private MultipartReaderState state = null;
     private ByteArrayBuffer buffer = null;
@@ -91,7 +91,7 @@ public class MultipartReader {
                 if (!header.contains(":")) {
                     throw new IllegalArgumentException("Missing ':' in header line: " + header);
                 }
-                int colon = header.indexOf(":");
+                int colon = header.indexOf(':');
                 String key = header.substring(0, colon).trim();
                 String value = header.substring(colon+1).trim();
                 headers.put(key, value);

@@ -55,7 +55,7 @@ public class FileDirUtils {
 
     public static String getDatabaseNameFromPath(String path) {
         String fileName = new File(path).getName();
-        int extensionPos = fileName.lastIndexOf(".");
+        int extensionPos = fileName.lastIndexOf('.');
         if (extensionPos < 0) {
             String message = "Unable to determine database name from path: " + path;
             Log.e(Database.TAG, message);
@@ -65,7 +65,7 @@ public class FileDirUtils {
     }
 
     public static String getPathWithoutExt(String path) {
-        int pos = path.lastIndexOf(".");
+        int pos = path.lastIndexOf('.');
         return pos > 0 ? path.substring(0, pos) : path;
     }
 
