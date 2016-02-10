@@ -125,53 +125,44 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
             } else {
-                HttpEntity entity = null;
-                try {
-                    entity = response.getEntity();
-                    if (entity != null) {
-                        InputStream inputStream = null;
+                HttpEntity entity = response.getEntity();
+                if (entity != null) {
+                    try {
+                        InputStream inputStream;
+                        if (Utils.isGzip(entity)) {
+                            // decompress if contentEncoding is gzip
+                            inputStream = new GZIPInputStream(entity.getContent());
+                        } else {
+                            inputStream = entity.getContent();
+                        }
                         try {
                             Header contentTypeHeader = entity.getContentType();
                             if (contentTypeHeader != null) {
-                                inputStream = entity.getContent();
-                                // decompress if contentEncoding is gzip
-                                if (Utils.isGzip(entity)) {
-                                    inputStream = new GZIPInputStream(inputStream);
-                                }
                                 // multipart
                                 if (contentTypeHeader.getValue().contains("multipart/")) {
-                                    Log.v(TAG, "contentTypeHeader = %s",
-                                            contentTypeHeader.getValue());
-                                    _topReader = new MultipartReader(
-                                            contentTypeHeader.getValue(), this);
+                                    Log.v(TAG, "contentTypeHeader = %s", contentTypeHeader.getValue());
+                                    _topReader = new MultipartReader(contentTypeHeader.getValue(), this);
                                     byte[] buffer = new byte[BUF_LEN];
-                                    int nBytesRead = 0;
+                                    int nBytesRead;
                                     while ((nBytesRead = inputStream.read(buffer)) != -1) {
                                         _topReader.appendData(buffer, 0, nBytesRead);
                                     }
                                     _topReader.finished();
-                                    respondWithResult(fullBody, error, response);
                                 }
                                 // non-multipart
                                 else {
-                                    Log.v(TAG, "contentTypeHeader is not multipart = %s",
-                                            contentTypeHeader.getValue());
-                                    fullBody = Manager.getObjectMapper().readValue(
-                                            inputStream, Object.class);
-                                    respondWithResult(fullBody, error, response);
+                                    Log.v(TAG, "contentTypeHeader is not multipart = %s", contentTypeHeader.getValue());
+                                    fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                                 }
+                                respondWithResult(fullBody, error, response);
                             }
                         } finally {
                             try {
-                                if (inputStream != null) {
-                                    inputStream.close();
-                                }
+                                inputStream.close();
                             } catch (IOException e) {
                             }
                         }
-                    }
-                } finally {
-                    if (entity != null) {
+                    } finally {
                         try {
                             entity.consumeContent();
                         } catch (IOException e) {

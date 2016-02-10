@@ -79,14 +79,11 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         status.getReasonPhrase());
                 respondWithResult(fullBody, error, response);
             } else {
-                HttpEntity entity = null;
-                try {
-                    entity = response.getEntity();
-                    if (entity != null) {
-                        InputStream inputStream = null;
+                HttpEntity entity = response.getEntity();
+                if (entity != null) {
+                    try {
+                        InputStream inputStream = entity.getContent();
                         try {
-                            inputStream = entity.getContent();
-
                             Header contentTypeHeader = entity.getContentType();
                             if (contentTypeHeader != null) {
                                 // multipart
@@ -104,33 +101,33 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                                 }
                                 // non-multipart
                                 else {
-                                    GZIPInputStream gzipStream = null;
-                                    try {
-                                        // decompress if contentEncoding is gzip
-                                        Header contentEncoding = entity.getContentEncoding();
-                                        if (contentEncoding != null && contentEncoding.getValue().contains("gzip")) {
-                                            gzipStream = new GZIPInputStream(inputStream);
+                                    // decompress if contentEncoding is gzip
+                                    Header contentEncoding = entity.getContentEncoding();
+                                    if (contentEncoding != null && contentEncoding.getValue().contains("gzip")) {
+                                        GZIPInputStream gzipStream = new GZIPInputStream(inputStream);
+                                        try {
                                             fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
-                                        } else {
-                                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
+                                        } finally {
+                                            gzipStream.close();
                                         }
-                                        respondWithResult(fullBody, error, response);
-                                    } finally {
-                                        try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
-                                        gzipStream = null;
+                                    } else {
+                                        fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                                     }
+                                    respondWithResult(fullBody, error, response);
                                 }
                             }
+                        } finally {
+                            try {
+                                inputStream.close();
+                            } catch (IOException e) {
+                            }
                         }
-                        finally {
-                            try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
-                            inputStream = null;
+                    } finally {
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
                         }
                     }
-                }
-                finally{
-                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
-                    entity = null;
                 }
             }
         } catch (IOException e) {
