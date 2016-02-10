@@ -205,25 +205,26 @@ public class RemoteRequest implements Runnable {
             } else {
                 HttpEntity entity = null;
                 InputStream inputStream = null;
+                GZIPInputStream gzipStream = null;
                 try {
                     entity = response.getEntity();
                     if (entity != null) {
                         inputStream = entity.getContent();
                         // decompress if contentEncoding is gzip
                         if (Utils.isGzip(entity)) {
-                            GZIPInputStream gzipStream = new GZIPInputStream(inputStream);
-                            try {
-                                fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
-                            }finally {
-                                gzipStream.close();
-                            }
+                            gzipStream = new GZIPInputStream(inputStream);
+                            fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
                         } else {
                             fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                         }
                     }
                 }finally {
+                    try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
+                    gzipStream = null;
                     try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
+                    inputStream = null;
                     if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
+                    entity = null;
                 }
             }
         } catch (IOException e) {

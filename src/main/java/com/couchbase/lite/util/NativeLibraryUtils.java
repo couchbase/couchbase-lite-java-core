@@ -85,23 +85,21 @@ public class NativeLibraryUtils {
 
         // Extract the library to the target directory:
         InputStream libraryReader = NativeLibraryUtils.class.getResourceAsStream(libraryResourcePath);
+        if (libraryReader == null) {
+            System.err.println("Library not found: " + libraryResourcePath);
+            return null;
+        }
+
+        FileOutputStream libraryWriter = new FileOutputStream(targetFile);
         try {
-            if (libraryReader == null) {
-                System.err.println("Library not found: " + libraryResourcePath);
-                return null;
-            }
-            FileOutputStream libraryWriter = new FileOutputStream(targetFile);
-            try {
-                byte[] buffer = new byte[1024];
-                int bytesRead = 0;
-                while ((bytesRead = libraryReader.read(buffer)) != -1) {
-                    libraryWriter.write(buffer, 0, bytesRead);
-                }
-            } finally {
-                libraryWriter.close();
+            byte[] buffer = new byte[1024];
+            int bytesRead = 0;
+            while ((bytesRead = libraryReader.read(buffer)) != -1) {
+                libraryWriter.write(buffer, 0, bytesRead);
             }
         } finally {
-            if (libraryReader != null) libraryReader.close();
+            libraryWriter.close();
+            libraryReader.close();
         }
 
         // On non-windows systems set up permissions for the extracted native library.

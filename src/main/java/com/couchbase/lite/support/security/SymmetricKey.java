@@ -149,7 +149,6 @@ public class SymmetricKey {
      */
     public InputStream decryptStream(InputStream input) throws SymmetricKeyException {
         try {
-            //noinspection IOResourceOpenedButNotSafelyClosed
             EncryptedInputStream encryptedInputStream = new EncryptedInputStream(input);
             byte[] iv = encryptedInputStream.getIv();
             Cipher cipher = getCipher(Cipher.DECRYPT_MODE, iv);

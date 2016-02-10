@@ -78,11 +78,13 @@ public class TextUtils {
     }
 
     public static void write(String text, File file) throws IOException {
-        BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(file));
+        BufferedOutputStream output = null;
         try {
+            output = new BufferedOutputStream(new FileOutputStream(file));
             output.write(text.getBytes());
         } finally {
-            output.close();
+             if (output != null)
+                 output.close();
         }
     }
 

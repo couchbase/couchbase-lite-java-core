@@ -27,7 +27,6 @@ import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.lang.ref.WeakReference;
@@ -239,31 +238,18 @@ public class PersistentCookieStore implements CookieStore {
      * @param cookie cookie to be encoded, can be null
      * @return cookie encoded as String
      */
-    String encodeCookie(SerializableCookie cookie) {
+    /* package */ String encodeCookie(SerializableCookie cookie) {
         if (cookie == null)
             return null;
-
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
         try {
-            ObjectOutputStream outputStream = new ObjectOutputStream(baos);
-            try {
-                outputStream.writeObject(cookie);
-                return byteArrayToHexString(baos.toByteArray());
-            } finally {
-                try {
-                    outputStream.close();
-                } catch (IOException e) {
-                }
-            }
-        } catch (IOException e) {
+            ObjectOutputStream outputStream = new ObjectOutputStream(os);
+            outputStream.writeObject(cookie);
+        } catch (Exception e) {
             Log.e(Log.TAG_SYNC, String.format("encodeCookie failed.  cookie: %s", cookie), e);
             return null;
-        } finally {
-            try {
-                baos.close();
-            } catch (IOException e) {
-            }
         }
+        return byteArrayToHexString(os.toByteArray());
     }
 
     /**
@@ -272,28 +258,17 @@ public class PersistentCookieStore implements CookieStore {
      * @param cookieString string of cookie as returned from http request
      * @return decoded cookie or null if exception occured
      */
-    Cookie decodeCookie(String cookieString) {
-        byte[] bytes = hexStringToByteArray(cookieString);
-        ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
+    /* package */ Cookie decodeCookie(String cookieString) {
+        Cookie cookie = null;
         try {
-            ObjectInputStream ois = new ObjectInputStream(bais);
-            try {
-                return ((SerializableCookie) ois.readObject()).getCookie();
-            } finally {
-                try {
-                    ois.close();
-                } catch (IOException e) {
-                }
-            }
+            byte[] bytes = hexStringToByteArray(cookieString);
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
+            ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
+            cookie = ((SerializableCookie) objectInputStream.readObject()).getCookie();
         } catch (Exception exception) {
             Log.d(Log.TAG_SYNC, String.format("decodeCookie failed.  encoded cookie: %s", cookieString), exception);
-            return null;
-        } finally {
-            try {
-                bais.close();
-            } catch (IOException e) {
-            }
         }
+        return cookie;
     }
 
     /**

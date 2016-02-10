@@ -12,6 +12,7 @@ import org.apache.http.client.HttpResponseException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
@@ -184,65 +185,72 @@ public class Utils {
     public static byte[] compressByGzip(byte[] sourceBytes) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            GZIPOutputStream gzip = new GZIPOutputStream(out);
+            GZIPOutputStream gzip = null;
             try {
+                gzip = new GZIPOutputStream(out);
                 gzip.write(sourceBytes);
+                gzip.close();
             } catch (IOException ex) {
                 return null;
             } finally {
                 try {
-                    gzip.close();
+                    if (gzip != null) {
+                        gzip.close();
+                    }
                 } catch (IOException ex) {
                 }
             }
-        }catch (IOException e){
-            return null;
+
+            return out.toByteArray();
         } finally {
             try {
                 out.close();
             } catch (IOException ex) {
             }
         }
-        return out.toByteArray();
     }
 
     // from gzip
     public static int CHUNK_SIZE = 8192; // 1024 * 8
 
     public static byte[] decompressByGzip(byte[] sourceBytes) {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = null;
+        ByteArrayOutputStream out = null;
+        ByteArrayInputStream in = null;
+        GZIPInputStream gzip = null;
         try {
-            byte[] buffer = new byte[CHUNK_SIZE];
-            ByteArrayInputStream in = new ByteArrayInputStream(sourceBytes);
+            out = new ByteArrayOutputStream();
+            buffer = new byte[CHUNK_SIZE];
+            in = new ByteArrayInputStream(sourceBytes);
+            gzip = new GZIPInputStream(in);
+            int len = 0;
+            while ((len = gzip.read(buffer, 0, CHUNK_SIZE)) != -1) {
+                out.write(buffer, 0, len);
+            }
+            return out.toByteArray();
+        } catch (IOException ex) {
+            Log.w(Log.TAG, "Failed to decompress gzipped data: " + ex.getMessage());
+            return null;
+        } finally {
             try {
-                GZIPInputStream gzip = new GZIPInputStream(in);
-                try {
-                    int len = 0;
-                    while ((len = gzip.read(buffer, 0, CHUNK_SIZE)) != -1) {
-                        out.write(buffer, 0, len);
-                    }
-                } finally {
-                    try {
-                        gzip.close();
-                    } catch (IOException e) {
-                    }
+                if (out != null) {
+                    out.close();
                 }
             } catch (IOException ex) {
-                Log.w(Log.TAG, "Failed to decompress gzipped data: " + ex.getMessage());
-                return null;
-            } finally {
-                try {
-                    in.close();
-                } catch (IOException ex) {
-                }
             }
-        }finally {
             try {
-                out.close();
+                if (in != null) {
+                    in.close();
+                }
+            } catch (IOException ex) {
+            }
+            try {
+                if (gzip != null) {
+                    gzip.close();
+                }
             } catch (IOException ex) {
             }
         }
-        return out.toByteArray();
     }
 
     public static Map<String, String> headersToMap(Header[] headers) {
