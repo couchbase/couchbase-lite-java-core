@@ -31,9 +31,9 @@ import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
 import com.couchbase.lite.View;
-import com.couchbase.lite.internal.database.ContentValues;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.internal.database.ContentValues;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
@@ -2360,7 +2360,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     /**
      * Hack because cursor interface does not support cursor.getColumnIndex("deleted") yet.
      */
-    private int getDeletedColumnIndex(QueryOptions options) {
+    private static int getDeletedColumnIndex(QueryOptions options) {
         if (options.isIncludeDocs()) {
             return 6; // + json and no_attachments
         } else {
@@ -2394,8 +2394,8 @@ public class SQLiteStore implements Store, EncryptableStore {
         return rev;
     }
 
-    protected RevisionInternal revision(String docID, String revID,
-                                        boolean deleted, long sequence, byte[] json) {
+    protected static RevisionInternal revision(String docID, String revID,
+                                               boolean deleted, long sequence, byte[] json) {
         RevisionInternal rev = new RevisionInternal(docID, revID, deleted);
         rev.setSequence(sequence);
         if (json != null)
@@ -2403,9 +2403,9 @@ public class SQLiteStore implements Store, EncryptableStore {
         return rev;
     }
 
-    protected RevisionInternal revision(String docID, String revID,
-                                        boolean deleted, long sequence,
-                                        Map<String, Object> properties) {
+    protected static RevisionInternal revision(String docID, String revID,
+                                               boolean deleted, long sequence,
+                                               Map<String, Object> properties) {
         RevisionInternal rev = new RevisionInternal(docID, revID, deleted);
         rev.setSequence(sequence);
         if (properties != null)

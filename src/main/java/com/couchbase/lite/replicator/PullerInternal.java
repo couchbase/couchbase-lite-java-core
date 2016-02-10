@@ -631,7 +631,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     @InterfaceAudience.Private
-    private Comparator<RevisionInternal> getRevisionListComparator() {
+    private static Comparator<RevisionInternal> getRevisionListComparator() {
         return new Comparator<RevisionInternal>() {
 
             public int compare(RevisionInternal reva, RevisionInternal revb) {
@@ -725,7 +725,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     @InterfaceAudience.Private
-    public String joinQuotedEscaped(List<String> strings) {
+    public static String joinQuotedEscaped(List<String> strings) {
         if (strings.size() == 0) {
             return "[]";
         }

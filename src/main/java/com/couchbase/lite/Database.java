@@ -1068,7 +1068,7 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    private String getStoreClassName(String storageType) {
+    private static String getStoreClassName(String storageType) {
         if (storageType == null) storageType = DEFAULT_STORAGE;
         if (storageType.equals(Manager.SQLITE_STORAGE))
             return SQLITE_STORE_CLASS;

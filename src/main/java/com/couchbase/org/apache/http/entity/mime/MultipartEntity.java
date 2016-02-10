@@ -27,24 +27,25 @@
 
 package com.couchbase.org.apache.http.entity.mime;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.Charset;
-import java.util.Random;
+import com.couchbase.org.apache.http.entity.mime.content.ContentBody;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.protocol.HTTP;
 
-import com.couchbase.org.apache.http.entity.mime.content.ContentBody;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.Charset;
+import java.util.Random;
 
 /**
  * Multipart/form coded HTTP entity consisting of multiple body parts.
  *
  * @since 4.0
  */
+@SuppressWarnings("MethodMayBeStatic")
 public class MultipartEntity implements HttpEntity {
 
     /**

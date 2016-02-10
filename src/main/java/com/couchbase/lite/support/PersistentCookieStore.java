@@ -149,7 +149,7 @@ public class PersistentCookieStore implements CookieStore {
         }
     }
 
-    private Cookie createCookie(String name, String value, String domain, String path, Date expirationDate, boolean secure) {
+    private static Cookie createCookie(String name, String value, String domain, String path, Date expirationDate, boolean secure) {
         BasicClientCookie2 cookie = new BasicClientCookie2(name, value);
         cookie.setDomain(domain);
         cookie.setPath(path);
@@ -238,7 +238,7 @@ public class PersistentCookieStore implements CookieStore {
      * @param cookie cookie to be encoded, can be null
      * @return cookie encoded as String
      */
-    /* package */ String encodeCookie(SerializableCookie cookie) {
+    /* package */ static String encodeCookie(SerializableCookie cookie) {
         if (cookie == null)
             return null;
         ByteArrayOutputStream os = new ByteArrayOutputStream();
@@ -258,7 +258,7 @@ public class PersistentCookieStore implements CookieStore {
      * @param cookieString string of cookie as returned from http request
      * @return decoded cookie or null if exception occured
      */
-    /* package */ Cookie decodeCookie(String cookieString) {
+    /* package */ static Cookie decodeCookie(String cookieString) {
         Cookie cookie = null;
         try {
             byte[] bytes = hexStringToByteArray(cookieString);
@@ -278,7 +278,7 @@ public class PersistentCookieStore implements CookieStore {
      * @param bytes byte array to be converted
      * @return string containing hex values
      */
-    protected String byteArrayToHexString(byte[] bytes) {
+    protected static String byteArrayToHexString(byte[] bytes) {
         StringBuilder sb = new StringBuilder(bytes.length * 2);
         for (byte element : bytes) {
             int v = element & 0xff;
@@ -296,7 +296,7 @@ public class PersistentCookieStore implements CookieStore {
      * @param hexString string of hex-encoded values
      * @return decoded byte array
      */
-    protected byte[] hexStringToByteArray(String hexString) {
+    protected static byte[] hexStringToByteArray(String hexString) {
         int len = hexString.length();
         byte[] data = new byte[len / 2];
         for (int i = 0; i < len; i += 2) {
