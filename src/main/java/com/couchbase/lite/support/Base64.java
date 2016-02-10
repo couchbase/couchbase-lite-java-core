@@ -147,6 +147,7 @@ package com.couchbase.lite.support;
  * @author rob@iharder.net
  * @version 2.3.7
  */
+@SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
 public class Base64
 {
 

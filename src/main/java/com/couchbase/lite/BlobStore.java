@@ -337,34 +337,6 @@ public class BlobStore {
         return result;
     }
 
-    public static BlobKey keyForBlobFromFile(File file) {
-        MessageDigest md;
-        try {
-            md = MessageDigest.getInstance("SHA-1");
-        } catch (NoSuchAlgorithmException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error, SHA-1 getDigest is unavailable.");
-            return null;
-        }
-        byte[] sha1hash = new byte[40];
-
-        try {
-            FileInputStream fis = new FileInputStream(file);
-            byte[] buffer = new byte[65536];
-            int lenRead = fis.read(buffer);
-            while (lenRead > 0) {
-                md.update(buffer, 0, lenRead);
-                lenRead = fis.read(buffer);
-            }
-            fis.close();
-        } catch (IOException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error reading tmp file to compute key");
-        }
-
-        sha1hash = md.digest();
-        BlobKey result = new BlobKey(sha1hash);
-        return result;
-    }
-
     /**
      * Path to file storing the blob. Returns null if the blob is encrypted.
      * @param key
@@ -479,43 +451,6 @@ public class BlobStore {
         return null;
     }
 
-    /*
-    NO Usages: Should be removed:
-    public boolean storeBlobStream(InputStream inputStream, BlobKey outKey) {
-        File tmp = null;
-        try {
-            tmp = File.createTempFile(TMP_FILE_PREFIX, TMP_FILE_EXTENSION, new File(path));
-            FileOutputStream fos = new FileOutputStream(tmp);
-            byte[] buffer = new byte[65536];
-            int lenRead = inputStream.read(buffer);
-            while (lenRead > 0) {
-                fos.write(buffer, 0, lenRead);
-                lenRead = inputStream.read(buffer);
-            }
-            inputStream.close();
-            fos.close();
-        } catch (IOException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error writing blob to tmp file", e);
-            return false;
-        }
-
-        BlobKey newKey = keyForBlobFromFile(tmp);
-        outKey.setBytes(newKey.getBytes());
-        String path = getRawPathForKey(outKey);
-        File file = new File(path);
-
-        if (file.canRead()) {
-            // object with this hash already exists, we should delete tmp file and return true
-            tmp.delete();
-            return true;
-        } else {
-            // does not exist, we should rename tmp file to this name
-            tmp.renameTo(file);
-        }
-        return true;
-    }
-    */
-
     public boolean storeBlob(byte[] data, BlobKey outKey) {
         BlobKey newKey = keyForBlob(data);
         outKey.setBytes(newKey.getBytes());
@@ -534,33 +469,30 @@ public class BlobStore {
             }
         }
 
-        FileOutputStream fos = null;
+        FileOutputStream fos;
         try {
             fos = new FileOutputStream(file);
-            fos.write(data);
         } catch (FileNotFoundException e) {
             Log.e(Log.TAG_DATABASE, "BlobStore: Error opening file for output", e);
             return false;
+        }
+        try {
+            fos.write(data);
         } catch (IOException ioe) {
             Log.e(Log.TAG_DATABASE, "BlobStore: Error writing to file", ioe);
             return false;
         } finally {
-            if (fos != null) {
-                try {
-                    fos.close();
-                } catch (IOException e) {
-                    // ignore
-                }
+            try {
+                fos.close();
+            } catch (IOException e) {
             }
         }
         return true;
     }
 
     private static byte[] getBytesFromFile(File file) throws IOException {
-        InputStream is = null;
+        InputStream is = new FileInputStream(file);
         try {
-            is = new FileInputStream(file);
-
             // Get the size of the file:
             long length = file.length();
             if (length > (long)Integer.MAX_VALUE)
@@ -584,8 +516,7 @@ public class BlobStore {
                 throw new IOException("Could not completely read file " + file.getName());
             return bytes;
         } finally {
-             if (is != null)
-                 is.close();
+            is.close();
         }
     }
 
@@ -649,12 +580,23 @@ public class BlobStore {
         String path = getRawPathForKey(key);
         File file = new File(path);
         if (file.canRead()) {
+            RandomAccessFile raf = null;
             try {
-                RandomAccessFile raf = new RandomAccessFile(file, "r");
+                raf = new RandomAccessFile(file, "r");
+            } catch (FileNotFoundException e) {
+                Log.w(Log.TAG_BLOB_STORE, "File not found: " + file.toString());
+                return false;
+            }
+            try {
                 magic = raf.read() & 0xff | ((raf.read() << 8) & 0xff00);
-                raf.close();
-            } catch (Throwable e) {
-                e.printStackTrace(System.err);
+            } catch (IOException e) {
+                Log.w(Log.TAG_BLOB_STORE, "Unable to read from file: " + file.toString());
+                return false;
+            } finally {
+                try {
+                    raf.close();
+                } catch (IOException e) {
+                }
             }
         }
         return magic == GZIPInputStream.GZIP_MAGIC;
