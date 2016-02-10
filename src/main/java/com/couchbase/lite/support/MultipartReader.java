@@ -58,7 +58,7 @@ public class MultipartReader {
         return state == MultipartReaderState.kAtEnd;
     }
 
-    private boolean memcmp(byte[] array1, byte[] array2, int len) {
+    private static boolean memcmp(byte[] array1, byte[] array2, int len) {
         boolean equals = true;
         for (int i = 0; i < len; i++) {
             if (array1[i] != array2[i]) {
@@ -254,7 +254,7 @@ class KMPMatch {
     /**
      * Finds the first occurrence of the pattern in the text.
      */
-    public int indexOf(byte[] data, int dataLength, byte[] pattern, int dataOffset) {
+    public static int indexOf(byte[] data, int dataLength, byte[] pattern, int dataOffset) {
 
         int[] failure = computeFailure(pattern);
 
@@ -284,7 +284,7 @@ class KMPMatch {
      * Computes the failure function using a boot-strapping process,
      * where the pattern is matched against itself.
      */
-    private int[] computeFailure(byte[] pattern) {
+    private static int[] computeFailure(byte[] pattern) {
         int[] failure = new int[pattern.length];
 
         int j = 0;
