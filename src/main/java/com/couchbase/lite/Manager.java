@@ -860,7 +860,7 @@ public final class Manager {
         }
     }
 
-    private void moveSQLiteDbFiles(String oldDbPath, String newDbPath) {
+    private static void moveSQLiteDbFiles(String oldDbPath, String newDbPath) {
         for (String suffix : Arrays.asList("", "-wal", "-shm", "-journal")) {
             File oldFile = new File(oldDbPath + suffix);
             if (!oldFile.exists())
@@ -893,7 +893,7 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    private String nameOfDatabaseAtPath(String path) {
+    private static String nameOfDatabaseAtPath(String path) {
         String name = FileDirUtils.getDatabaseNameFromPath(path);
         return isWindows() ? name.replace('/', '.') : name.replace('/', ':');
     }
@@ -920,7 +920,7 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    private Map<String, Object> parseSourceOrTarget(Map<String, Object> properties, String key) {
+    private static Map<String, Object> parseSourceOrTarget(Map<String, Object> properties, String key) {
         Map<String, Object> result = new HashMap<String, Object>();
 
         Object value = properties.get(key);

@@ -345,7 +345,7 @@ public class RemoteRequest implements Runnable {
      * in CBLRemoteRequest.m
      * - (BOOL) compressBody
      */
-    protected ByteArrayEntity setCompressedBody(byte[] bodyBytes){
+    protected static ByteArrayEntity setCompressedBody(byte[] bodyBytes){
         if(bodyBytes.length < MIN_JSON_LENGTH_TO_COMPRESS){
             return null;
         }
@@ -365,7 +365,7 @@ public class RemoteRequest implements Runnable {
         return entity;
     }
 
-    protected ByteArrayEntity setUncompressedBody(byte[] bodyBytes){
+    protected static ByteArrayEntity setUncompressedBody(byte[] bodyBytes){
         ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
         entity.setContentType("application/json");
         return entity;

@@ -1707,7 +1707,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * <p/>
      * Avoids encoding the slash in _design documents since it may cause a 301 redirect.
      */
-    protected String encodeDocumentId(String docId) {
+    protected static String encodeDocumentId(String docId) {
         if (docId.startsWith("_design/")) {
             // http://docs.couchdb.org/en/1.6.1/http-api.html#cap-/{db}/_design/{ddoc}
             String designDocId = docId.substring("_design/".length());

@@ -120,8 +120,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return queries;
     }
 
-    private boolean getBooleanValueFromBody(String paramName, Map<String, Object> bodyDict,
-                                            boolean defaultVal) {
+    private static boolean getBooleanValueFromBody(String paramName, Map<String, Object> bodyDict,
+                                                   boolean defaultVal) {
         boolean value = defaultVal;
         if (bodyDict.containsKey(paramName)) {
             value = Boolean.TRUE.equals(bodyDict.get(paramName));
@@ -579,6 +579,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
+    @SuppressWarnings("MethodMayBeStatic")
     public Status do_UNKNOWN(Database db, String docID, String attachmentName) {
         return new Status(Status.NOT_FOUND);
     }
@@ -884,7 +885,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * TODO: To be compatible with CBL iOS, this method should move to Replicator.activeTaskInfo().
      * TODO: Reference: - (NSDictionary*) activeTaskInfo in CBL_Replicator.m
      */
-    private Map<String, Object> getActivity(Replication replicator) {
+    private static Map<String, Object> getActivity(Replication replicator) {
         // For schema, see http://wiki.apache.org/couchdb/HttpGetActiveTasks
         Map<String, Object> activity = new HashMap<String, Object>();
 
@@ -1018,7 +1019,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * This is a hack to deal with the fact that there is currently no custom
      * serializer for QueryRow.  Instead, just convert everything to generic Maps.
      */
-    private void convertCBLQueryRowsToMaps(Map<String, Object> allDocsResult) {
+    private static void convertCBLQueryRowsToMaps(Map<String, Object> allDocsResult) {
         List<Map<String, Object>> rowsAsMaps = new ArrayList<Map<String, Object>>();
         List<QueryRow> rows = (List<QueryRow>) allDocsResult.get("rows");
         if (rows != null) {
@@ -1291,6 +1292,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.OK);
     }
 
+    @SuppressWarnings("MethodMayBeStatic")
     public Status do_POST_Document_compact(Database _db, String _docID, String _attachmentName) {
         Status status = new Status(Status.OK);
         try {
@@ -1359,6 +1361,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.OK);
     }
 
+    @SuppressWarnings("MethodMayBeStatic")
     public Status do_POST_Document_ensure_full_commit(Database _db, String _docID, String _attachmentName) {
         return new Status(Status.OK);
     }

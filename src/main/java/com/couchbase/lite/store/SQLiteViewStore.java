@@ -644,7 +644,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                                 revID,
                                 false,
                                 sequence);
-                        docRevision = store.revision(
+                        docRevision = SQLiteStore.revision(
                                 docID,    // docID
                                 revID,    // revID
                                 false,    // deleted
@@ -1027,7 +1027,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         return status;
     }
 
-    private String toJSONString(Object object) {
+    private static String toJSONString(Object object) {
         if (object == null) {
             return null;
         }

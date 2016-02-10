@@ -232,7 +232,7 @@ final public class DatabaseUpgrade {
                             return new Status(Status.BAD_JSON);
                     } else {//.NET v1.1 database already has attachments bundled in the JSON data:
                         if (!noAtts) {
-                            json = this.updateAttachmentFollowsInJson(json);
+                            json = DatabaseUpgrade.updateAttachmentFollowsInJson(json);
                             if (json == null)
                                 return new Status(Status.BAD_JSON);
                         }
@@ -267,7 +267,7 @@ final public class DatabaseUpgrade {
         return new Status(Status.OK);
     }
 
-    private byte[] updateAttachmentFollowsInJson(byte[] json) {
+    private static byte[] updateAttachmentFollowsInJson(byte[] json) {
         Map<String, Object> object = null;
         try {
             object = Manager.getObjectMapper().readValue(json, Map.class);

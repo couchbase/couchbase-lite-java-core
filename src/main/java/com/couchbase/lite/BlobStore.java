@@ -303,7 +303,7 @@ public class BlobStore {
         actionToChangeEncryptionKey(newKey).run();
     }
 
-    protected void migrateBlobstoreFilenames(File directory) {
+    protected static void migrateBlobstoreFilenames(File directory) {
         if (directory == null || !directory.isDirectory())
             return;
 

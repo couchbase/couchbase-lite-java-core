@@ -100,7 +100,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
     // Database Encryption
     ///////////////////////////////////////////////////////////////////////////
 
-    private void decrypt(SQLiteConnection connection, SymmetricKey key)
+    private static void decrypt(SQLiteConnection connection, SymmetricKey key)
             throws com.couchbase.lite.internal.database.SQLException {
         if (key != null) {
             try {
