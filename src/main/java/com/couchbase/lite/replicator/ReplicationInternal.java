@@ -239,12 +239,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
             initSessionId();
 
-            // init batcher
+            // initialize batcher
             initBatcher();
 
-            // init authorizer / authenticator
+            // initialize authorizer / authenticator
             initAuthorizer();
 
+            // initialize request workers
             initializeRequestWorkers();
 
             // single-shot replication
