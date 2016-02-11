@@ -463,7 +463,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
             // if permanent error, stop immediately
             if(Utils.isPermanentError(this.error)) {
-                stop();
+                triggerStopGraceful();
             }
 
             // iOS version sends notification from stop() method, but java version does not.
@@ -866,12 +866,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 if (e != null && !Utils.is404(e)) {
                     Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
                     setError(e);
-
-                    // TODO: double check this behavior against iOS implementation, especially
-                    //       with regards to behavior of a continuous replication.
-                    // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
-                    //       (before adding this, the replication would just end up in limbo and never finish)
-                    triggerStopGraceful();
                 } else {
                     if (e != null && Utils.is404(e)) {
                         Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s",
@@ -894,7 +888,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     beginReplicating();
                 }
             }
-
         });
         pendingFutures.add(future);
     }
