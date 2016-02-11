@@ -226,17 +226,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Start the replication process.
      */
     protected void start() {
-
         try {
             if (!db.isOpen()) {
-
                 String msg = String.format("Db: %s is not open, abort replication", db);
                 parentReplication.setLastError(new Exception(msg));
-
                 fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
-
                 return;
-
             }
 
             db.addReplication(parentReplication);
@@ -250,16 +245,23 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             // init authorizer / authenticator
             initAuthorizer();
 
-            // call goOnline (or trigger state change into online state)
-            goOnlineInitialStartup();
+            initializeRequestWorkers();
 
-            initNetworkReachabilityManager();
-
-            this.retryCount = 0;
+            // single-shot replication
+            if (!isContinuous()) {
+                goOnline();
+            }
+            // continuous mode
+            else {
+                if (isNetworkReachable())
+                    goOnline();
+                else
+                    triggerGoOffline();
+                startNetworkReachabilityManager();
+            }
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "%s: Exception in start()", e, this);
         }
-
     }
 
     private void initSessionId() {
@@ -277,8 +279,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Put the replication back online after being offline
      */
     protected void goOnline() {
-        // implemented by subclasses
-
+        this.retryCount = 0;
+        checkSession();
     }
 
     public void databaseClosing() {
@@ -323,37 +325,43 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     }
 
-    protected void initNetworkReachabilityManager() {
+    protected void startNetworkReachabilityManager() {
         db.getManager().getContext().getNetworkReachabilityManager().addNetworkReachabilityListener(parentReplication);
+    }
+
+    protected void stopNetworkReachabilityManager() {
+        db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(parentReplication);
+    }
+
+    protected boolean isNetworkReachable() {
+        return db.getManager().getContext().getNetworkReachabilityManager().isOnline();
     }
 
     public abstract boolean shouldCreateTarget();
 
     public abstract void setCreateTarget(boolean createTarget);
 
-    protected void goOnlineInitialStartup() {
+    protected void initializeRequestWorkers() {
+        if (remoteRequestExecutor == null) {
+            int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
+                    EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
+            Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
+            remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
+                private int counter = 0;
 
-        int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
-                EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
-        Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
-        remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
-            private int counter = 0;
-
-            @Override
-            public Thread newThread(Runnable r) {
-                String threadName = "CBLRequestWorker";
-                try {
-                    String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                    threadName = String.format("CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
-                } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                @Override
+                public Thread newThread(Runnable r) {
+                    String threadName = "CBLRequestWorker";
+                    try {
+                        String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+                        threadName = String.format("CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                    }
+                    return new Thread(r, threadName);
                 }
-                return new Thread(r, threadName);
-            }
-        });
-
-        checkSession();
-
+            });
+        }
     }
 
     @InterfaceAudience.Private
