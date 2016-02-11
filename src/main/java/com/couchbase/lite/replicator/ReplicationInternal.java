@@ -1300,11 +1300,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
-                saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
-                clearDbRef();
-
-                // close any active resources associated with this replicator
-                close();
 
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
@@ -1313,6 +1308,16 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     // ignore STOPPED to STOPPED
                     return;
                 }
+
+                saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called
+
+                // stop network reachablity check
+                stopNetworkReachabilityManager();
+
+                // close any active resources associated with this replicator
+                close();
+
+                clearDbRef();
 
                 notifyChangeListenersStateTransition(transition);
             }
