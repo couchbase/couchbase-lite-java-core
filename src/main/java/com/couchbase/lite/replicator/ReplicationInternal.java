@@ -462,7 +462,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             this.error = throwable;
 
             // if permanent error, stop immediately
-            if(Utils.isPermanentError(this.error)) {
+            if(Utils.isPermanentError(this.error) || !isContinuous()) {
                 triggerStopGraceful();
             }
 
