@@ -205,7 +205,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                             Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
                             stateMachine.fire(trigger);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            Log.e(Log.TAG_SYNC, "Unknown Error in stateMachine.fire(trigger)", e);
                             throw new RuntimeException(e);
                         }
                     }
@@ -734,7 +734,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 try {
 
                     if (e != null) {
-                        Log.w(Log.TAG_SYNC, "%s: Unable to save remote checkpoint", e, this);
                         // Failed to save checkpoint:
                         switch (Utils.getStatusFromError(e)) {
                             case Status.NOT_FOUND:
@@ -1111,8 +1110,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 try {
                     changeListener.changed(changeEvent);
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
+                    Log.e(Log.TAG_SYNC, "Unknown Error in changeListener.changed(changeEvent)", e);
                 }
             }
         } else {
