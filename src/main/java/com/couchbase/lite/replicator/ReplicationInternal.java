@@ -1313,7 +1313,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called
 
                 // stop network reachablity check
-                stopNetworkReachabilityManager();
+                if (isContinuous())
+                    stopNetworkReachabilityManager();
 
                 // close any active resources associated with this replicator
                 close();
@@ -1323,7 +1324,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 notifyChangeListenersStateTransition(transition);
             }
         });
-
     }
 
     private void logTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
