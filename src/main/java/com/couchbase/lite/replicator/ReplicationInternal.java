@@ -226,17 +226,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Start the replication process.
      */
     protected void start() {
-
         try {
             if (!db.isOpen()) {
-
                 String msg = String.format("Db: %s is not open, abort replication", db);
                 parentReplication.setLastError(new Exception(msg));
-
                 fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
-
                 return;
-
             }
 
             db.addReplication(parentReplication);
@@ -244,22 +239,30 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
             initSessionId();
 
-            // init batcher
+            // initialize batcher
             initBatcher();
 
-            // init authorizer / authenticator
+            // initialize authorizer / authenticator
             initAuthorizer();
 
-            // call goOnline (or trigger state change into online state)
-            goOnlineInitialStartup();
+            // initialize request workers
+            initializeRequestWorkers();
 
-            initNetworkReachabilityManager();
-
-            this.retryCount = 0;
+            // single-shot replication
+            if (!isContinuous()) {
+                goOnline();
+            }
+            // continuous mode
+            else {
+                if (isNetworkReachable())
+                    goOnline();
+                else
+                    triggerGoOffline();
+                startNetworkReachabilityManager();
+            }
         } catch (Exception e) {
             Log.e(Log.TAG_SYNC, "%s: Exception in start()", e, this);
         }
-
     }
 
     private void initSessionId() {
@@ -277,8 +280,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Put the replication back online after being offline
      */
     protected void goOnline() {
-        // implemented by subclasses
-
+        this.retryCount = 0;
+        checkSession();
     }
 
     public void databaseClosing() {
@@ -323,37 +326,43 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     }
 
-    protected void initNetworkReachabilityManager() {
+    protected void startNetworkReachabilityManager() {
         db.getManager().getContext().getNetworkReachabilityManager().addNetworkReachabilityListener(parentReplication);
+    }
+
+    protected void stopNetworkReachabilityManager() {
+        db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(parentReplication);
+    }
+
+    protected boolean isNetworkReachable() {
+        return db.getManager().getContext().getNetworkReachabilityManager().isOnline();
     }
 
     public abstract boolean shouldCreateTarget();
 
     public abstract void setCreateTarget(boolean createTarget);
 
-    protected void goOnlineInitialStartup() {
+    protected void initializeRequestWorkers() {
+        if (remoteRequestExecutor == null) {
+            int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
+                    EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
+            Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
+            remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
+                private int counter = 0;
 
-        int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
-                EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
-        Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
-        remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
-            private int counter = 0;
-
-            @Override
-            public Thread newThread(Runnable r) {
-                String threadName = "CBLRequestWorker";
-                try {
-                    String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                    threadName = String.format("CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
-                } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                @Override
+                public Thread newThread(Runnable r) {
+                    String threadName = "CBLRequestWorker";
+                    try {
+                        String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+                        threadName = String.format("CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                    }
+                    return new Thread(r, threadName);
                 }
-                return new Thread(r, threadName);
-            }
-        });
-
-        checkSession();
-
+            });
+        }
     }
 
     @InterfaceAudience.Private
@@ -462,8 +471,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             this.error = throwable;
 
             // if permanent error, stop immediately
-            if(Utils.isPermanentError(this.error)) {
-                stop();
+            if(Utils.isPermanentError(this.error) || !isContinuous()) {
+                triggerStopGraceful();
             }
 
             // iOS version sends notification from stop() method, but java version does not.
@@ -866,12 +875,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 if (e != null && !Utils.is404(e)) {
                     Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
                     setError(e);
-
-                    // TODO: double check this behavior against iOS implementation, especially
-                    //       with regards to behavior of a continuous replication.
-                    // Note: was added in order that unit test testRunReplicationWithError() finished and passed.
-                    //       (before adding this, the replication would just end up in limbo and never finish)
-                    triggerStopGraceful();
                 } else {
                     if (e != null && Utils.is404(e)) {
                         Log.v(Log.TAG_SYNC, "%s: Remote checkpoint does not exist on server yet: %s",
@@ -894,7 +897,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     beginReplicating();
                 }
             }
-
         });
         pendingFutures.add(future);
     }
@@ -1299,11 +1301,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
                 Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
-                saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called if Rem
-                clearDbRef();
-
-                // close any active resources associated with this replicator
-                close();
 
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
@@ -1313,10 +1310,20 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     return;
                 }
 
+                saveLastSequence(); // move from databaseClosing() method as databaseClosing() is not called
+
+                // stop network reachablity check
+                if (isContinuous())
+                    stopNetworkReachabilityManager();
+
+                // close any active resources associated with this replicator
+                close();
+
+                clearDbRef();
+
                 notifyChangeListenersStateTransition(transition);
             }
         });
-
     }
 
     private void logTransition(Transition<ReplicationState, ReplicationTrigger> transition) {

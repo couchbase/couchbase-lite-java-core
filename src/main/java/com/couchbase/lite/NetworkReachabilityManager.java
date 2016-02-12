@@ -69,4 +69,5 @@ public abstract class NetworkReachabilityManager {
      */
     public abstract void stopListening();
 
+    public abstract boolean isOnline();
 }

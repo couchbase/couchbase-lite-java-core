@@ -1099,17 +1099,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (changeTracker != null) {
             changeTracker.stop();
         }
-
-        // TODO: stop remote requests in progress, but first
-        // TODO: write a test that verifies this actually works
-    }
-
-    @Override
-    protected void goOnline() {
-        super.goOnline();
-
-        // start change tracker
-        beginReplicating();
     }
 
     protected void pauseOrResume() {
