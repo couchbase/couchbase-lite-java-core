@@ -654,7 +654,7 @@ public class BlobStore {
                 magic = raf.read() & 0xff | ((raf.read() << 8) & 0xff00);
                 raf.close();
             } catch (Throwable e) {
-                e.printStackTrace(System.err);
+                Log.e(Log.TAG_BLOB_STORE, "Failed to read from RandomAccessFile", e);
             }
         }
         return magic == GZIPInputStream.GZIP_MAGIC;

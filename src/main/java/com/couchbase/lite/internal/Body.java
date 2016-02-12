@@ -18,6 +18,7 @@
 package com.couchbase.lite.internal;
 
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.util.Log;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 import java.io.IOException;
@@ -61,7 +62,7 @@ public class Body {
         try {
             props = Manager.getObjectMapper().readValue(json, Map.class);
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.w(Log.TAG_DATABASE, "Failed to parse Json document", e);
         }
         props.putAll(extra);
         this.object = props;

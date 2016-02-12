@@ -157,9 +157,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         future.get();
                         Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        Log.e(Log.TAG_SYNC, "InterruptedException in Future.get()", e);
                     } catch (ExecutionException e) {
-                        e.printStackTrace();
+                        Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
                     }
                 }
 

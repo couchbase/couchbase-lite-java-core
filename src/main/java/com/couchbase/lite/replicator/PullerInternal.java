@@ -852,7 +852,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         try {
                             processChangeTrackerStopped(changeTracker);
                         } catch (RuntimeException e) {
-                            e.printStackTrace();
+                            Log.e(Log.TAG_CHANGE_TRACKER, "Unknown Error in processChangeTrackerStopped()", e);
                             throw e;
                         }
                     }
@@ -1067,13 +1067,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             while (!pendingFutures.isEmpty()) {
                 Future future = pendingFutures.take();
                 try {
-                    Log.d(TAG, "calling future.get() on %s", future);
+                    Log.v(TAG, "calling future.get() on %s", future);
                     future.get();
-                    Log.d(TAG, "done calling future.get() on %s", future);
+                    Log.v(TAG, "done calling future.get() on %s", future);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    Log.e(Log.TAG_SYNC, "InterruptedException in Future.get()", e);
                 } catch (ExecutionException e) {
-                    e.printStackTrace();
+                    Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
                 }
             }
         } catch (Exception e) {
