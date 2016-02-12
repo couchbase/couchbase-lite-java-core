@@ -1894,8 +1894,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
 
         } catch (CouchbaseLiteException e) {
-            e.printStackTrace();
-            Log.e(Log.TAG_ROUTER, "Error updating doc: %s", e, docID);
+            if (e.getCBLStatus() != null && e.getCBLStatus().getCode() == Status.CONFLICT) {
+                // conflict is not critical error for replicators, not print stack trace
+                Log.w(Log.TAG_ROUTER, "Error updating doc: %s", docID);
+            } else {
+                Log.e(Log.TAG_ROUTER, "Error updating doc: %s", e, docID);
+            }
             outStatus.setCode(e.getCBLStatus().getCode());
         }
 
