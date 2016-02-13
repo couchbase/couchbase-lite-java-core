@@ -973,7 +973,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 "WHERE docid IN (" +
                 quotedDocIds +
                 ") AND revid in (" +
-                quotedRevIds + ")" +
+                quotedRevIds + ')' +
                 " AND revs.doc_id == docs.doc_id";
 
         Cursor cursor = null;

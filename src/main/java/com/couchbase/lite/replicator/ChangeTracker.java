@@ -191,7 +191,7 @@ public class ChangeTracker implements Runnable {
                             throw new IllegalArgumentException(e);
                         }
                     }
-                    path += "&" + URLEncoder.encode(key) + "=" + URLEncoder.encode(value.toString());
+                    path += '&' + URLEncoder.encode(key) + '=' + URLEncoder.encode(value.toString());
                 }
             }
         }

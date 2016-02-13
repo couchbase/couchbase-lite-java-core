@@ -36,7 +36,7 @@ public class SystemLogger implements Logger {
 
     @Override
     public void v(String tag, String msg, Throwable tr) {
-        logger.finer(tag + ": " + msg + "\n" + getStackTraceString(tr));
+        logger.finer(tag + ": " + msg + '\n' + getStackTraceString(tr));
     }
 
     @Override
@@ -46,7 +46,7 @@ public class SystemLogger implements Logger {
 
     @Override
     public void d(String tag, String msg, Throwable tr) {
-        logger.fine(tag + ": " + msg + "\n" + getStackTraceString(tr));
+        logger.fine(tag + ": " + msg + '\n' + getStackTraceString(tr));
     }
 
     @Override
@@ -56,7 +56,7 @@ public class SystemLogger implements Logger {
 
     @Override
     public void i(String tag, String msg, Throwable tr) {
-        logger.info(tag + ": " + msg + "\n" + getStackTraceString(tr));
+        logger.info(tag + ": " + msg + '\n' + getStackTraceString(tr));
     }
 
     @Override
@@ -66,12 +66,12 @@ public class SystemLogger implements Logger {
 
     @Override
     public void w(String tag, Throwable tr) {
-        logger.warning(tag + ": " + "\n" + getStackTraceString(tr));
+        logger.warning(tag + ": " + '\n' + getStackTraceString(tr));
     }
 
     @Override
     public void w(String tag, String msg, Throwable tr) {
-        logger.warning(tag + ": " + msg + "\n" + getStackTraceString(tr));
+        logger.warning(tag + ": " + msg + '\n' + getStackTraceString(tr));
     }
 
     @Override
@@ -81,7 +81,7 @@ public class SystemLogger implements Logger {
 
     @Override
     public void e(String tag, String msg, Throwable tr) {
-        logger.severe(tag + ": " + msg + "\n" + getStackTraceString(tr));
+        logger.severe(tag + ": " + msg + '\n' + getStackTraceString(tr));
     }
 
     private static String getStackTraceString(Throwable tr) {

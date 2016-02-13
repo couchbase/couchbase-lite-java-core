@@ -248,7 +248,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
     public Status updateIndexes(List<ViewStore>inputViews) throws CouchbaseLiteException {
         Log.v(Log.TAG_VIEW, "Re-indexing view: %s", name);
         if (getViewID() <= 0) {
-            String msg = String.format("getViewID() < 0");
+            String msg = "getViewID() < 0";
             throw new CouchbaseLiteException(msg, new Status(Status.NOT_FOUND));
         }
 
@@ -897,7 +897,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 sb.append("','");
             sb.append(s.replace("'", "''"));
         }
-        sb.append("'");
+        sb.append('\'');
         return sb.toString();
     }
 
@@ -938,7 +938,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 item = ", ?";
                 argsList.add(toJSONString(key));
             }
-            sql.append(")");
+            sql.append(')');
         }
 
         Object minKey = options.getStartKey();

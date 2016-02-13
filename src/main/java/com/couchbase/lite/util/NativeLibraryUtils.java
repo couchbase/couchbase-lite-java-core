@@ -127,17 +127,17 @@ public class NativeLibraryUtils {
         } else if (osName.contains("Windows")) {
             path += "/windows";
         } else {
-            path += "/" + osName.replaceAll("\\W", "").toLowerCase();
+            path += '/' + osName.replaceAll("\\W", "").toLowerCase();
         }
 
         // Architecture part of path.
         String archName = System.getProperty("os.arch");
         archName = archName.replaceAll("\\W", "");
         archName = archName.replace("-", "_");
-        path += "/" + archName;
+        path += '/' + archName;
 
         // Platform specific name part of path.
-        path += "/" + getLibraryFullName(libraryName);
+        path += '/' + getLibraryFullName(libraryName);
         return path;
     }
 }

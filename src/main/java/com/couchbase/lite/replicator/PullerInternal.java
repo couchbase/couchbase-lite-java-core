@@ -882,7 +882,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 } else {
                     // otherwise, try to restart the change tracker, since it should
                     // always be running in continuous replications
-                    String msg = String.format("Change tracker stopped during continuous replication");
+                    String msg = "Change tracker stopped during continuous replication";
                     Log.e(TAG, msg);
                     parentReplication.setLastError(new Exception(msg));
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);

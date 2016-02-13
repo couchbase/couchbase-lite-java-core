@@ -675,7 +675,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public String toString() {
-        return this.getClass().getName() + "[" + path + "]";
+        return this.getClass().getName() + '[' + path + ']';
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1244,7 +1244,7 @@ public class Database implements StoreDelegate {
             rawKey = (byte[])keyOrPassword;
         } else {
             throw new CouchbaseLiteException("Key must be String or byte[" +
-                    SymmetricKey.KEY_SIZE + "]", Status.BAD_REQUEST);
+                    SymmetricKey.KEY_SIZE + ']', Status.BAD_REQUEST);
         }
 
         SymmetricKey symmetricKey = null;
@@ -1677,7 +1677,7 @@ public class Database implements StoreDelegate {
         if (start != null) {
             for (int i = 0; i < revIDs.size(); i++) {
                 String revID = revIDs.get(i);
-                revIDs.set(i, Integer.toString(start--) + "-" + revID);
+                revIDs.set(i, Integer.toString(start--) + '-' + revID);
             }
         }
         return revIDs;

@@ -1632,7 +1632,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
         cookie.setExpiryDate(expirationDate);
         cookie.setSecure(secure);
-        List<Cookie> cookies = Arrays.asList((Cookie) cookie);
+        List<Cookie> cookies = Collections.singletonList((Cookie) cookie);
         this.clientFactory.addCookies(cookies);
 
     }

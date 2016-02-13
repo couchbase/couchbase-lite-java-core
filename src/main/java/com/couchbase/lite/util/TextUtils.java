@@ -107,7 +107,7 @@ public class TextUtils {
             }
             result = result + quote(string);
         }
-        result = result + "'";
+        result = result + '\'';
 
         return result;
     }
