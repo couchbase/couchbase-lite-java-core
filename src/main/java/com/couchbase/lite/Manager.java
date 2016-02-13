@@ -69,6 +69,7 @@ public final class Manager {
     public static final String SQLITE_STORAGE = "SQLite";
     public static final String FORESTDB_STORAGE = "ForestDB";
 
+    // NOTE: Jackson is thread-safe http://wiki.fasterxml.com/JacksonFAQThreadSafety
     private static final ObjectMapper mapper = new ObjectMapper();
 
     private ManagerOptions options;

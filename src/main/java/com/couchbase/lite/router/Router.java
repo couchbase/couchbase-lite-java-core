@@ -365,7 +365,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     return;
                 } else {
                     boolean mustExist = false;
-                    db = manager.getDatabase(dbName, mustExist);
+                    db = manager.getDatabase(dbName, mustExist); // NOTE: synchronized
                     if (db == null) {
                         connection.setResponseCode(Status.BAD_REQUEST);
                         try {
@@ -548,10 +548,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             waiting = true;
         }
 
-        if (waiting) {
-            if (db != null) {
-                db.addDatabaseListener(this);
-            }
+        if (waiting && db != null) {
+            Log.v(Log.TAG_ROUTER, "waiting=true & db!=null: call Database.addDatabaseListener()");
+            db.addDatabaseListener(this);
         }
     }
 
@@ -692,6 +691,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         try {
+            // NOTE: replicator instance is created per request. not access shared instances
             replicator = manager.getReplicator(body);
         } catch (CouchbaseLiteException e) {
             Map<String, Object> result = new HashMap<String, Object>();
@@ -978,6 +978,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (!status.isSuccessful()) {
             return status;
         }
+        // NOTE: all methods are read operation. not necessary to be synchronized
         int num_docs = db.getDocumentCount();
         long update_seq = db.getLastSequenceNumber();
         long instanceStartTimeMicroseconds = db.getStartTime() * 1000;
@@ -999,6 +1000,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         try {
+            // note: synchronized
             db.open();
         } catch (CouchbaseLiteException e) {
             return e.getCBLStatus();
@@ -1012,7 +1014,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (getQuery("rev") != null) {
             return new Status(Status.BAD_REQUEST);  // CouchDB checks for this; probably meant to be a document deletion
         }
-        db.delete();
+        synchronized (db) {
+            db.delete();
+        }
         return new Status(Status.OK);
     }
 
@@ -1883,10 +1887,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         RevisionInternal result = null;
         try {
-            if (isLocalDoc) {
-                result = _db.getStore().putLocalRevision(rev, prevRevID, true);
-            } else {
-                result = _db.putRevision(rev, prevRevID, allowConflict);
+            synchronized (_db) {
+                if (isLocalDoc) {
+                    result = _db.getStore().putLocalRevision(rev, prevRevID, true);
+                } else {
+                    result = _db.putRevision(rev, prevRevID, allowConflict);
+                }
             }
             if (deleting) {
                 outStatus.setCode(Status.OK);
@@ -1921,8 +1927,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (docID != null && docID.isEmpty() == false) {
             // On PUT/DELETE, get revision ID from either ?rev= query or doc body:
             String revParam = getQuery("rev");
-
-            // TODO: If-Match
 
             if (revParam != null && body != null) {
                 String revProp = (String) body.getProperties().get("_rev");
@@ -1989,7 +1993,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return update(_db, docID, null, true);
     }
 
-    private Status updateAttachment(String attachment, String docID, InputStream contentStream) throws CouchbaseLiteException {
+    private Status updateAttachment(String attachment,
+                                    String docID,
+                                    InputStream contentStream)
+            throws CouchbaseLiteException {
         Status status = new Status(Status.OK);
         String revID = getQuery("rev");
         if (revID == null) {
@@ -2007,8 +2014,17 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
         }
 
-        RevisionInternal rev = db.updateAttachment(attachment, body, connection.getRequestProperty("content-type"), AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
-                docID, revID, null);
+        RevisionInternal rev;
+        synchronized (db) {
+            rev = db.updateAttachment(
+                    attachment,
+                    body,
+                    connection.getRequestProperty("content-type"),
+                    AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
+                    docID,
+                    revID,
+                    null);
+        }
         Map<String, Object> resultDict = new HashMap<String, Object>();
         resultDict.put("ok", true);
         resultDict.put("id", rev.getDocID());
@@ -2021,11 +2037,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return status;
     }
 
-    public Status do_PUT_Attachment(Database _db, String docID, String _attachmentName) throws CouchbaseLiteException {
+    public Status do_PUT_Attachment(Database _db, String docID, String _attachmentName)
+            throws CouchbaseLiteException {
         return updateAttachment(_attachmentName, docID, connection.getRequestInputStream());
     }
 
-    public Status do_DELETE_Attachment(Database _db, String docID, String _attachmentName) throws CouchbaseLiteException {
+    public Status do_DELETE_Attachment(Database _db, String docID, String _attachmentName)
+            throws CouchbaseLiteException {
         return updateAttachment(_attachmentName, docID, null);
     }
 
@@ -2101,7 +2119,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             options.setKeys(keys);
         }
 
-        view.updateIndex();
+        synchronized (db) {
+            view.updateIndex();
+        }
 
         long lastSequenceIndexed = view.getLastSequenceIndexed();
 
