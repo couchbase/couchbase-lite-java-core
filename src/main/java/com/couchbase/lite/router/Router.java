@@ -88,6 +88,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     Map<String, Object> changesFilterParams = null;
     private boolean longpoll = false;
     private boolean waiting = false;
+    private URL source = null;
 
     public static String getVersionString() {
         return Version.getVersion();
@@ -1189,7 +1190,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                                 status.setCode(Status.BAD_REQUEST);
                             } else {
                                 List<String> history = Database.parseCouchDBRevisionHistory(doc);
-                                db.forceInsert(rev, history, null);
+                                db.forceInsert(rev, history, source);
                             }
                         } else {
                             Status outStatus = new Status();
@@ -1979,7 +1980,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 throw new CouchbaseLiteException(Status.BAD_REQUEST);
             }
             List<String> history = Database.parseCouchDBRevisionHistory(body.getProperties());
-            db.forceInsert(rev, history, null);
+            db.forceInsert(rev, history, source);
         }
         return status;
     }
@@ -2141,6 +2142,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
         List<Object> keys = (List<Object>) bodyDict.get("keys");
         return queryDesignDoc(designDocID, viewName, keys);
+    }
+
+    public void setSource(URL source) {
+        this.source = source;
     }
 
     @Override
