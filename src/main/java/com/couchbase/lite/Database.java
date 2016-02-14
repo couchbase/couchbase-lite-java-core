@@ -251,7 +251,9 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void compact() throws CouchbaseLiteException {
-        store.compact();
+        synchronized (store) {
+            store.compact();
+        }
         garbageCollectAttachments();
     }
 

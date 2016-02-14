@@ -1014,9 +1014,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (getQuery("rev") != null) {
             return new Status(Status.BAD_REQUEST);  // CouchDB checks for this; probably meant to be a document deletion
         }
-        synchronized (db) {
-            db.delete();
-        }
+        db.delete();
         return new Status(Status.OK);
     }
 
@@ -1176,6 +1174,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         final Status status = new Status(Status.OK);
         final List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
+        // Transaction provide synchronized feature by SQLiteDatabase.
+        // In the transaction block, should not use `synchronized` block
         boolean ret = db.getStore().runInTransaction(new TransactionalTask() {
             @Override
             public boolean run() {
@@ -1190,7 +1190,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         if (noNewEdits) {
                             rev = new RevisionInternal(docBody);
                             if (rev.getRevID() == null || rev.getDocID() == null || !rev.getDocID().equals(docID)) {
-                                //status = new Status(Status.BAD_REQUEST);
                                 status.setCode(Status.BAD_REQUEST);
                             } else {
                                 List<String> history = Database.parseCouchDBRevisionHistory(doc);
@@ -1210,7 +1209,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                                 result.put("rev", rev.getRevID());
                             }
                         } else if (allOrNothing) {
-                            //return status;  // all_or_nothing backs out if there's any error
                             return false;
                         } else if (status.getCode() == Status.FORBIDDEN) {
                             result = new HashMap<String, Object>();
@@ -1264,6 +1262,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         // Look them up, removing the existing ones from revs:
         try {
+            // query db only, not necessary to be syncrhonized
             db.findMissingRevisions(revs);
         } catch (SQLException e) {
             Log.e(Log.TAG_ROUTER, "Exception", e);
@@ -1301,6 +1300,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     public Status do_POST_Document_compact(Database _db, String _docID, String _attachmentName) {
         Status status = new Status(Status.OK);
         try {
+            // Make Database.compact() thread-safe
             _db.compact();
         } catch (CouchbaseLiteException e) {
             status = e.getCBLStatus();
@@ -1341,6 +1341,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         Future future = db.runAsync(new AsyncTask() {
             @Override
             public void run(Database database) {
+                // purgeRevisions uses transaction internally.
                 Map<String, Object> purgedRevisions = db.purgeRevisions(docsToRevs);
                 asyncApiCallResponse.add(purgedRevisions);
             }
@@ -1563,6 +1564,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             Log.v(Log.TAG_ROUTER, "Filter params=" + changesFilterParams);
         }
 
+        // changesSince() is query only. not required synchronized
         RevisionList changes = db.changesSince(since, options, changesFilter, changesFilterParams);
 
         if (changes == null) {
@@ -1623,27 +1625,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 String revID = getQuery("rev");  // often null
                 RevisionInternal rev = null;
                 if (isLocalDoc) {
+                    // query only -> not required synchronized
                     rev = db.getLocalDocument(docID, revID);
                 } else {
-                    /*
-                    rev = db.getDocument(docID, revID, options);
-                    // Handle ?atts_since query by stubbing out older attachments:
-                    //?atts_since parameter - value is a (URL-encoded) JSON array of one or more revision IDs.
-                    // The response will include the content of only those attachments that changed since the given revision(s).
-                    //(You can ask for this either in the default JSON or as multipart/related, as previously described.)
-                    List<String> attsSince = (List<String>) getJSONQuery("atts_since");
-                    if (attsSince != null) {
-                        String ancestorId = db.findCommonAncestorOf(rev, attsSince);
-                        if (ancestorId != null) {
-                            int generation = RevisionInternal.generationFromRevID(ancestorId);
-                            db.stubOutAttachmentsIn(rev, generation + 1);
-                        }
-                    }
-                    */
                     boolean includeAttachments = options.contains(TDContentOptions.TDIncludeAttachments);
                     if (includeAttachments) {
                         options.remove(TDContentOptions.TDIncludeAttachments);
                     }
+                    // query only -> not required synchronized
                     rev = db.getDocument(docID, revID, true);
                     if (rev != null) {
                         rev = applyOptionsToRevision(options, rev);
@@ -1658,8 +1647,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 if (cacheWithEtag(rev.getRevID()))
                     return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
 
-                // TODO
-
                 connection.setResponseBody(rev.getBody());
             } else {
                 List<Map<String, Object>> result = null;
@@ -1670,6 +1657,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     for (RevisionInternal rev : allRevs) {
 
                         try {
+                            // loadRevisionBody is synchronized with store instance.
                             db.loadRevisionBody(rev);
                         } catch (CouchbaseLiteException e) {
                             if (e.getCBLStatus().getCode() != Status.INTERNAL_SERVER_ERROR) {
@@ -1807,14 +1795,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
             }
 
-            String type = null;
             String acceptEncoding = connection.getRequestProperty("accept-encoding");
+            // getAttachment is safe. this could be static method??
             AttachmentInternal attachment = db.getAttachment(rev, _attachmentName);
             if (attachment == null) {
                 return new Status(Status.NOT_FOUND);
             }
 
-            type = attachment.getContentType();
+            String type = attachment.getContentType();
             if (type != null) {
                 connection.getResHeader().add("Content-Type", type);
             }
@@ -1850,7 +1838,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         boolean isLocalDoc = docID != null && docID.startsWith(("_local"));
-        String prevRevID = null;
+        String prevRevID;
 
         if (!deleting) {
             Boolean deletingBoolean = (Boolean) body.getPropertyForKey("_deleted");
@@ -1887,19 +1875,46 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         RevisionInternal result = null;
         try {
-            synchronized (_db) {
-                if (isLocalDoc) {
-                    result = _db.getStore().putLocalRevision(rev, prevRevID, true);
-                } else {
-                    result = _db.putRevision(rev, prevRevID, allowConflict);
+            if (isLocalDoc) {
+                // NOTE: putLocalRevision() does not use transaction internally with obeyMVCC=true
+
+                final Database fDb = _db;
+                final RevisionInternal _rev = rev;
+                final String _prevRevID = prevRevID;
+                final List<RevisionInternal> _revs = new ArrayList<RevisionInternal>();
+                try {
+                    fDb.getStore().runInTransaction(new TransactionalTask() {
+                        @Override
+                        public boolean run() {
+                            try {
+                                RevisionInternal r = fDb.getStore().putLocalRevision(_rev, _prevRevID, true);
+                                _revs.add(r);
+                                return true;
+                            } catch (CouchbaseLiteException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    });
+                    // success
+                    if (_revs.size() > 0)
+                        result = _revs.get(0);
+                } catch (RuntimeException ex) {
+                    if (ex.getCause() != null &&
+                            ex.getCause().getCause() != null &&
+                            ex.getCause().getCause() instanceof CouchbaseLiteException)
+                        throw (CouchbaseLiteException) ex.getCause().getCause();
+                    else
+                        throw new CouchbaseLiteException(ex, Status.INTERNAL_SERVER_ERROR);
                 }
+            } else {
+                // putRevision() uses transaction internally.
+                result = _db.putRevision(rev, prevRevID, allowConflict);
             }
             if (deleting) {
                 outStatus.setCode(Status.OK);
             } else {
                 outStatus.setCode(Status.CREATED);
             }
-
         } catch (CouchbaseLiteException e) {
             if (e.getCBLStatus() != null && e.getCBLStatus().getCode() == Status.CONFLICT) {
                 // conflict is not critical error for replicators, not print stack trace
@@ -1984,6 +1999,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 throw new CouchbaseLiteException(Status.BAD_REQUEST);
             }
             List<String> history = Database.parseCouchDBRevisionHistory(body.getProperties());
+            // forceInsert uses transaction internally, not necessary to apply synchronized
             db.forceInsert(rev, history, source);
         }
         return status;
@@ -2014,17 +2030,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
         }
 
-        RevisionInternal rev;
-        synchronized (db) {
-            rev = db.updateAttachment(
-                    attachment,
-                    body,
-                    connection.getRequestProperty("content-type"),
-                    AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
-                    docID,
-                    revID,
-                    null);
-        }
+        // updateAttachment uses transaction internally, not necessary to be synchronized
+        RevisionInternal rev = db.updateAttachment(
+                attachment,
+                body,
+                connection.getRequestProperty("content-type"),
+                AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
+                docID,
+                revID,
+                null);
         Map<String, Object> resultDict = new HashMap<String, Object>();
         resultDict.put("ok", true);
         resultDict.put("id", rev.getDocID());
@@ -2085,6 +2099,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys) throws CouchbaseLiteException {
         String tdViewName = String.format("%s/%s", designDoc, viewName);
+        // getExistingView is not thread-safe, but not access to db. In the database, it should protect instance variable
         View view = db.getExistingView(tdViewName);
         if (view == null || view.getMap() == null) {
             // No TouchDB view is defined, or it hasn't had a map block assigned;
@@ -2119,9 +2134,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             options.setKeys(keys);
         }
 
-        synchronized (db) {
-            view.updateIndex();
-        }
+        // updateIndex() uses transaction internally, not necessary to apply syncrhonized.
+        view.updateIndex();
 
         long lastSequenceIndexed = view.getLastSequenceIndexed();
 
