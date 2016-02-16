@@ -27,9 +27,9 @@ import com.couchbase.lite.Reducer;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
 import com.couchbase.lite.View;
-import com.couchbase.lite.internal.database.ContentValues;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.internal.database.ContentValues;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
@@ -366,6 +366,10 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             AbstractMapEmitBlock emitBlock = new AbstractMapEmitBlock() {
                 @Override
                 public void emit(Object key, Object value) {
+                    if (key == null) {
+                        Log.w(Log.TAG_VIEW, "Emitted key is null. Ignore this emit call.");
+                        return;
+                    }
                     try {
                         curView.emit(key, value, this.sequence); // emit block's sequence
                         int curViewID = curView.getViewID();
@@ -930,13 +934,16 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
         List<String> argsList = new ArrayList<String>();
 
-        if (options.getKeys() != null) {
+        if (options.getKeys() != null && options.getKeys().size() > 0) {
             sql.append(" AND key in (");
             String item = "?";
             for (Object key : options.getKeys()) {
-                sql.append(item);
-                item = ", ?";
-                argsList.add(toJSONString(key));
+                // null key should be ignored
+                if (key != null) {
+                    sql.append(item);
+                    item = ", ?";
+                    argsList.add(toJSONString(key));
+                }
             }
             sql.append(')');
         }
