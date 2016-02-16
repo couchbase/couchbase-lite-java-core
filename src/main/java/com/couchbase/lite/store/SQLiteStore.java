@@ -1446,8 +1446,11 @@ public class SQLiteStore implements Store, EncryptableStore {
                 json = new byte[0];
 
             //// PART III: In which the actual insertion finally takes place:
-            boolean hasAttachments = properties == null ? false : properties.get("_attachments") != null;
-            String docType = properties == null ? null : (String) properties.get("type");
+            boolean hasAttachments = properties == null ? false :
+                    properties.get("_attachments") != null;
+            String docType = null;
+            if (properties != null && properties.containsKey("type") && properties.get("type") instanceof String)
+                docType = (String) properties.get("type");
             long sequence = 0;
             try {
                 sequence = insertRevision(newRev,
