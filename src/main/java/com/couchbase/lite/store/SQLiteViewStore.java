@@ -367,7 +367,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 @Override
                 public void emit(Object key, Object value) {
                     if (key == null) {
-                        Log.w(Log.TAG_VIEW, "Emitted key is null. Ignore this emit call.");
+                        Log.w(Log.TAG_VIEW, "emit() called with nil key; ignoring");
                         return;
                     }
                     try {
