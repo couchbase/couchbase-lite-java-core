@@ -55,6 +55,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     public static final int MAX_PENDING_DOCS = 200;
 
+    private static final int TIMEOUT_FOR_PAUSE = 30 * 1000; // 30 sec
+
     private boolean createTarget;
     private boolean creatingTarget;
     private boolean observing;
@@ -64,7 +66,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     Long maxPendingSequence;
 
     private boolean paused = false;
-    private Object  pausedObj = new Object();
+    private final Object pausedObj = new Object();
 
     /**
      * Constructor
@@ -104,6 +106,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Log.d(Log.TAG_SYNC, "%s STOPPING...", toString());
 
         stopObserving();
+
+        // Awake thread if it is wait for pause
+        setPaused(false);
 
         super.stop();
 
@@ -283,13 +288,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 remaining -= size;
                 pauseOrResume();
                 waitIfPaused();
+                // if not running state anymore, exit from loop.
+                if(!isRunning())
+                    break;
             }
         } else {
             Log.d(Log.TAG_SYNC, "%s: No changes since %s", this, lastSequence);
         }
 
         // Now listen for future changes (in continuous mode):
-        if (isContinuous()) {
+        if (isContinuous() && isRunning()) {
             observing = true;
             db.addChangeListener(this);
         }
@@ -383,6 +391,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
                     pauseOrResume();
                     waitIfPaused();
+                    // if not running state anymore, exit from loop.
+                    if(!isRunning())
+                        break;
                     RevisionInternal nuRev = rev.copy();
                     nuRev.setBody(null); //save memory
                     addToInbox(nuRev);
@@ -394,7 +405,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             // I'm not sure we have a choice but to swallow this.
             Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
         }
-
     }
 
     /**
@@ -831,10 +841,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     private void waitIfPaused(){
         synchronized (pausedObj) {
-            while (paused) {
+            while (paused && isRunning()) {
                 Log.v(Log.TAG, "Waiting: " + paused);
                 try {
-                    pausedObj.wait();
+                    // every 30 sec, wake by myself to check if still needs to pause
+                    pausedObj.wait(TIMEOUT_FOR_PAUSE);
                 } catch (InterruptedException e) {
                 }
             }
