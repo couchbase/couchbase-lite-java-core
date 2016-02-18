@@ -51,6 +51,8 @@ import java.util.zip.GZIPInputStream;
  */
 @InterfaceAudience.Private
 public class ChangeTracker implements Runnable {
+    private static final int TIMEOUT_FOR_PAUSE = 30 * 1000; // 30 sec
+
     private URL databaseURL;
     private Object lastSequenceID;
     private boolean continuous = false;  // is enclosing replication continuous?
@@ -68,7 +70,7 @@ public class ChangeTracker implements Runnable {
     private List<String> docIDs;
 
     private boolean paused = false;
-    private Object  pausedObj = new Object();
+    private final Object pausedObj = new Object();
 
     private boolean includeConflicts;
     private Thread thread;
@@ -404,6 +406,9 @@ public class ChangeTracker implements Runnable {
                                 if (!receivedChange(change)) {
                                     Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
                                 }
+                                // if not running state anymore, exit from loop.
+                                if(!running)
+                                    break;
                             }
 
                             if (jp != null) {
@@ -458,19 +463,21 @@ public class ChangeTracker implements Runnable {
     public boolean receivedChange(final Map<String,Object> change) {
         // wait if paused flag is on.
         waitIfPaused();
+        // check if still running
+        if(running) {
+            Object seq = change.get("seq");
+            if (seq == null) {
+                return false;
+            }
+            //pass the change to the client on the thread that created this change tracker
+            if (client != null) {
+                Log.d(Log.TAG_CHANGE_TRACKER, "%s: changeTrackerReceivedChange: %s", this, change);
+                client.changeTrackerReceivedChange(change);
+                Log.d(Log.TAG_CHANGE_TRACKER, "%s: /changeTrackerReceivedChange: %s", this, change);
 
-        Object seq = change.get("seq");
-        if(seq == null) {
-            return false;
+            }
+            lastSequenceID = seq;
         }
-        //pass the change to the client on the thread that created this change tracker
-        if(client != null) {
-            Log.d(Log.TAG_CHANGE_TRACKER, "%s: changeTrackerReceivedChange: %s", this, change);
-            client.changeTrackerReceivedChange(change);
-            Log.d(Log.TAG_CHANGE_TRACKER, "%s: /changeTrackerReceivedChange: %s", this, change);
-
-        }
-        lastSequenceID = seq;
         return true;
     }
 
@@ -483,6 +490,9 @@ public class ChangeTracker implements Runnable {
             if(!receivedChange(change)) {
                 return false;
             }
+            // if not running state anymore, exit from loop.
+            if(!running)
+                break;
         }
         return true;
     }
@@ -506,6 +516,10 @@ public class ChangeTracker implements Runnable {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to stop", this);
 
         running = false;
+
+        // Awake thread if it is wait for pause
+        setPaused(false);
+
         try {
             if (thread != null) {
                 thread.interrupt(); // wake thread if it sleeps, waits, ...
@@ -630,10 +644,11 @@ public class ChangeTracker implements Runnable {
 
     protected void waitIfPaused(){
         synchronized (pausedObj) {
-            while (paused) {
+            while (paused && running) {
                 Log.v(Log.TAG, "Waiting: " + paused);
                 try {
-                    pausedObj.wait();
+                    // every 30 sec, wake by myself to check if still needs to pause
+                    pausedObj.wait(TIMEOUT_FOR_PAUSE);
                 } catch (InterruptedException e) { }
             }
         }
