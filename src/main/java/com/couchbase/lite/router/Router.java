@@ -1523,7 +1523,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     os.flush();
                 }
             } catch (IOException e) {
-                Log.w(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+                // NOTE: Under multi-threads environment, OutputStream could be already closed
+                // by other thread. Because multiple Database write operations
+                // from multiple threads cause `changed(ChangeEvent)` callbacks
+                // from multiple threads simultaneously because `changed` is fired
+                // at out of transaction after endTransaction(). So this is ignorable error.
+                // So print warning message, and exit from method.
+                // Stacktrace should not be printed, it confuses developer.
+                // https://github.com/couchbase/couchbase-lite-java-core/issues/1043
+                Log.w(Log.TAG_ROUTER, "IOException writing to internal streams: " + e.getMessage());
             } finally {
                 try {
                     if (os != null) {
