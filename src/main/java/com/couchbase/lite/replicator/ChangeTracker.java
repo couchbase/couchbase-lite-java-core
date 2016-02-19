@@ -51,7 +51,7 @@ import java.util.zip.GZIPInputStream;
  */
 @InterfaceAudience.Private
 public class ChangeTracker implements Runnable {
-    private static final int TIMEOUT_FOR_PAUSE = 30 * 1000; // 30 sec
+    private static final int TIMEOUT_FOR_PAUSE = 5 * 1000; // 5 sec
 
     private URL databaseURL;
     private Object lastSequenceID;
@@ -647,7 +647,7 @@ public class ChangeTracker implements Runnable {
             while (paused && running) {
                 Log.v(Log.TAG, "Waiting: " + paused);
                 try {
-                    // every 30 sec, wake by myself to check if still needs to pause
+                    // every 5 sec, wake by myself to check if still needs to pause
                     pausedObj.wait(TIMEOUT_FOR_PAUSE);
                 } catch (InterruptedException e) { }
             }

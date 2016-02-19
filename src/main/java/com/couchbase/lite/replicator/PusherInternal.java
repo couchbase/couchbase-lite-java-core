@@ -55,7 +55,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     public static final int MAX_PENDING_DOCS = 200;
 
-    private static final int TIMEOUT_FOR_PAUSE = 30 * 1000; // 30 sec
+    private static final int TIMEOUT_FOR_PAUSE = 5 * 1000; // 5 sec
 
     private boolean createTarget;
     private boolean creatingTarget;
@@ -389,8 +389,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     return;
                 RevisionInternal rev = change.getAddedRevision();
                 if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
+
+                    // TODO: Commented out following line to fix https://github.com/couchbase/couchbase-lite-java-core/issues/1047
+                    //       We need to implement non-problematic solution to control push repl flow immediately.
+                    //       Keep pauseOrResume() for just in case.
                     pauseOrResume();
-                    waitIfPaused();
+                    //waitIfPaused();
+
                     // if not running state anymore, exit from loop.
                     if(!isRunning())
                         break;
@@ -844,7 +849,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             while (paused && isRunning()) {
                 Log.v(Log.TAG, "Waiting: " + paused);
                 try {
-                    // every 30 sec, wake by myself to check if still needs to pause
+                    // every 5 sec, wake by myself to check if still needs to pause
                     pausedObj.wait(TIMEOUT_FOR_PAUSE);
                 } catch (InterruptedException e) {
                 }
