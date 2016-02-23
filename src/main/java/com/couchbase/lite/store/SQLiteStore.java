@@ -631,7 +631,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     public void compact() throws CouchbaseLiteException {
         Log.v(TAG, "Begin database compaction...");
         synchronized (compactLock) {
-            boolean shouldCommit = true;
+            boolean shouldCommit = false;
             beginTransaction();
             try {
                 // Start off by pruning each revision tree's depth:
@@ -650,6 +650,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                     Log.e(TAG, "Error compacting", e);
                     throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
                 }
+                shouldCommit = true;
             } finally {
                 endTransaction(shouldCommit);
             }
