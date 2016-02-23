@@ -120,8 +120,13 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
             }
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
-                        status.getStatusCode(), request, status.getReasonPhrase());
+                // conflict could be happen. So ERROR prints make developer confused.
+                if (status.getStatusCode() == 409)
+                    Log.w(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
+                            status.getStatusCode(), request, status.getReasonPhrase());
+                else
+                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
+                            status.getStatusCode(), request, status.getReasonPhrase());
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
             } else {

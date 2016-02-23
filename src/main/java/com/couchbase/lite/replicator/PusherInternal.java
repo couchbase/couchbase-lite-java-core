@@ -41,8 +41,12 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @exclude
@@ -65,6 +69,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
 
+    private ExecutorService executor;
+    private static AtomicInteger noExecutor = new AtomicInteger();
+
     private boolean paused = false;
     private final Object pausedObj = new Object();
 
@@ -80,6 +87,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                           Replication.Lifecycle lifecycle,
                           Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        // make sure executor is shut down
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdownNow();
+        }
+
+        super.finalize();
     }
 
     @Override
@@ -99,6 +116,21 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     @Override
+    protected void start() {
+        // create single thread executor for push relication
+        if (executor == null || executor.isShutdown()) {
+            executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    return new Thread(r, "CBLPusherInternalExecutor" + noExecutor.getAndIncrement());
+                }
+            });
+        }
+
+        super.start();
+    }
+
+    @Override
     protected void stop() {
         if (stateMachine.isInState(ReplicationState.STOPPED))
             return;
@@ -109,6 +141,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         // Awake thread if it is wait for pause
         setPaused(false);
+
+        // shutdown executor immediately, does not add any more tasks.
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdownNow();
+        }
 
         super.stop();
 
@@ -273,25 +310,15 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         ChangesOptions options = new ChangesOptions();
         options.setIncludeConflicts(true);
         Log.d(Log.TAG_SYNC, "%s: Getting changes since %s", this, lastSequence);
-        RevisionList changes = db.changesSince(lastSequenceLong, options, filter, filterParams);
+        final RevisionList changes = db.changesSince(lastSequenceLong, options, filter, filterParams);
         if (changes.size() > 0) {
             Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %s", this, changes.size(), lastSequence);
-            int remaining = changes.size();
-            int size = batcher.getCapacity();
-            int start = 0;
-            while(remaining > 0){
-                if(size > remaining)
-                    size = remaining;
-                RevisionList subChanges = new RevisionList(changes.subList(start, start+size));
-                batcher.queueObjects(subChanges);
-                start += size;
-                remaining -= size;
-                pauseOrResume();
-                waitIfPaused();
-                // if not running state anymore, exit from loop.
-                if(!isRunning())
-                    break;
-            }
+            executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    submitRevisions(changes);
+                }
+            });
         } else {
             Log.d(Log.TAG_SYNC, "%s: No changes since %s", this, lastSequence);
         }
@@ -301,6 +328,21 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             observing = true;
             db.addChangeListener(this);
         }
+    }
+
+    /**
+     * - (void) dbChanged: (NSNotification*)n in CBLRestPusher.m
+     */
+    @Override
+    @InterfaceAudience.Private
+    public void changed(Database.ChangeEvent event) {
+        final List<DocumentChange> changes = event.getChanges();
+        executor.submit(new Runnable() {
+            @Override
+            public void run() {
+                submitRevisions(changes);
+            }
+        });
     }
 
     /**
@@ -371,45 +413,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if(revisionInternal.getBody()!=null)
             revisionInternal.getBody().release();
         pauseOrResume();
-    }
-
-    /**
-     * - (void) dbChanged: (NSNotification*)n in CBLRestPusher.m
-     */
-    @Override
-    @InterfaceAudience.Private
-    public void changed(Database.ChangeEvent event) {
-        List<DocumentChange> changes = event.getChanges();
-        try {
-            java.net.URI remoteUri = remote.toURI();
-            for (DocumentChange change : changes) {
-                // Skip revisions that originally came from the database I'm syncing to:
-                URL source = change.getSource();
-                if (source != null && source.toURI().equals(remoteUri))
-                    return;
-                RevisionInternal rev = change.getAddedRevision();
-                if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
-
-                    // TODO: Commented out following line to fix https://github.com/couchbase/couchbase-lite-java-core/issues/1047
-                    //       We need to implement non-problematic solution to control push repl flow immediately.
-                    //       Keep pauseOrResume() for just in case.
-                    pauseOrResume();
-                    //waitIfPaused();
-
-                    // if not running state anymore, exit from loop.
-                    if(!isRunning())
-                        break;
-                    RevisionInternal nuRev = rev.copy();
-                    nuRev.setBody(null); //save memory
-                    addToInbox(nuRev);
-                }
-            }
-        } catch (java.net.URISyntaxException uriException) {
-            // Not possible since it would not be an active replicator.
-            // However, until we refactor everything to use java.net,
-            // I'm not sure we have a choice but to swallow this.
-            Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
-        }
     }
 
     /**
@@ -854,6 +857,59 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 } catch (InterruptedException e) {
                 }
             }
+        }
+    }
+
+    /**
+     * Submit revisions into inbox for changes from changesSince()
+     */
+    private void submitRevisions(final RevisionList changes){
+        int remaining = changes.size();
+        int size = batcher.getCapacity();
+        int start = 0;
+        while(remaining > 0){
+            if(size > remaining)
+                size = remaining;
+            RevisionList subChanges = new RevisionList(changes.subList(start, start+size));
+            batcher.queueObjects(subChanges);
+            start += size;
+            remaining -= size;
+            pauseOrResume();
+            waitIfPaused();
+            // if not running state anymore, exit from loop.
+            if(!isRunning())
+                break;
+        }
+    }
+
+    /**
+     * Submit revisions into inbox for changes from Database.ChangeListener.change(ChangeEvent)
+     */
+    private void submitRevisions(final List<DocumentChange> changes){
+        try {
+            java.net.URI remoteUri = remote.toURI();
+            for (DocumentChange change : changes) {
+                // Skip revisions that originally came from the database I'm syncing to:
+                URL source = change.getSource();
+                if (source != null && source.toURI().equals(remoteUri))
+                    return;
+                RevisionInternal rev = change.getAddedRevision();
+                if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
+                    pauseOrResume();
+                    waitIfPaused();
+                    // if not running state anymore, exit from loop.
+                    if (!isRunning())
+                        break;
+                    RevisionInternal nuRev = rev.copy();
+                    nuRev.setBody(null); //save memory
+                    addToInbox(nuRev);
+                }
+            }
+        } catch (java.net.URISyntaxException uriException) {
+            // Not possible since it would not be an active replicator.
+            // However, until we refactor everything to use java.net,
+            // I'm not sure we have a choice but to swallow this.
+            Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
         }
     }
 }
