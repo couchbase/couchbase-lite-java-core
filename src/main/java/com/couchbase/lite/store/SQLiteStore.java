@@ -133,6 +133,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     private StoreDelegate delegate;
     private int maxRevTreeDepth;
     private SymmetricKey encryptionKey;
+    private final Object compactLock = new Object(); // lock for compact() method
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructor
@@ -628,39 +629,47 @@ public class SQLiteStore implements Store, EncryptableStore {
 
     @Override
     public void compact() throws CouchbaseLiteException {
-        // Start off by pruning each revision tree's depth:
-        pruneRevsToMaxDepth(maxRevTreeDepth);
+        Log.v(TAG, "Begin database compaction...");
+        synchronized (compactLock) {
+            boolean shouldCommit = true;
+            beginTransaction();
+            try {
+                // Start off by pruning each revision tree's depth:
+                pruneRevsToMaxDepth(maxRevTreeDepth);
 
-        // Remove the JSON of non-current revisions, which is most of the space.
-        try {
-            Log.v(TAG, "Deleting JSON of old revisions...");
-            ContentValues args = new ContentValues();
-            args.put("json", (String) null);
-            args.put("doc_type", (String) null);
-            args.put("no_attachments", 1);
-            int changes = storageEngine.update("revs", args, "current=0", null);
-            Log.v(TAG, "... deleted %d revisions", changes);
-        } catch (SQLException e) {
-            Log.e(TAG, "Error compacting", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                // Remove the JSON of non-current revisions, which is most of the space.
+                try {
+                    Log.v(TAG, "Deleting JSON of old revisions...");
+                    ContentValues args = new ContentValues();
+                    args.put("json", (String) null);
+                    args.put("doc_type", (String) null);
+                    args.put("no_attachments", 1);
+                    int changes = storageEngine.update("revs", args, "current=0", null);
+                    Log.v(TAG, "... deleted %d revisions", changes);
+                } catch (SQLException e) {
+                    Log.e(TAG, "Error compacting", e);
+                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                }
+            } finally {
+                endTransaction(shouldCommit);
+            }
+
+            Log.v(TAG, "Flushing SQLite WAL...");
+            try {
+                storageEngine.execSQL("PRAGMA wal_checkpoint(RESTART)");
+            } catch (SQLException e) {
+                Log.e(TAG, "Error PRAGMA wal_checkpoint(RESTART)", e);
+                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            }
+
+            Log.v(TAG, "Vacuuming SQLite database...");
+            try {
+                storageEngine.execSQL("VACUUM");
+            } catch (SQLException e) {
+                Log.e(TAG, "Error vacuuming sqliteDb", e);
+                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            }
         }
-
-        Log.v(TAG, "Flushing SQLite WAL...");
-        try {
-            storageEngine.execSQL("PRAGMA wal_checkpoint(RESTART)");
-        } catch (SQLException e) {
-            Log.e(TAG, "Error PRAGMA wal_checkpoint(RESTART)", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
-        }
-
-        Log.v(TAG, "Vacuuming SQLite database...");
-        try {
-            storageEngine.execSQL("VACUUM");
-        } catch (SQLException e) {
-            Log.e(TAG, "Error vacuuming sqliteDb", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
-        }
-
         Log.v(TAG, "...Finished database compaction.");
     }
 
@@ -747,6 +756,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         assert (rev.getDocID() != null && rev.getRevID() != null);
 
+        // SQLite read operation
         long docNumericID = getDocNumericID(rev.getDocID());
         if (docNumericID <= 0)
             throw new CouchbaseLiteException(Status.NOT_FOUND);
@@ -834,6 +844,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         String revId = rev.getRevID();
         assert ((docId != null) && (revId != null));
 
+        // SQlite read operation
         long docNumericId = getDocNumericID(docId);
         if (docNumericId < 0) {
             return null;
@@ -1233,25 +1244,24 @@ public class SQLiteStore implements Store, EncryptableStore {
             options = new ChangesOptions();
         }
 
+        RevisionList changes = new RevisionList();
+
         boolean includeDocs = options.isIncludeDocs() || (filter != null);
         String additionalSelectColumns = "";
         if (includeDocs) {
             additionalSelectColumns = ", json";
         }
 
-        String sql = "SELECT sequence, revs.doc_id, docid, revid, deleted" + additionalSelectColumns + " FROM revs, docs "
+        String sql = "SELECT sequence, revs.doc_id, docid, revid, deleted" + additionalSelectColumns
+                + " FROM revs, docs "
                 + "WHERE sequence > ? AND current=1 "
                 + "AND revs.doc_id = docs.doc_id "
                 + "ORDER BY revs.doc_id, revid DESC";
         String[] args = {Long.toString(lastSequence)};
-        Cursor cursor = null;
-        RevisionList changes = null;
-
+        Cursor cursor = storageEngine.rawQuery(sql, args);
+        cursor.moveToNext();
+        long lastDocId = 0;
         try {
-            cursor = storageEngine.rawQuery(sql, args);
-            cursor.moveToNext();
-            changes = new RevisionList();
-            long lastDocId = 0;
             while (!cursor.isAfterLast()) {
                 if (!options.isIncludeConflicts()) {
                     // Only count the first rev for a given doc (the rest will be losing conflicts):
@@ -1263,12 +1273,12 @@ public class SQLiteStore implements Store, EncryptableStore {
                     lastDocId = docNumericId;
                 }
 
-                RevisionInternal rev = new RevisionInternal(cursor.getString(2), cursor.getString(3), (cursor.getInt(4) > 0));
+                RevisionInternal rev = new RevisionInternal(
+                        cursor.getString(2), cursor.getString(3), (cursor.getInt(4) > 0));
                 rev.setSequence(cursor.getLong(0));
                 if (includeDocs)
                     rev.setJSON(cursor.getBlob(5));
-                if (delegate.runFilter(filter, filterParams, rev))
-                    changes.add(rev);
+                changes.add(rev);
                 cursor.moveToNext();
             }
         } catch (SQLException e) {
@@ -1276,6 +1286,15 @@ public class SQLiteStore implements Store, EncryptableStore {
         } finally {
             if (cursor != null) {
                 cursor.close();
+            }
+        }
+
+        // Note: To minimize holding SQLite connection, executing filter out-of SQLite query.
+        if (filter != null) {
+            // to avoid to create another list, filter from end to front.
+            for (int i = changes.size() - 1; i >= 0; i--) {
+                if (!delegate.runFilter(filter, filterParams, changes.get(i)))
+                    changes.remove(i);
             }
         }
 
