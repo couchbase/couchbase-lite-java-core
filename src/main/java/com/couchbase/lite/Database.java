@@ -251,9 +251,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void compact() throws CouchbaseLiteException {
-        synchronized (store) {
-            store.compact();
-        }
+        store.compact();
         garbageCollectAttachments();
     }
 
@@ -1365,13 +1363,9 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public RevisionInternal loadRevisionBody(RevisionInternal rev) throws CouchbaseLiteException {
-        // loadRevisionBody() and getRevisionHistory() are called back by RemoteRequest threads.
-        // That causes non-synchronized access to database.
-        // This issue might not be occured with SQLite because SQLiteDatabase from Android takes
-        // care multi-threads access.
-        synchronized(store) {
-            return store.loadRevisionBody(rev);
-        }
+        // NOTE: loadRevisionBoy() is thread safe. It is read operation to database as storage
+        //       layer is thread-safe, and also not access to instance variables.
+        return store.loadRevisionBody(rev);
     }
 
     /**
@@ -1994,13 +1988,9 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public List<RevisionInternal> getRevisionHistory(RevisionInternal rev) {
-        // loadRevisionBody() and getRevisionHistory() are called back by RemoteRequest threads.
-        // That causes non-synchronized access to database.
-        // This issue might not be occured with SQLite because SQLiteDatabase from Android takes
-        // care multi-threads access.
-        synchronized(store) {
-            return store.getRevisionHistory(rev);
-        }
+        // NOTE: getRevisionHistory() is thread safe. It is read operation to database as storage
+        //       layer is thread-safe, and also not access to instance variables.
+        return store.getRevisionHistory(rev);
     }
 
     private String getDesignDocFunction(String fnName, String key, List<String> outLanguageList) {
