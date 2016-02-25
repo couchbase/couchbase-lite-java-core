@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -62,6 +63,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @InterfaceAudience.Private
 abstract class ReplicationInternal implements BlockingQueueListener {
+
+    private static final String TAG = Log.TAG_SYNC;
 
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle {
@@ -118,6 +121,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     private Future retryFuture = null;  // future obj of retry task
     private int retryCount = 0;         // counter for retry.
+
+    // for waitingPendingFutures
+    protected boolean waitingForPendingFutures = false;
+    protected Object lockWaitForPendingFutures = new Object();
 
     /**
      * Constructor
@@ -793,7 +800,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                if(db != null && db.isOpen())
+                if (db != null && db.isOpen())
                     db.setLastSequence(lastSequence, checkpointId);
             }
         });
@@ -1686,8 +1693,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         return sessionID;
     }
 
-    public abstract void waitForPendingFutures();
-
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {
         if (type == EventType.PUT || type == EventType.ADD) {
@@ -1726,5 +1731,78 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         return stateMachine.isInState(ReplicationState.RUNNING) ||
                 stateMachine.isInState(ReplicationState.IDLE) ||
                 stateMachine.isInState(ReplicationState.OFFLINE);
+    }
+
+    protected void waitForPendingFutures() {
+        synchronized (lockWaitForPendingFutures) {
+            if (waitingForPendingFutures) {
+                return;
+            }
+            waitingForPendingFutures = true;
+        }
+
+        Log.v(TAG, "[waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
+
+        try {
+            waitForAllTasksCompleted();
+        } catch (Exception e) {
+            Log.e(TAG, "Exception waiting for pending futures: %s", e);
+        }
+
+        // continuous mode, make state IDLE
+        if (isContinuous()) {
+            fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
+        }
+        // one shot mode, make state STOPPING
+        else {
+            triggerStopGraceful();
+        }
+
+        Log.v(TAG, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
+
+        synchronized (lockWaitForPendingFutures) {
+            waitingForPendingFutures = false;
+        }
+    }
+
+    protected void waitForAllTasksCompleted() {
+        // NOTE: Wait till all queue becomes empty
+        while ((batcher != null && batcher.count() > 0) ||
+                (pendingFutures != null && pendingFutures.size() > 0)) {
+            // Wait for batcher (inbox) completed
+            waitBatcherCompleted(batcher);
+
+            // wait for pending featurs completed
+            waitPendingFuturesCompleted(pendingFutures);
+        }
+    }
+
+    protected static void waitBatcherCompleted(Batcher<RevisionInternal> b) {
+        // Wait for batcher completed
+        if (b != null) {
+            // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
+            try {
+                Thread.sleep(b.getDelay());
+            } catch (Exception e) {
+            }
+            b.waitForPendingFutures();
+        }
+    }
+
+    protected static void waitPendingFuturesCompleted(BlockingQueue<Future> futures) {
+        try {
+            while (!futures.isEmpty()) {
+                Future future = futures.take();
+                try {
+                    future.get();
+                } catch (InterruptedException e) {
+                    Log.e(Log.TAG_SYNC, "InterruptedException in Future.get()", e);
+                } catch (ExecutionException e) {
+                    Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Exception waiting for pending futures: %s", e);
+        }
     }
 }

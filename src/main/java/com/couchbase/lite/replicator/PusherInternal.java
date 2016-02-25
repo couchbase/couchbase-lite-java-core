@@ -40,7 +40,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -53,6 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @InterfaceAudience.Private
 public class PusherInternal extends ReplicationInternal implements Database.ChangeListener {
+    private static final String TAG = Log.TAG_SYNC;
 
     // Max in-memory size of buffered bulk_docs dictionary
     private static long kMaxBulkDocsObjectSize = 5*1000*1000;
@@ -166,75 +166,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 }
             }
         }).start();
-    }
-
-    protected boolean waitingForPendingFutures = false;
-    protected Object lockWaitForPendingFutures = new Object();
-
-    public void waitForPendingFutures() {
-        if (waitingForPendingFutures) {
-            return;
-        }
-
-        synchronized (lockWaitForPendingFutures) {
-            waitingForPendingFutures = true;
-
-            Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] STARTED - thread id: " +
-                    Thread.currentThread().getId());
-
-            try {
-
-                // wait for batcher's pending futures
-                if (batcher != null) {
-                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                    // TODO: should we call batcher.flushAll(); here?
-                    batcher.waitForPendingFutures();
-                    Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
-                }
-
-                while (!pendingFutures.isEmpty()) {
-                    Future future = pendingFutures.take();
-                    try {
-                        Log.d(Log.TAG_SYNC, "calling future.get() on %s", future);
-                        future.get();
-                        Log.d(Log.TAG_SYNC, "done calling future.get() on %s", future);
-                    } catch (InterruptedException e) {
-                        Log.e(Log.TAG_SYNC, "InterruptedException in Future.get()", e);
-                    } catch (ExecutionException e) {
-                        Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
-                    }
-                }
-
-                // since it's possible that in the process of waiting for pendingFutures,
-                // new items were added to the batcher, let's wait for the batcher to
-                // drain again.
-                if (batcher != null) {
-                    Log.d(Log.TAG_SYNC, "batcher.waitForPendingFutures()");
-                    batcher.waitForPendingFutures();
-                    Log.d(Log.TAG_SYNC, "/batcher.waitForPendingFutures()");
-                }
-
-                // If pendingFutures queue is empty and state is RUNNING, fireTrigger to IDLE
-                // NOTE: in case of many documents sync, new Future tasks could be added into the queue.
-                //       This is reason to check if queue is empty.
-                if (pendingFutures.isEmpty()) {
-                    Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] state=" + stateMachine.getState());
-                    if (isContinuous()) {
-                        // Make state IDLE
-                        Log.v(Log.TAG_SYNC, "[waitForPendingFutures()] fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);");
-                        fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                    } else {
-                        // Make state STOPPING
-                        triggerStopGraceful();
-                    }
-                }
-            } catch (Exception e) {
-                Log.e(Log.TAG_SYNC, "Exception waiting for pending futures: %s", e);
-            } finally {
-                Log.d(Log.TAG_SYNC, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
-                waitingForPendingFutures = false;
-            }
-        }
     }
 
     /**

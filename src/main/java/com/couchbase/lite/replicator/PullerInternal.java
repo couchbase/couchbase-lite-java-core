@@ -35,7 +35,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -77,10 +76,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             new ArrayList<RevisionInternal>(100));
     protected int httpConnectionCount;
     protected Batcher<RevisionInternal> downloadsToInsert;
-
-    // for waitingPendingFutures
-    protected boolean waitingForPendingFutures = false;
-    protected Object lockWaitForPendingFutures = new Object();
 
     public PullerInternal(Database db,
                           URL remote,
@@ -996,88 +991,20 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }).start();
     }
 
-    public void waitForPendingFutures() {
-        synchronized (lockWaitForPendingFutures) {
-            if (waitingForPendingFutures) {
-                return;
-            }
-            waitingForPendingFutures = true;
-        }
-
-        Log.d(TAG, "[PullerInternal.waitForPendingFutures()] STARTED - thread id: " + Thread.currentThread().getId());
-
-        try {
-            waitForAllTasksCompleted();
-        } catch (Exception e) {
-            Log.e(TAG, "Exception waiting for pending futures: %s", e);
-        }
-
-        // continuous mode, make state IDLE
-        if (isContinuous()) {
-            fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-        }
-        // one shot mode, make state STOPPING
-        else {
-            triggerStopGraceful();
-        }
-
-        Log.d(TAG, "[waitForPendingFutures()] END - thread id: " + Thread.currentThread().getId());
-
-        synchronized (lockWaitForPendingFutures) {
-            waitingForPendingFutures = false;
-        }
-    }
-
-    private void waitForAllTasksCompleted() {
+    protected void waitForAllTasksCompleted() {
         // NOTE: Wait till all queue becomes empty
         while ((batcher != null && batcher.count() > 0) ||
                 (pendingFutures != null && pendingFutures.size() > 0) ||
                 (downloadsToInsert != null && downloadsToInsert.count() > 0)) {
 
-            // Wait for batcher completed
-            if (batcher != null) {
-                // if batcher delays task execution, need to wait same amount of time. (0.5 sec or 0 sec)
-                try {
-                    Thread.sleep(batcher.getDelay());
-                } catch (Exception e) {
-                }
-                Log.d(TAG, "batcher.waitForPendingFutures()");
-                batcher.waitForPendingFutures();
-            }
+            // Wait for batcher (inbox) completed
+            waitBatcherCompleted(batcher);
 
             // wait for pending featurs completed
-            Log.d(TAG, "waitPendingFuturesCompleted()");
-            waitPendingFuturesCompleted();
+            waitPendingFuturesCompleted(pendingFutures);
 
             // wait for downloadToInsert batcher completed
-            if (downloadsToInsert != null) {
-                // if batcher delays task execution, need to wait same amount of time. (1.0 sec or 0 sec)
-                try {
-                    Thread.sleep(downloadsToInsert.getDelay());
-                } catch (Exception e) {
-                }
-                Log.d(TAG, "downloadsToInsert.waitForPendingFutures()");
-                downloadsToInsert.waitForPendingFutures();
-            }
-        }
-    }
-
-    private void waitPendingFuturesCompleted() {
-        try {
-            while (!pendingFutures.isEmpty()) {
-                Future future = pendingFutures.take();
-                try {
-                    Log.v(TAG, "calling future.get() on %s", future);
-                    future.get();
-                    Log.v(TAG, "done calling future.get() on %s", future);
-                } catch (InterruptedException e) {
-                    Log.e(Log.TAG_SYNC, "InterruptedException in Future.get()", e);
-                } catch (ExecutionException e) {
-                    Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Exception waiting for pending futures: %s", e);
+            waitBatcherCompleted(downloadsToInsert);
         }
     }
 
