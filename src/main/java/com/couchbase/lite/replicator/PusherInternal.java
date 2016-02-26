@@ -45,7 +45,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @exclude
@@ -69,8 +68,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
 
-    private ExecutorService executor;
-    private static AtomicInteger noExecutor = new AtomicInteger();
+    private ExecutorService supportExecutor;
 
     private boolean paused = false;
     private final Object pausedObj = new Object();
@@ -95,9 +93,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     @Override
     protected void finalize() throws Throwable {
-        // make sure executor is shut down
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdownNow();
+        // make sure supportExecutor is shut down
+        if (supportExecutor != null && !supportExecutor.isShutdown()) {
+            supportExecutor.shutdownNow();
         }
 
         super.finalize();
@@ -121,12 +119,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     @Override
     protected void start() {
-        // create single thread executor for push relication
-        if (executor == null || executor.isShutdown()) {
-            executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        // create single thread supportExecutor for push relication
+        if (supportExecutor == null || supportExecutor.isShutdown()) {
+            supportExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
                 @Override
                 public Thread newThread(Runnable r) {
-                    return new Thread(r, "CBLPusherInternalExecutor-" + noExecutor.getAndIncrement());
+                    String maskedRemoteWithoutCredentials = remote.toExternalForm();
+                    maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials
+                            .replaceAll("://.*:.*@", "://---:---@");
+                    return new Thread(r, "CBLPusherSupportExecutor-" +
+                            maskedRemoteWithoutCredentials);
                 }
             });
         }
@@ -146,9 +148,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // Awake thread if it is wait for pause
         setPaused(false);
 
-        // shutdown executor immediately, does not add any more tasks.
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdownNow();
+        // shutdown supportExecutor immediately, does not add any more tasks.
+        if (supportExecutor != null && !supportExecutor.isShutdown()) {
+            supportExecutor.shutdownNow();
         }
 
         super.stop();
@@ -263,10 +265,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             Log.d(Log.TAG_SYNC, "%s: No changes since %d", this, lastSequenceLong);
         }
 
+        // process queued changes by `changed()` callback
         synchronized (changesLock) {
             for (RevisionInternal rev : queueChanges) {
-                if (!changes.contains(rev))
+                if (!changes.contains(rev)) {
+                    pauseOrResume();
+                    waitIfPaused();
                     addToInbox(rev);
+                }
             }
             doneBeginReplicating = true;
         }
@@ -279,7 +285,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     public void changed(Database.ChangeEvent event) {
         final List<DocumentChange> changes = event.getChanges();
-        executor.submit(new Runnable() {
+        supportExecutor.submit(new Runnable() {
             @Override
             public void run() {
                 submitRevisions(changes);
