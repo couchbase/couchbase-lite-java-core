@@ -75,6 +75,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private boolean paused = false;
     private final Object pausedObj = new Object();
 
+    final Object changesLock = new Object();
+    boolean doneBeginReplicating = false;
+    List<RevisionInternal> queueChanges = new ArrayList<RevisionInternal>();
+
     /**
      * Constructor
      *
@@ -233,6 +237,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     this, filterName);
         }
 
+        // Now listen for future changes (in continuous mode):
+        if (isContinuous() && isRunning()) {
+            observing = true;
+            db.addChangeListener(this);
+        }
+
         // Process existing changes since the last push:
         long lastSequenceLong = 0;
         if (lastSequence != null) {
@@ -253,10 +263,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             Log.d(Log.TAG_SYNC, "%s: No changes since %d", this, lastSequenceLong);
         }
 
-        // Now listen for future changes (in continuous mode):
-        if (isContinuous() && isRunning()) {
-            observing = true;
-            db.addChangeListener(this);
+        synchronized (changesLock) {
+            for (RevisionInternal rev : queueChanges) {
+                if (!changes.contains(rev))
+                    addToInbox(rev);
+            }
+            doneBeginReplicating = true;
         }
     }
 
@@ -352,7 +364,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     protected void processInbox(final RevisionList changes) {
 
-        Log.v(Log.TAG_SYNC, "processInbox() changes="+changes.size());
+        Log.v(Log.TAG_SYNC, "processInbox() changes=" + changes.size());
 
         // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
         // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>
@@ -815,31 +827,39 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     /**
      * Submit revisions into inbox for changes from Database.ChangeListener.change(ChangeEvent)
      */
-    private void submitRevisions(final List<DocumentChange> changes){
-        try {
-            java.net.URI remoteUri = remote.toURI();
-            for (DocumentChange change : changes) {
-                // Skip revisions that originally came from the database I'm syncing to:
-                URL source = change.getSource();
-                if (source != null && source.toURI().equals(remoteUri))
-                    return;
-                RevisionInternal rev = change.getAddedRevision();
-                if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
-                    pauseOrResume();
-                    waitIfPaused();
-                    // if not running state anymore, exit from loop.
-                    if (!isRunning())
-                        break;
-                    RevisionInternal nuRev = rev.copy();
-                    nuRev.setBody(null); //save memory
-                    addToInbox(nuRev);
+    private void submitRevisions(final List<DocumentChange> changes) {
+        synchronized (changesLock) {
+            try {
+                java.net.URI remoteUri = remote.toURI();
+                for (DocumentChange change : changes) {
+                    // Skip revisions that originally came from the database I'm syncing to:
+                    URL source = change.getSource();
+                    if (source != null && source.toURI().equals(remoteUri))
+                        return;
+                    RevisionInternal rev = change.getAddedRevision();
+                    if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
+                        if (doneBeginReplicating) {
+                            pauseOrResume();
+                            waitIfPaused();
+                            // if not running state anymore, exit from loop.
+                            if (!isRunning())
+                                break;
+                            RevisionInternal nuRev = rev.copy();
+                            nuRev.setBody(null); //save memory
+                            addToInbox(nuRev);
+                        } else {
+                            RevisionInternal nuRev = rev.copy();
+                            nuRev.setBody(null); //save memory
+                            queueChanges.add(nuRev);
+                        }
+                    }
                 }
+            } catch (java.net.URISyntaxException uriException) {
+                // Not possible since it would not be an active replicator.
+                // However, until we refactor everything to use java.net,
+                // I'm not sure we have a choice but to swallow this.
+                Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
             }
-        } catch (java.net.URISyntaxException uriException) {
-            // Not possible since it would not be an active replicator.
-            // However, until we refactor everything to use java.net,
-            // I'm not sure we have a choice but to swallow this.
-            Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
         }
     }
 }
