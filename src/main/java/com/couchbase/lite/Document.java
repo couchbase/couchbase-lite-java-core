@@ -381,12 +381,14 @@ public class Document {
 
         List<SavedRevision> result = new ArrayList<SavedRevision>();
         RevisionList revs = database.getStore().getAllRevisions(documentId, true);
-        for (RevisionInternal rev : revs) {
-            // add it to result, unless we are not supposed to include deleted and it's deleted
-            if (!includeDeleted && rev.isDeleted()) {
-                // don't add it
-            } else {
-                result.add(getRevisionFromRev(rev));
+        if (revs != null) {
+            for (RevisionInternal rev : revs) {
+                // add it to result, unless we are not supposed to include deleted and it's deleted
+                if (!includeDeleted && rev.isDeleted()) {
+                    // don't add it
+                } else {
+                    result.add(getRevisionFromRev(rev));
+                }
             }
         }
         return Collections.unmodifiableList(result);
