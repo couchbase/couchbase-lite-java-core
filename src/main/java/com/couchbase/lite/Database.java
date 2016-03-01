@@ -91,7 +91,6 @@ public class Database implements StoreDelegate {
     private Store store = null;
     private String path;
     private String name;
-    private boolean readOnly = false;
     private boolean open = false;
 
     private Map<String, View> views;
@@ -141,7 +140,6 @@ public class Database implements StoreDelegate {
         this.path = path;
         this.name = name != null ? name : FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
-        this.readOnly = readOnly;
 
         this.startTime = System.currentTimeMillis();
 
@@ -192,9 +190,7 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Public
     public List<Replication> getAllReplications() {
         List<Replication> allReplicatorsList = new ArrayList<Replication>();
-        if (allReplicators != null) {
-            allReplicatorsList.addAll(allReplicators);
-        }
+        allReplicatorsList.addAll(allReplicators);
         return allReplicatorsList;
     }
 
@@ -1038,9 +1034,7 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public List<Replication> getActiveReplications() {
         List<Replication> activeReplicatorsList = new ArrayList<Replication>();
-        if (activeReplicators != null) {
-            activeReplicatorsList.addAll(activeReplicators);
-        }
+        activeReplicatorsList.addAll(activeReplicators);
         return activeReplicatorsList;
     }
 
@@ -1264,43 +1258,45 @@ public class Database implements StoreDelegate {
             return false;
         }
 
-        for (DatabaseListener listener : databaseListeners) {
+        for (DatabaseListener listener : databaseListeners)
             listener.databaseClosing();
-        }
 
         if (views != null) {
-            for (View view : views.values()) {
+            for (View view : views.values())
                 view.close();
-            }
         }
         views = null;
 
-        if (activeReplicators != null) {
-            List<CountDownLatch> latches = new ArrayList<CountDownLatch>();
-            synchronized (activeReplicators) {
-                for (Replication replicator : activeReplicators) {
-                    if(replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
-                        continue;
-                    // Handler to check if the replicator stopped:
-                    final CountDownLatch latch = new CountDownLatch(1);
-                    replicator.addChangeListener(new Replication.ChangeListener() {
-                        @Override
-                        public void changed(Replication.ChangeEvent event) {
-                            if (event.getSource().getStatus() ==
-                                    Replication.ReplicationStatus.REPLICATION_STOPPED) {
-                                latch.countDown();
-                            }
-                        }
-                    });
-                    latches.add(latch);
+        // make all replicators stop
+        Map<Replication, CountDownLatch> latches = new HashMap<Replication, CountDownLatch>();
+        synchronized (activeReplicators) {
+            for (Replication replicator : activeReplicators) {
+                if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
+                    continue;
+                // Handler to check if the replicator stopped:
+                final CountDownLatch latch = new CountDownLatch(1);
+                replicator.addChangeListener(new Replication.ChangeListener() {
+                    @Override
+                    public void changed(Replication.ChangeEvent event) {
+                        if (event.getSource().getStatus() ==
+                                Replication.ReplicationStatus.REPLICATION_STOPPED)
+                            latch.countDown();
+                    }
+                });
+                latches.put(replicator, latch);
 
-                    // Ask replicator to stop:
-                    replicator.databaseClosing();
-                }
+                // Ask replicator to stop:
+                replicator.stop();
             }
+        }
 
-            // Wait till all replicator stopped:
-            for (CountDownLatch latch : latches) {
+        // Wait till all replicator stopped:
+        for (Map.Entry<Replication, CountDownLatch> entry : latches.entrySet()) {
+            // still active?
+            Replication repl = entry.getKey();
+            if (activeReplicators.contains(repl) &&
+                    repl.getStatus() != Replication.ReplicationStatus.REPLICATION_STOPPED) {
+                CountDownLatch latch = entry.getValue();
                 try {
                     boolean success = latch.getCount() == 0 ||
                             latch.await(Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN,
@@ -1313,10 +1309,10 @@ public class Database implements StoreDelegate {
                     Log.w(Log.TAG_DATABASE, e.getMessage());
                 }
             }
-            activeReplicators = null;
         }
+        activeReplicators.clear();
 
-        allReplicators = null;
+        allReplicators.clear();
 
         if (store != null)
             store.close();
@@ -1876,9 +1872,7 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public void addReplication(Replication replication) {
-        if (allReplicators != null) {
-            allReplicators.add(replication);
-        }
+        allReplicators.add(replication);
     }
 
     @InterfaceAudience.Private
@@ -1886,18 +1880,12 @@ public class Database implements StoreDelegate {
         replication.addChangeListener(new Replication.ChangeListener() {
             @Override
             public void changed(Replication.ChangeEvent event) {
-                if (event.getTransition() != null && event.getTransition().getDestination() ==
-                        ReplicationState.STOPPED) {
-                    if (activeReplicators != null) {
-                        activeReplicators.remove(event.getSource());
-                    }
-                }
+                if (event.getTransition() != null &&
+                        event.getTransition().getDestination() == ReplicationState.STOPPED)
+                    activeReplicators.remove(event.getSource());
             }
         });
-
-        if (activeReplicators != null) {
-            activeReplicators.add(replication);
-        }
+        activeReplicators.add(replication);
     }
 
     /**
@@ -2270,22 +2258,19 @@ public class Database implements StoreDelegate {
     // Database+Replication
 
     protected Replication getActiveReplicator(URL remote, boolean push) {
-        if (activeReplicators != null) {
-            synchronized (activeReplicators) {
-                try {
-                    java.net.URI remoteUri = remote.toURI();
-                    for (Replication replicator : activeReplicators) {
-                            if (replicator.getRemoteUrl().toURI().equals(remoteUri) &&
-                                    replicator.isPull() == !push && replicator.isRunning()) {
-                                return replicator;
-                            }
-                    }
-                } catch (java.net.URISyntaxException uriException) {
-                    // Not possible since it would not be an active replicator.
-                    // However, until we refactor everything to use java.net,
-                    // I'm not sure we have a choice but to swallow this.
-                    Log.e(Log.TAG_DATABASE, "Active replicator found with invalid URI", uriException);
+        synchronized (activeReplicators) {
+            try {
+                java.net.URI remoteUri = remote.toURI();
+                for (Replication replicator : activeReplicators) {
+                    if (replicator.getRemoteUrl().toURI().equals(remoteUri) &&
+                            replicator.isPull() == !push && replicator.isRunning())
+                        return replicator;
                 }
+            } catch (java.net.URISyntaxException uriException) {
+                // Not possible since it would not be an active replicator.
+                // However, until we refactor everything to use java.net,
+                // I'm not sure we have a choice but to swallow this.
+                Log.e(Log.TAG_DATABASE, "Active replicator found with invalid URI", uriException);
             }
         }
         return null;

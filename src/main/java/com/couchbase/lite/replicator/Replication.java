@@ -823,14 +823,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * @exclude
      */
     @InterfaceAudience.Private
-    public void databaseClosing() {
-        replicationInternal.databaseClosing();
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
     public String getSessionID() {
         return replicationInternal.getSessionID();
     }
