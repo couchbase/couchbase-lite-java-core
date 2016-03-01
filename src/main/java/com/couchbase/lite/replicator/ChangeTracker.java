@@ -79,6 +79,7 @@ public class ChangeTracker implements Runnable {
     protected ChangeTrackerBackoff backoff;
     private long startTime = 0;
 
+    private String str = null;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -652,5 +653,14 @@ public class ChangeTracker implements Runnable {
                 } catch (InterruptedException e) { }
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        if (str == null) {
+            String remoteURL = databaseURL.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
+            str = String.format("ChangeTracker{%s, %s}", remoteURL, mode);
+        }
+        return str;
     }
 }
