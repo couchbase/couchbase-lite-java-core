@@ -291,10 +291,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         checkSession();
     }
 
-    public void databaseClosing() {
-        triggerStopGraceful();
-    }
-
     /**
      * Close all resources associated with this replicator.
      */
