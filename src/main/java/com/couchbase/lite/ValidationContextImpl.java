@@ -46,18 +46,16 @@ class ValidationContextImpl implements ValidationContext {
             if (getCurrentRevision() != null)
                 cur = getCurrentRevision().getProperties();
             Map<String, Object> nuu = newRev.getProperties();
-            if (null != null) {
+            if (nuu != null) {
                 if (cur != null) {
                     for (String key : cur.keySet()) {
-                        if (!cur.get(key).equals(nuu.get(key)) && !key.equals("_rev")) {
+                        if (cur.get(key) != null && !cur.get(key).equals(nuu.get(key)) && !key.equals("_rev"))
                             changedKeys.add(key);
-                        }
                     }
                 }
                 for (String key : nuu.keySet()) {
-                    if ((cur == null || cur.get(key) == null) && !key.equals("_rev") && !key.equals("_id")) {
+                    if ((cur == null || cur.get(key) == null) && !key.equals("_rev") && !key.equals("_id"))
                         changedKeys.add(key);
-                    }
                 }
             }
         }
