@@ -1044,7 +1044,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
             String type = parentReplication.isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-            str = String.format("PusherInternal{%s, %s, %s}",
+            str = String.format("PullerInternal{%s, %s, %s}",
                     maskedRemote, type, replicationIdentifier);
         }
         return str;
