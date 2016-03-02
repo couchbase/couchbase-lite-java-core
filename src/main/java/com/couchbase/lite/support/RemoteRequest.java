@@ -54,7 +54,6 @@ public class RemoteRequest implements Runnable {
     protected RemoteRequestCompletionBlock onPreCompletion;
     protected RemoteRequestCompletionBlock onCompletion;
     protected RemoteRequestCompletionBlock onPostCompletion;
-    private Database db;
     protected HttpUriRequest request;
 
     protected Map<String, Object> requestHeaders;
@@ -64,6 +63,8 @@ public class RemoteRequest implements Runnable {
 
     // if true, send compressed (gzip) request
     private boolean compressedRequest = false;
+
+    private String str = null;
 
     public RemoteRequest(ScheduledExecutorService workExecutor,
                          HttpClientFactory clientFactory, String method, URL url,
@@ -75,10 +76,8 @@ public class RemoteRequest implements Runnable {
         this.onCompletion = onCompletion;
         this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
-        this.db = db;
         this.request = createConcreteRequest();
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest created, url: %s", this, url);
-
     }
 
     @Override
@@ -369,5 +368,14 @@ public class RemoteRequest implements Runnable {
         ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
         entity.setContentType("application/json");
         return entity;
+    }
+
+    @Override
+    public String toString() {
+        if (str == null) {
+            String remoteURL = url.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
+            str = String.format("RemoteRequest{%s, %s}", method, remoteURL);
+        }
+        return str;
     }
 }

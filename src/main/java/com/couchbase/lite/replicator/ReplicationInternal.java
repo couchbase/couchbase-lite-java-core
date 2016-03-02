@@ -357,8 +357,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 public Thread newThread(Runnable r) {
                     String threadName = "CBLRequestWorker";
                     try {
+                        String maskedRemote = remote.toExternalForm();
+                        maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                        String type = parentReplication.isPull()?"pull":"push";
                         String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                        threadName = String.format("CBLRequestWorker-%s-%s", replicationIdentifier, counter++);
+                        threadName = String.format("CBLRequestWorker-%s-%s-%s-%d",
+                                maskedRemote, type, replicationIdentifier, counter++);
                     } catch (Exception e) {
                         Log.e(Log.TAG_SYNC, "Error creating thread name", e);
                     }
@@ -1698,12 +1702,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     fireTrigger(ReplicationTrigger.RESUME);
 
                 // run waitForPendingFutures.
+                String threadName = String.format("Thread.waitForPendingFutures[%s]", toString());
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
                         waitForPendingFutures();
                     }
-                }).start();
+                }, threadName).start();
             }
         }
     }

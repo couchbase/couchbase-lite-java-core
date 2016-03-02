@@ -77,6 +77,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected int httpConnectionCount;
     protected Batcher<RevisionInternal> downloadsToInsert;
 
+    private String str = null;
+
     public PullerInternal(Database db,
                           URL remote,
                           HttpClientFactory clientFactory,
@@ -908,12 +910,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void waitForPendingFuturesWithNewThread() {
+        String threadName = String.format("Thread.waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
                 waitForPendingFutures();
             }
-        }).start();
+        }, threadName).start();
     }
 
     @Override
@@ -974,6 +977,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
+        String threadName = String.format("Thread.waitForAllTasksCompleted[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -988,7 +992,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     Log.d(TAG, "PullerInternal stop.run() finished");
                 }
             }
-        }).start();
+        }, threadName).start();
     }
 
     protected void waitForAllTasksCompleted() {
@@ -1031,5 +1035,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected void pauseOrResume() {
         int pending = batcher.count() + pendingSequences.count();
         changeTracker.setPaused(pending >= MAX_PENDING_DOCS);
+    }
+
+    @Override
+    public String toString() {
+        if (str == null) {
+            String maskedRemote = remote.toExternalForm();
+            maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+            String type = parentReplication.isPull() ? "pull" : "push";
+            String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+            str = String.format("PullerInternal{%s, %s, %s}",
+                    maskedRemote, type, replicationIdentifier);
+        }
+        return str;
     }
 }
