@@ -74,13 +74,16 @@ public class Utils {
         } else if (throwable instanceof HttpResponseException) {
             HttpResponseException e = (HttpResponseException) throwable;
             return isTransientError(e.getStatusCode());
-        }
-        // connection and socket timeouts => transient error
-        else if (throwable instanceof java.net.SocketTimeoutException){
+        } else if (throwable instanceof java.net.SocketTimeoutException)
+            // connection and socket timeouts => transient error
             return true;
-        } else {
+        else if (throwable instanceof org.apache.http.conn.ConnectTimeoutException)
+            return true;
+        else if (throwable instanceof java.net.ConnectException)
+            // connection issue => transient error
+            return true;
+        else
             return false;
-        }
     }
 
     public static boolean isTransientError(StatusLine status) {
