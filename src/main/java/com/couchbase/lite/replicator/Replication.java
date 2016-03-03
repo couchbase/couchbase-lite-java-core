@@ -52,7 +52,9 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
 
-    public static final long DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN = 60; // 60 sec
+    public static long DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN = 60; // 60 sec
+
+    public static int DEFAULT_HEARTBEAT = 300; // 5min (300 sec)
 
     /**
      * Options for what metadata to include in document bodies

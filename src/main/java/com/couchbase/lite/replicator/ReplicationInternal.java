@@ -80,7 +80,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private static int lastSessionID = 0;
 
     public static int MAX_RETRIES = 10;  // total number of attempts = 11 (1 initial + MAX_RETRIES)
-    public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
+    public static int RETRY_DELAY_SECONDS = 20; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
     protected Database db;
@@ -1420,7 +1420,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * helper function to schedule retry future. no in iOS code.
      */
     private void scheduleRetryFuture() {
-        long delay = RETRY_DELAY_SECONDS * (long) Math.pow((double) 2, (double) Math.min(retryCount, MAX_RETRIES));
+        long delay = (long) (RETRY_DELAY_SECONDS * Math.pow(1.5, (double) retryCount));
         Log.v(Log.TAG_SYNC, "%s: Failed to xfer; will retry in %d sec",
                 this, delay);
         this.retryFuture = workExecutor.schedule(new Runnable() {
@@ -1444,27 +1444,27 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Retry replication if previous attempt ends with error
      */
     protected void retryReplicationIfError() {
-        // Make sure if state is IDLE, this method should be called when state becomes IDLE
-        if (!stateMachine.getState().equals(ReplicationState.IDLE)) {
-            return;
-        }
+        Log.d(TAG, "retryReplicationIfError() retryCount=" + retryCount +
+                ", state=" + stateMachine.getState() +
+                ", error=" + this.error +
+                ", isContinuous()=" + isContinuous() +
+                ", isTransientError()=" + Utils.isTransientError(this.error));
 
-        // IDLE_OK
-        if (this.error == null) {
+        // Make sure if state is IDLE, this method should be called when state becomes IDLE
+        if (!stateMachine.getState().equals(ReplicationState.IDLE))
+            return;
+
+        if (this.error == null)
+            // IDLE_OK
             retryCount = 0;
-        }
-        // IDLE_ERROR
         else {
-            // not retry infinite times
-            if (retryCount < MAX_RETRIES) {
-                // mode should be continuous
-                if (isContinuous()) {
-                    // 12/16/2014 - only retry if error is transient error 50x http error
-                    // It may need to retry for any kind of errors
-                    if (Utils.isTransientError(this.error)) {
-                        cancelRetryFuture();
-                        scheduleRetryFuture();
-                    }
+            // IDLE_ERROR
+            if (isContinuous()) {
+                // 12/16/2014 - only retry if error is transient error 50x http error
+                // It may need to retry for any kind of errors
+                if (Utils.isTransientError(this.error)) {
+                    cancelRetryFuture();
+                    scheduleRetryFuture();
                 }
             }
         }
