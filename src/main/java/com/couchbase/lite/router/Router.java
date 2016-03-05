@@ -237,6 +237,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             options.setInclusiveEnd(getBooleanQuery("inclusive_end"));
         }
         if (getQuery("reduce") != null) {
+            options.setReduceSpecified(true);
             options.setReduce(getBooleanQuery("reduce"));
         }
         options.setGroup(getBooleanQuery("group"));
