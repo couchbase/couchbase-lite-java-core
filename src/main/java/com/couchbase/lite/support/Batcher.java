@@ -3,7 +3,6 @@ package com.couchbase.lite.support;
 import com.couchbase.lite.util.Log;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -76,14 +75,25 @@ public class Batcher<T> {
      * Get capacity amount.
      */
     public int getCapacity() {
-        return capacity;
+        synchronized (mutex) {
+            return capacity;
+        }
     }
 
     /**
      * Get delay amount.
      */
     public long getDelay() {
-        return delay;
+        synchronized (mutex) {
+            return delay;
+        }
+    }
+
+    public boolean isEmpty() {
+        synchronized (mutex) {
+            return inbox.size() == 0 &&
+                    (pendingFuture == null || pendingFuture.isDone() || pendingFuture.isCancelled());
+        }
     }
 
     /**
