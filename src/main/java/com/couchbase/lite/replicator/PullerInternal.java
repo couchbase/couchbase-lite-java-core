@@ -997,9 +997,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     protected void waitForAllTasksCompleted() {
         // NOTE: Wait till all queue becomes empty
-        while ((batcher != null && batcher.count() > 0) ||
+        while ((batcher != null && !batcher.isEmpty()) ||
                 (pendingFutures != null && pendingFutures.size() > 0) ||
-                (downloadsToInsert != null && downloadsToInsert.count() > 0)) {
+                (downloadsToInsert != null && !downloadsToInsert.isEmpty())) {
 
             // Wait for batcher (inbox) completed
             waitBatcherCompleted(batcher);
