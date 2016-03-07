@@ -23,6 +23,7 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.ReplicationState;
+import com.couchbase.lite.replicator.ReplicationStateTransition;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.store.EncryptableStore;
 import com.couchbase.lite.store.StorageValidation;
@@ -58,10 +59,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -140,9 +139,7 @@ public class Database implements StoreDelegate {
         this.path = path;
         this.name = name != null ? name : FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
-
         this.startTime = System.currentTimeMillis();
-
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.databaseListeners = new CopyOnWriteArrayList<DatabaseListener>();
         this.docCache = new Cache<String, Document>();
@@ -1033,9 +1030,11 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public List<Replication> getActiveReplications() {
-        List<Replication> activeReplicatorsList = new ArrayList<Replication>();
-        activeReplicatorsList.addAll(activeReplicators);
-        return activeReplicatorsList;
+        List<Replication> replicators = new ArrayList<Replication>();
+        synchronized (activeReplicators) {
+            replicators.addAll(activeReplicators);
+        }
+        return replicators;
     }
 
     @InterfaceAudience.Private
@@ -1267,53 +1266,33 @@ public class Database implements StoreDelegate {
         }
         views = null;
 
-        // make all replicators stop
-        Map<Replication, CountDownLatch> latches = new HashMap<Replication, CountDownLatch>();
+        // Make all replicators stop and wait:
         synchronized (activeReplicators) {
             for (Replication replicator : activeReplicators) {
                 if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
                     continue;
-                // Handler to check if the replicator stopped:
-                final CountDownLatch latch = new CountDownLatch(1);
-                replicator.addChangeListener(new Replication.ChangeListener() {
-                    @Override
-                    public void changed(Replication.ChangeEvent event) {
-                        if (event.getSource().getStatus() ==
-                                Replication.ReplicationStatus.REPLICATION_STOPPED)
-                            latch.countDown();
-                    }
-                });
-                latches.put(replicator, latch);
-
-                // Ask replicator to stop:
                 replicator.stop();
             }
-        }
 
-        // Wait till all replicator stopped:
-        for (Map.Entry<Replication, CountDownLatch> entry : latches.entrySet()) {
-            // still active?
-            Replication repl = entry.getKey();
-            if (activeReplicators.contains(repl) &&
-                    repl.getStatus() != Replication.ReplicationStatus.REPLICATION_STOPPED) {
-                CountDownLatch latch = entry.getValue();
+            // maximum wait time per replicator is 60 sec.
+            // total maximum wait time for all replicators is between 60sec and 119 sec.
+            long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
+            long startTime = System.currentTimeMillis();
+            while (activeReplicators.size() > 0 &&
+                    (System.currentTimeMillis() - startTime) < timeout) {
                 try {
-                    boolean success = latch.getCount() == 0 ||
-                            latch.await(Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN,
-                                    TimeUnit.SECONDS);
-                    if (!success) {
-                        Log.w(Log.TAG_DATABASE, "Replicator could not stop in " +
-                                Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN + " second.");
-                    }
-                } catch (Exception e) {
-                    Log.w(Log.TAG_DATABASE, e.getMessage());
+                    activeReplicators.wait(timeout);
+                } catch (InterruptedException e) {
                 }
             }
+            // clear active replicators:
+            activeReplicators.clear();
         }
-        activeReplicators.clear();
 
+        // Clear all replicators:
         allReplicators.clear();
 
+        // Close Store:
         if (store != null)
             store.close();
         store = null;
@@ -1880,9 +1859,13 @@ public class Database implements StoreDelegate {
         replication.addChangeListener(new Replication.ChangeListener() {
             @Override
             public void changed(Replication.ChangeEvent event) {
-                if (event.getTransition() != null &&
-                        event.getTransition().getDestination() == ReplicationState.STOPPED)
-                    activeReplicators.remove(event.getSource());
+                ReplicationStateTransition transition = event.getTransition();
+                if (transition != null && transition.getDestination() == ReplicationState.STOPPED) {
+                    synchronized (activeReplicators) {
+                        activeReplicators.remove(event.getSource());
+                        activeReplicators.notifyAll();
+                    }
+                }
             }
         });
         activeReplicators.add(replication);
