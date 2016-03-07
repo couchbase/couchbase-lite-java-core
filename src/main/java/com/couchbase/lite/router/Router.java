@@ -54,6 +54,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -61,6 +63,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class Router implements Database.ChangeListener, Database.DatabaseListener {
+
+    private final static long MIN_HEARTBEAT = 5000; // 5 second
 
     /**
      * Options for what metadata to include in document bodies
@@ -89,6 +93,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private boolean longpoll = false;
     private boolean waiting = false;
     private URL source = null;
+    private Timer timer = null; // timer for heartbeat
 
     private final Object databaseChangesLongpollLock = new Object();
 
@@ -99,6 +104,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     public Router(Manager manager, URLConnection connection) {
         this.manager = manager;
         this.connection = connection;
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        stop();
+        super.finalize();
     }
 
     public void setCallbackBlock(RouterCallbackBlock callbackBlock) {
@@ -226,6 +237,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             options.setInclusiveEnd(getBooleanQuery("inclusive_end"));
         }
         if (getQuery("reduce") != null) {
+            options.setReduceSpecified(true);
             options.setReduce(getBooleanQuery("reduce"));
         }
         options.setGroup(getBooleanQuery("group"));
@@ -574,6 +586,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public void stop() {
+        stopHeartbeat();
         callbackBlock = null;
         if (db != null) {
             db.removeChangeListener(this);
@@ -1600,7 +1613,25 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 }
             }
             db.addChangeListener(this);
+
+            // heartbeat
+            String heartbeatParam = getQuery("heartbeat");
+            if (heartbeatParam != null) {
+                long heartbeat = 0;
+                try {
+                    heartbeat = (long) Double.parseDouble(heartbeatParam);
+                } catch (Exception e) {
+                    return new Status(Status.BAD_REQUEST);
+                }
+                if (heartbeat <= 0)
+                    return new Status(Status.BAD_REQUEST);
+                else if (heartbeat < MIN_HEARTBEAT)
+                    heartbeat = MIN_HEARTBEAT;
+                startHeartbeat(heartbeat);
+            }
+
             // Don't close connection; more data to come
+
             return new Status(0);
         } else {
             if (options.isIncludeConflicts()) {
@@ -1609,6 +1640,40 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.setResponseBody(new Body(responseBodyForChanges(changes, since)));
             }
             return new Status(Status.OK);
+        }
+    }
+
+    private void startHeartbeat(long interval) {
+        if (interval <= 0)
+            return;
+
+        stopHeartbeat();
+        timer = new Timer();
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                synchronized (databaseChangesLongpollLock) {
+                    OutputStream os = connection.getResponseOutputStream();
+                    if (os != null) {
+                        try {
+                            os.write("\r\n".getBytes());
+                            os.flush();
+                        } catch (IOException e) {
+                            Log.w(Log.TAG_ROUTER, "IOException writing to internal streams: " + e.getMessage());
+                        } finally {
+                            // no close outputstream, OutputStream might be re-used
+                        }
+                    }
+                }
+            }
+        }, interval, interval);
+    }
+
+    private void stopHeartbeat() {
+        if (timer != null) {
+            timer.cancel();
+            timer.purge();
+            timer = null;
         }
     }
 

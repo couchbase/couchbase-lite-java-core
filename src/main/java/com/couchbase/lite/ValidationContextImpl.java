@@ -42,16 +42,20 @@ class ValidationContextImpl implements ValidationContext {
     public List<String> getChangedKeys() {
         if (changedKeys == null) {
             changedKeys = new ArrayList<String>();
-            Map<String, Object> cur = getCurrentRevision().getProperties();
+            Map<String, Object> cur = null;
+            if (getCurrentRevision() != null)
+                cur = getCurrentRevision().getProperties();
             Map<String, Object> nuu = newRev.getProperties();
-            for (String key : cur.keySet()) {
-                if (!cur.get(key).equals(nuu.get(key)) && !key.equals("_rev")) {
-                    changedKeys.add(key);
+            if (nuu != null) {
+                if (cur != null) {
+                    for (String key : cur.keySet()) {
+                        if (cur.get(key) != null && !cur.get(key).equals(nuu.get(key)) && !key.equals("_rev"))
+                            changedKeys.add(key);
+                    }
                 }
-            }
-            for (String key : nuu.keySet()) {
-                if (cur.get(key) == null && !key.equals("_rev") && !key.equals("_id")) {
-                    changedKeys.add(key);
+                for (String key : nuu.keySet()) {
+                    if ((cur == null || cur.get(key) == null) && !key.equals("_rev") && !key.equals("_id"))
+                        changedKeys.add(key);
                 }
             }
         }

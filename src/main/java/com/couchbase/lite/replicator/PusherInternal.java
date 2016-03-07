@@ -77,6 +77,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     boolean doneBeginReplicating = false;
     List<RevisionInternal> queueChanges = new ArrayList<RevisionInternal>();
 
+    private String str = null;
+
     /**
      * Constructor
      *
@@ -124,11 +126,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             supportExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
                 @Override
                 public Thread newThread(Runnable r) {
-                    String maskedRemoteWithoutCredentials = remote.toExternalForm();
-                    maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials
-                            .replaceAll("://.*:.*@", "://---:---@");
-                    return new Thread(r, "CBLPusherSupportExecutor-" +
-                            maskedRemoteWithoutCredentials);
+                    String maskedRemote = remote.toExternalForm();
+                    maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                    return new Thread(r, "CBLPusherSupportExecutor-" + maskedRemote);
                 }
             });
         }
@@ -158,6 +158,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
+        String threadName = String.format("Thread.waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -171,7 +172,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     Log.d(Log.TAG_SYNC, "PusherInternal stop.run() finished");
                 }
             }
-        }).start();
+        }, threadName).start();
     }
 
     /**
@@ -867,5 +868,18 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        if (str == null) {
+            String maskedRemote = remote.toExternalForm();
+            maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+            String type = parentReplication.isPull() ? "pull" : "push";
+            String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+            str = String.format("PusherInternal{%s, %s, %s}",
+                    maskedRemote, type, replicationIdentifier);
+        }
+        return str;
     }
 }

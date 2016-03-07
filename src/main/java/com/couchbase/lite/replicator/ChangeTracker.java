@@ -79,6 +79,7 @@ public class ChangeTracker implements Runnable {
     protected ChangeTrackerBackoff backoff;
     private long startTime = 0;
 
+    private String str = null;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -94,7 +95,7 @@ public class ChangeTracker implements Runnable {
         this.lastSequenceID = lastSequenceID;
         this.client = client;
         this.requestHeaders = new HashMap<String, Object>();
-        this.heartBeatSeconds = 300;
+        this.heartBeatSeconds = Replication.DEFAULT_HEARTBEAT;
         this.limit = 50;
     }
 
@@ -652,5 +653,14 @@ public class ChangeTracker implements Runnable {
                 } catch (InterruptedException e) { }
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        if (str == null) {
+            String remoteURL = databaseURL.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
+            str = String.format("ChangeTracker{%s, %s}", remoteURL, mode);
+        }
+        return str;
     }
 }
