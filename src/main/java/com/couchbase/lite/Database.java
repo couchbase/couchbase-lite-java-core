@@ -139,9 +139,7 @@ public class Database implements StoreDelegate {
         this.path = path;
         this.name = name != null ? name : FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
-
         this.startTime = System.currentTimeMillis();
-
         this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
         this.databaseListeners = new CopyOnWriteArrayList<DatabaseListener>();
         this.docCache = new Cache<String, Document>();
@@ -1276,14 +1274,18 @@ public class Database implements StoreDelegate {
                 replicator.stop();
             }
 
-            final long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
-            final long startTime = System.currentTimeMillis();
+            // maximum wait time per replicator is 60 sec.
+            // total maximum wait time for all replicators is between 60sec and 119 sec.
+            long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
+            long startTime = System.currentTimeMillis();
             while (activeReplicators.size() > 0 &&
                     (System.currentTimeMillis() - startTime) < timeout) {
                 try {
                     activeReplicators.wait(timeout);
-                } catch (InterruptedException e) { }
+                } catch (InterruptedException e) {
+                }
             }
+            // clear active replicators:
             activeReplicators.clear();
         }
 
