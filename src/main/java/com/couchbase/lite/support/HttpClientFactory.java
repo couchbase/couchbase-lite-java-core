@@ -7,8 +7,11 @@ import org.apache.http.cookie.Cookie;
 import java.util.List;
 
 public interface HttpClientFactory {
-	HttpClient getHttpClient();
-    public void addCookies(List<Cookie> cookies);
-    public void deleteCookie(String name);
-    public CookieStore getCookieStore();
+    HttpClient getHttpClient();
+
+    void addCookies(List<Cookie> cookies);
+
+    void deleteCookie(String name);
+
+    CookieStore getCookieStore();
 }

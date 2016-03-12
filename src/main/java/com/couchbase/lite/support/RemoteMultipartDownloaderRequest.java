@@ -35,17 +35,19 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
     @Override
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
-
-        preemptivelySetAuthCredentials(httpClient);
-
-        request.addHeader("Accept", "multipart/related, application/json");
-        request.addHeader("X-Accept-Part-Encoding", "gzip");
-        request.addHeader("User-Agent", Manager.getUserAgent());
-        request.addHeader("Accept-Encoding", "gzip, deflate");
-
-        addRequestHeaders(request);
-
-        executeRequest(httpClient, request);
+        try {
+            preemptivelySetAuthCredentials(httpClient);
+            request.addHeader("Accept", "multipart/related, application/json");
+            request.addHeader("X-Accept-Part-Encoding", "gzip");
+            request.addHeader("User-Agent", Manager.getUserAgent());
+            request.addHeader("Accept-Encoding", "gzip, deflate");
+            addRequestHeaders(request);
+            executeRequest(httpClient, request);
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
+        }
     }
 
     private static final int BUF_LEN = 1024;
@@ -79,13 +81,14 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         status.getReasonPhrase());
                 respondWithResult(fullBody, error, response);
             } else {
-                HttpEntity entity = null;
+                HttpEntity entity = response.getEntity();
                 try {
-                    entity = response.getEntity();
                     if (entity != null) {
-                        InputStream inputStream = null;
+                        InputStream inputStream = entity.getContent();
                         try {
-                            inputStream = entity.getContent();
+                            // decompress if contentEncoding is gzip
+                            if (Utils.isGzip(entity))
+                                inputStream = new GZIPInputStream(inputStream);
 
                             Header contentTypeHeader = entity.getContentType();
                             if (contentTypeHeader != null) {
@@ -104,33 +107,28 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                                 }
                                 // non-multipart
                                 else {
-                                    GZIPInputStream gzipStream = null;
-                                    try {
-                                        // decompress if contentEncoding is gzip
-                                        Header contentEncoding = entity.getContentEncoding();
-                                        if (contentEncoding != null && contentEncoding.getValue().contains("gzip")) {
-                                            gzipStream = new GZIPInputStream(inputStream);
-                                            fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
-                                        } else {
-                                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
-                                        }
-                                        respondWithResult(fullBody, error, response);
-                                    } finally {
-                                        try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
-                                        gzipStream = null;
-                                    }
+                                    fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
+                                    respondWithResult(fullBody, error, response);
                                 }
                             }
                         }
                         finally {
-                            try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
-                            inputStream = null;
+                            try {
+                                if (inputStream != null) {
+                                    inputStream.close();
+                                }
+                            } catch (IOException e) {
+                            }
                         }
                     }
                 }
                 finally{
-                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
-                    entity = null;
+                    if (entity != null) {
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
                 }
             }
         } catch (IOException e) {

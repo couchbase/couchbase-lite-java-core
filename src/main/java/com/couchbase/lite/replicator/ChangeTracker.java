@@ -238,7 +238,6 @@ public class ChangeTracker implements Runnable {
     protected void runLoop() {
         paused = false;
         running = true;
-        HttpClient httpClient;
 
         if (client == null) {
             // This is a race condition that can be reproduced by calling cbpuller.start() and cbpuller.stop()
@@ -255,188 +254,194 @@ public class ChangeTracker implements Runnable {
             throw new RuntimeException("ChangeTracker does not correctly support continuous mode");
         }
 
-        httpClient = client.getHttpClient();
-        backoff = new ChangeTrackerBackoff();
+        HttpClient httpClient = client.getHttpClient();
+        try {
+            backoff = new ChangeTrackerBackoff();
 
-        while (running) {
-            startTime = System.currentTimeMillis();
+            while (running) {
+                startTime = System.currentTimeMillis();
 
-            URL url = getChangesFeedURL();
-            if (usePOST) {
-                HttpPost postRequest = new HttpPost(url.toString());
-                postRequest.setHeader("Content-Type", "application/json");
-                postRequest.addHeader("User-Agent", Manager.getUserAgent());
-                postRequest.addHeader("Accept-Encoding", "gzip");
+                URL url = getChangesFeedURL();
+                if (usePOST) {
+                    HttpPost postRequest = new HttpPost(url.toString());
+                    postRequest.setHeader("Content-Type", "application/json");
+                    postRequest.addHeader("User-Agent", Manager.getUserAgent());
+                    postRequest.addHeader("Accept-Encoding", "gzip");
 
-                StringEntity entity;
-                try {
-                    entity = new StringEntity(changesFeedPOSTBody());
-                } catch (UnsupportedEncodingException e) {
-                    throw new RuntimeException(e);
-                }
-                postRequest.setEntity(entity);
-                request = postRequest;
-            } else {
-                request = new HttpGet(url.toString());
-            }
-
-            addRequestHeaders(request);
-
-            // Perform BASIC Authentication if needed
-            boolean isUrlBasedUserInfo = false;
-
-            // If the URL contains user info AND if this a DefaultHttpClient then preemptively set the auth credentials
-            String userInfo = url.getUserInfo();
-            if (userInfo != null) {
-                isUrlBasedUserInfo = true;
-            } else {
-                if (authenticator != null) {
-                    AuthenticatorImpl auth = (AuthenticatorImpl) authenticator;
-                    userInfo = auth.authUserInfo();
-                }
-            }
-
-            if (userInfo != null) {
-                if (userInfo.contains(":") && !":".equals(userInfo.trim())) {
-                    String[] userInfoElements = userInfo.split(":");
-                    String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
-                    String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
-                    final Credentials credentials = new UsernamePasswordCredentials(username, password);
-
-                    if (httpClient instanceof DefaultHttpClient) {
-                        DefaultHttpClient dhc = (DefaultHttpClient) httpClient;
-                        HttpRequestInterceptor preemptiveAuth = new HttpRequestInterceptor() {
-                            @Override
-                            public void process(HttpRequest request, HttpContext context) throws HttpException, IOException {
-                                AuthState authState = (AuthState) context.getAttribute(ClientContext.TARGET_AUTH_STATE);
-                                if (authState.getAuthScheme() == null) {
-                                    authState.setAuthScheme(new BasicScheme());
-                                    authState.setCredentials(credentials);
-                                }
-                            }
-                        };
-                        dhc.addRequestInterceptor(preemptiveAuth, 0);
-                    }
-                } else {
-                    Log.w(Log.TAG_CHANGE_TRACKER, "RemoteRequest Unable to parse user info, not setting credentials");
-                }
-            }
-
-            try {
-                String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
-                maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-
-                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
-                HttpResponse response = httpClient.execute(request);
-                StatusLine status = response.getStatusLine();
-                // In case response status is Error, ChangeTracker stops here
-                // except mode is LongPoll and error is transient.
-                if (status.getStatusCode() >= 300 &&
-                        ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
-                                mode != ChangeTrackerMode.LongPoll)) {
-                    Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
-                    this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
-                    break;
-                }
-
-                // Parse response body
-                HttpEntity entity = response.getEntity();
-                Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
-                if (entity != null) {
-                    InputStream inputStream = null;
+                    StringEntity entity;
                     try {
-                        Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
-                        inputStream = entity.getContent();
-                        if (Utils.isGzip(entity))
-                            inputStream = new GZIPInputStream(inputStream);
+                        entity = new StringEntity(changesFeedPOSTBody());
+                    } catch (UnsupportedEncodingException e) {
+                        throw new RuntimeException(e);
+                    }
+                    postRequest.setEntity(entity);
+                    request = postRequest;
+                } else {
+                    request = new HttpGet(url.toString());
+                }
 
-                        if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
-                            // NOTE: 1. check content length, ObjectMapper().readValue() throws Exception if size is 0.
-                            // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
-                            // NOTE: 3. If Http Status is error, not parse response body
-                            boolean responseOK = false; // default value
-                            if (entity.getContentLength() != 0 && status.getStatusCode() < 300) {
-                                try {
-                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
-                                    Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
-                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
-                                    responseOK = receivedPollResponse(fullBody);
-                                } catch (JsonParseException jpe) {
-                                    Log.w(Log.TAG_CHANGE_TRACKER, "%s: json parsing error; %s", this, jpe.toString());
+                addRequestHeaders(request);
+
+                // Perform BASIC Authentication if needed
+                boolean isUrlBasedUserInfo = false;
+
+                // If the URL contains user info AND if this a DefaultHttpClient then preemptively set the auth credentials
+                String userInfo = url.getUserInfo();
+                if (userInfo != null) {
+                    isUrlBasedUserInfo = true;
+                } else {
+                    if (authenticator != null) {
+                        AuthenticatorImpl auth = (AuthenticatorImpl) authenticator;
+                        userInfo = auth.authUserInfo();
+                    }
+                }
+
+                if (userInfo != null) {
+                    if (userInfo.contains(":") && !":".equals(userInfo.trim())) {
+                        String[] userInfoElements = userInfo.split(":");
+                        String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
+                        String password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
+                        final Credentials credentials = new UsernamePasswordCredentials(username, password);
+
+                        if (httpClient instanceof DefaultHttpClient) {
+                            DefaultHttpClient dhc = (DefaultHttpClient) httpClient;
+                            HttpRequestInterceptor preemptiveAuth = new HttpRequestInterceptor() {
+                                @Override
+                                public void process(HttpRequest request, HttpContext context) throws HttpException, IOException {
+                                    AuthState authState = (AuthState) context.getAttribute(ClientContext.TARGET_AUTH_STATE);
+                                    if (authState.getAuthScheme() == null) {
+                                        authState.setAuthScheme(new BasicScheme());
+                                        authState.setCredentials(credentials);
+                                    }
                                 }
-                            }
-                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);
+                            };
+                            dhc.addRequestInterceptor(preemptiveAuth, 0);
+                        }
+                    } else {
+                        Log.w(Log.TAG_CHANGE_TRACKER, "RemoteRequest Unable to parse user info, not setting credentials");
+                    }
+                }
 
-                            if (responseOK) {
-                                // TODO: this logic is questionable, there's lots
-                                // TODO: of differences in the iOS changetracker code,
-                                client.changeTrackerCaughtUp();
-                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
+                try {
+                    String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
+                    maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
+
+                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
+                    HttpResponse response = httpClient.execute(request);
+                    StatusLine status = response.getStatusLine();
+                    // In case response status is Error, ChangeTracker stops here
+                    // except mode is LongPoll and error is transient.
+                    if (status.getStatusCode() >= 300 &&
+                            ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
+                                    mode != ChangeTrackerMode.LongPoll)) {
+                        Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
+                        this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
+                        break;
+                    }
+
+                    // Parse response body
+                    HttpEntity entity = response.getEntity();
+                    try {
+                        Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
+                        if (entity != null) {
+                            InputStream inputStream = null;
+                            try {
+                                Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
+                                inputStream = entity.getContent();
+                                // decompress if contentEncoding is gzip
+                                if (Utils.isGzip(entity))
+                                    inputStream = new GZIPInputStream(inputStream);
+
+                                if (mode == ChangeTrackerMode.LongPoll) {  // continuous replications
+                                    // NOTE: 1. check content length, ObjectMapper().readValue() throws Exception if size is 0.
+                                    // NOTE: 2. HttpEntity.getContentLength() returns the number of bytes of the content, or a negative number if unknown.
+                                    // NOTE: 3. If Http Status is error, not parse response body
+                                    boolean responseOK = false; // default value
+                                    if (entity.getContentLength() != 0 && status.getStatusCode() < 300) {
+                                        try {
+                                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue", this);
+                                            Map<String, Object> fullBody = Manager.getObjectMapper().readValue(inputStream, Map.class);
+                                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
+                                            responseOK = receivedPollResponse(fullBody);
+                                        } catch (JsonParseException jpe) {
+                                            Log.w(Log.TAG_CHANGE_TRACKER, "%s: json parsing error; %s", this, jpe.toString());
+                                        }
+                                    }
+                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);
+
+                                    if (responseOK) {
+                                        // TODO: this logic is questionable, there's lots
+                                        // TODO: of differences in the iOS changetracker code,
+                                        client.changeTrackerCaughtUp();
+                                        Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
+                                        backoff.resetBackoff();
+                                        continue;
+                                    } else {
+                                        long elapsed = (System.currentTimeMillis() - startTime) / 1000;
+                                        Log.w(Log.TAG_CHANGE_TRACKER, "%s: Longpoll connection closed (by proxy?) after %d sec", this, elapsed);
+                                        if (elapsed >= 30) {
+                                            // Looks like the connection got closed by a proxy (like AWS' load balancer) while the
+                                            // server was waiting for a change to send, due to lack of activity.
+                                            // Lower the heartbeat time to work around this, and reconnect:
+                                            this.heartBeatSeconds = Math.min(this.heartBeatSeconds, (int) (elapsed * 0.75));
+                                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
+                                            backoff.resetBackoff();
+                                            continue;
+                                        } else {
+                                            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
+                                            client.changeTrackerFinished(this);
+                                            break;
+                                        }
+                                    }
+                                } else {  // one-shot replications
+                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
+                                    JsonFactory factory = new JsonFactory();
+                                    JsonParser jp = factory.createParser(inputStream);
+                                    JsonToken token;
+                                    // nextToken() is null => no more token
+                                    while (((token = jp.nextToken()) != JsonToken.START_ARRAY) &&
+                                            (token != null)) {
+                                        // ignore these tokens
+                                    }
+
+                                    while (jp.nextToken() == JsonToken.START_OBJECT) {
+                                        Map<String, Object> change = (Map) Manager.getObjectMapper().readValue(jp, Map.class);
+                                        if (!receivedChange(change)) {
+                                            Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
+                                        }
+                                        // if not running state anymore, exit from loop.
+                                        if (!running)
+                                            break;
+                                    }
+
+                                    if (jp != null) {
+                                        jp.close();
+                                    }
+
+                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
+
+                                    client.changeTrackerCaughtUp();
+
+                                    if (isContinuous()) {  // if enclosing replication is continuous
+                                        mode = ChangeTrackerMode.LongPoll;
+                                    } else {
+                                        Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
+                                        client.changeTrackerFinished(this);
+                                        break;
+                                    }
+                                }
+
                                 backoff.resetBackoff();
-                                continue;
-                            } else {
-                                long elapsed = (System.currentTimeMillis() - startTime) / 1000;
-                                Log.w(Log.TAG_CHANGE_TRACKER, "%s: Longpoll connection closed (by proxy?) after %d sec", this, elapsed);
-                                if (elapsed >= 30) {
-                                    // Looks like the connection got closed by a proxy (like AWS' load balancer) while the
-                                    // server was waiting for a change to send, due to lack of activity.
-                                    // Lower the heartbeat time to work around this, and reconnect:
-                                    this.heartBeatSeconds = Math.min(this.heartBeatSeconds, (int) (elapsed * 0.75));
-                                    Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
-                                    backoff.resetBackoff();
-                                    continue;
-                                } else {
-                                    Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (LongPoll)", this);
-                                    client.changeTrackerFinished(this);
-                                    break;
+                            } finally {
+                                try {
+                                    if (inputStream != null) {
+                                        inputStream.close();
+                                    }
+                                } catch (IOException e) {
                                 }
-                            }
-                        } else {  // one-shot replications
-                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: readValue (oneshot)", this);
-                            JsonFactory factory = new JsonFactory();
-                            JsonParser jp = factory.createParser(inputStream);
-                            JsonToken token;
-                            // nextToken() is null => no more token
-                            while (((token = jp.nextToken()) != JsonToken.START_ARRAY) &&
-                                    (token != null)) {
-                                // ignore these tokens
-                            }
-
-                            while (jp.nextToken() == JsonToken.START_OBJECT) {
-                                Map<String, Object> change = (Map) Manager.getObjectMapper().readValue(jp, Map.class);
-                                if (!receivedChange(change)) {
-                                    Log.w(Log.TAG_CHANGE_TRACKER, "Received unparseable change line from server: %s", change);
-                                }
-                                // if not running state anymore, exit from loop.
-                                if(!running)
-                                    break;
-                            }
-
-                            if (jp != null) {
-                                jp.close();
-                            }
-
-                            Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue (oneshot)", this);
-
-                            client.changeTrackerCaughtUp();
-
-                            if (isContinuous()) {  // if enclosing replication is continuous
-                                mode = ChangeTrackerMode.LongPoll;
-                            } else {
-                                Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling stop (OneShot)", this);
-                                client.changeTrackerFinished(this);
-                                break;
                             }
                         }
-
-                        backoff.resetBackoff();
                     } finally {
-                        try {
-                            if (inputStream != null) {
-                                inputStream.close();
-                            }
-                        } catch (IOException e) {
-                        }
                         if (entity != null) {
                             try {
                                 entity.consumeContent();
@@ -444,19 +449,23 @@ public class ChangeTracker implements Runnable {
                             }
                         }
                     }
-                }
-            } catch (Exception e) {
-                if (!running && e instanceof IOException) {
-                    // in this case, just silently absorb the exception because it
-                    // frequently happens when we're shutting down and have to
-                    // close the socket underneath our read.
-                } else {
-                    Log.w(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
-                    this.error = e;
-                }
+                } catch (Exception e) {
+                    if (!running && e instanceof IOException) {
+                        // in this case, just silently absorb the exception because it
+                        // frequently happens when we're shutting down and have to
+                        // close the socket underneath our read.
+                    } else {
+                        Log.w(Log.TAG_CHANGE_TRACKER, this + ": Exception in change tracker", e);
+                        this.error = e;
+                    }
 
-                backoff.sleepAppropriateAmountOfTime();
+                    backoff.sleepAppropriateAmountOfTime();
+                }
             }
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
         }
         Log.v(Log.TAG_CHANGE_TRACKER, "%s: Change tracker run loop exiting", this);
     }

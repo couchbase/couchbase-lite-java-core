@@ -770,10 +770,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     @Override
     public HttpClient getHttpClient() {
-
-        HttpClient httpClient = this.clientFactory.getHttpClient();
-
-        return httpClient;
+        return clientFactory.getHttpClient();
     }
 
     @Override

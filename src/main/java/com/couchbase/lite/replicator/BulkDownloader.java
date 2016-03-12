@@ -75,20 +75,21 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     @Override
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
-
-        preemptivelySetAuthCredentials(httpClient);
-
-        request.addHeader("Content-Type", "application/json");
-        request.addHeader("Accept", "multipart/related");
-        request.addHeader("User-Agent", Manager.getUserAgent());
-        request.addHeader("X-Accept-Part-Encoding", "gzip");
-        request.addHeader("Accept-Encoding", "gzip, deflate");
-
-        addRequestHeaders(request);
-
-        setBody(request);
-
-        executeRequest(httpClient, request);
+        try {
+            preemptivelySetAuthCredentials(httpClient);
+            request.addHeader("Content-Type", "application/json");
+            request.addHeader("Accept", "multipart/related");
+            request.addHeader("User-Agent", Manager.getUserAgent());
+            request.addHeader("X-Accept-Part-Encoding", "gzip");
+            request.addHeader("Accept-Encoding", "gzip, deflate");
+            addRequestHeaders(request);
+            setBody(request);
+            executeRequest(httpClient, request);
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
+        }
     }
 
     public String toString() {
@@ -130,19 +131,17 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 error = new HttpResponseException(status.getStatusCode(),
                         status.getReasonPhrase());
             } else {
-                HttpEntity entity = null;
+                HttpEntity entity = response.getEntity();
                 try {
-                    entity = response.getEntity();
                     if (entity != null) {
-                        InputStream inputStream = null;
+                        InputStream inputStream = entity.getContent();
                         try {
+                            // decompress if contentEncoding is gzip
+                            if (Utils.isGzip(entity))
+                                inputStream = new GZIPInputStream(inputStream);
+
                             Header contentTypeHeader = entity.getContentType();
                             if (contentTypeHeader != null) {
-                                inputStream = entity.getContent();
-                                // decompress if contentEncoding is gzip
-                                if (Utils.isGzip(entity)) {
-                                    inputStream = new GZIPInputStream(inputStream);
-                                }
                                 // multipart
                                 if (contentTypeHeader.getValue().contains("multipart/")) {
                                     Log.v(TAG, "contentTypeHeader = %s",
