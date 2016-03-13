@@ -336,6 +336,13 @@ public class ChangeTracker implements Runnable {
                                     mode != ChangeTrackerMode.LongPoll)) {
                         Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
                         this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
+                        HttpEntity entity = response.getEntity();
+                        if (entity != null) {
+                            try {
+                                entity.consumeContent();
+                            } catch (IOException e) {
+                            }
+                        }
                         break;
                     }
 

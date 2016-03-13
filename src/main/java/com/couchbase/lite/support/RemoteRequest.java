@@ -97,9 +97,6 @@ public class RemoteRequest implements Runnable {
 
             executeRequest(httpClient, request);
 
-            // shutdown connection manager (close all connections)
-            httpClient.getConnectionManager().shutdown();
-
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() finished, url: %s", this, url);
 
         } catch (Throwable e) {
@@ -191,12 +188,22 @@ public class RemoteRequest implements Runnable {
             StatusLine status = response.getStatusLine();
 
             if (status.getStatusCode() >= 300) {
-                if (!dontLog404) {
-                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                try {
+                    if (!dontLog404) {
+                        Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                    }
+                    error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
+                    respondWithResult(fullBody, error, response);
+                    return;
+                } finally {
+                    HttpEntity entity = response.getEntity();
+                    if (entity != null) {
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
                 }
-                error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
-                respondWithResult(fullBody, error, response);
-                return;
             } else {
                 HttpEntity entity = response.getEntity();
                 try {
@@ -208,6 +215,8 @@ public class RemoteRequest implements Runnable {
                                 inputStream = new GZIPInputStream(inputStream);
 
                             fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
+                            respondWithResult(fullBody, error, response);
+                            return;
                         } finally {
                             try {
                                 if (inputStream != null) {
@@ -226,14 +235,6 @@ public class RemoteRequest implements Runnable {
                     }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception.  url: %s", e, url);
-            error = e;
-            // Treat all IOExceptions as transient, per:
-            // http://hc.apache.org/httpclient-3.x/exception-handling.html
-        } catch (IllegalStateException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
-            error = e;
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
             error = e;
@@ -242,8 +243,7 @@ public class RemoteRequest implements Runnable {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
         }
 
-
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
+        // error scenario
         respondWithResult(fullBody, error, response);
     }
 

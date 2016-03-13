@@ -1656,6 +1656,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     OutputStream os = connection.getResponseOutputStream();
                     if (os != null) {
                         try {
+                            Log.v(Log.TAG_ROUTER, "[%s] Sent heart beat!", this);
                             os.write("\r\n".getBytes());
                             os.flush();
                         } catch (IOException e) {
