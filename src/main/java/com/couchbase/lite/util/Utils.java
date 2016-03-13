@@ -80,7 +80,15 @@ public class Utils {
         else if (throwable instanceof org.apache.http.conn.ConnectTimeoutException)
             return true;
         else if (throwable instanceof java.net.ConnectException)
-            // connection issue => transient error
+            return true;
+        else if (throwable instanceof java.net.SocketException)
+            return true;
+        else if (throwable instanceof org.apache.http.conn.HttpHostConnectException)
+            return true;
+        else if (throwable instanceof IOException)
+            // NOTE: Exception is thrown from HttpClient.execute() or InputStream.read()
+            //       As InputStream.read() thrown IOException, So IOException is considered
+            //       temporary issue.
             return true;
         else
             return false;
