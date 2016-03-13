@@ -131,6 +131,8 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                 status.getStatusCode(), request, status.getReasonPhrase());
                     error = new HttpResponseException(status.getStatusCode(),
                             status.getReasonPhrase());
+                    respondWithResult(fullBody, error, response);
+                    return;
                 } finally {
                     HttpEntity entity = response.getEntity();
                     if (entity != null) {
@@ -164,7 +166,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                         _topReader.appendData(buffer, 0, nBytesRead);
                                     }
                                     _topReader.finished();
-                                    respondWithResult(fullBody, error, response);
                                 }
                                 // non-multipart
                                 else {
@@ -172,8 +173,9 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                             contentTypeHeader.getValue());
                                     fullBody = Manager.getObjectMapper().readValue(
                                             inputStream, Object.class);
-                                    respondWithResult(fullBody, error, response);
                                 }
+                                respondWithResult(fullBody, error, response);
+                                return;
                             }
                         } finally {
                             try {
@@ -193,16 +195,14 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                     }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
-            error = e;
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             error = e;
         } finally {
             Log.v(TAG, "%s: BulkDownloader finally block.  url: %s", this, url);
         }
-        Log.v(TAG, "%s: BulkDownloader calling respondWithResult.  url: %s, error: %s", this, url, error);
+
+        // error scenario
         respondWithResult(fullBody, error, response);
     }
 

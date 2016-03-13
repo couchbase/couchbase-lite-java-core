@@ -81,6 +81,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                     error = new HttpResponseException(status.getStatusCode(),
                             status.getReasonPhrase());
                     respondWithResult(fullBody, error, response);
+                    return;
                 } finally {
                     HttpEntity entity = response.getEntity();
                     if (entity != null) {
@@ -113,13 +114,13 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                                     }
                                     reader.finish();
                                     fullBody = reader.getDocumentProperties();
-                                    respondWithResult(fullBody, error, response);
                                 }
                                 // non-multipart
                                 else {
                                     fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
-                                    respondWithResult(fullBody, error, response);
                                 }
+                                respondWithResult(fullBody, error, response);
+                                return;
                             }
                         }
                         finally {
@@ -141,14 +142,14 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                     }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: io exception", e, this);
-            respondWithResult(fullBody, e, response);
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             respondWithResult(fullBody, e, response);
         } finally {
-            Log.d(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
+            Log.v(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
         }
+
+        // error scenario
+        respondWithResult(fullBody, error, response);
     }
 }
