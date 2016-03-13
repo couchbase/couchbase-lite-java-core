@@ -13,7 +13,7 @@ import java.util.Map;
 public interface ChangeTrackerClient {
     HttpClient getHttpClient();
 
-    void changeTrackerReceivedChange(Map<String,Object> change);
+    void changeTrackerReceivedChange(Map<String, Object> change);
 
     void changeTrackerStopped(ChangeTracker tracker);
 

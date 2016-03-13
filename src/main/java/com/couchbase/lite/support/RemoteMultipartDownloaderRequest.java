@@ -35,17 +35,19 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
     @Override
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
-
-        preemptivelySetAuthCredentials(httpClient);
-
-        request.addHeader("Accept", "multipart/related, application/json");
-        request.addHeader("X-Accept-Part-Encoding", "gzip");
-        request.addHeader("User-Agent", Manager.getUserAgent());
-        request.addHeader("Accept-Encoding", "gzip, deflate");
-
-        addRequestHeaders(request);
-
-        executeRequest(httpClient, request);
+        try {
+            preemptivelySetAuthCredentials(httpClient);
+            request.addHeader("Accept", "multipart/related, application/json");
+            request.addHeader("X-Accept-Part-Encoding", "gzip");
+            request.addHeader("User-Agent", Manager.getUserAgent());
+            request.addHeader("Accept-Encoding", "gzip, deflate");
+            addRequestHeaders(request);
+            executeRequest(httpClient, request);
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
+        }
     }
 
     private static final int BUF_LEN = 1024;
@@ -74,18 +76,30 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
-                Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
-                error = new HttpResponseException(status.getStatusCode(),
-                        status.getReasonPhrase());
-                respondWithResult(fullBody, error, response);
-            } else {
-                HttpEntity entity = null;
                 try {
-                    entity = response.getEntity();
+                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
+                    error = new HttpResponseException(status.getStatusCode(),
+                            status.getReasonPhrase());
+                    respondWithResult(fullBody, error, response);
+                    return;
+                } finally {
+                    HttpEntity entity = response.getEntity();
                     if (entity != null) {
-                        InputStream inputStream = null;
                         try {
-                            inputStream = entity.getContent();
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+            } else {
+                HttpEntity entity = response.getEntity();
+                try {
+                    if (entity != null) {
+                        InputStream inputStream = entity.getContent();
+                        try {
+                            // decompress if contentEncoding is gzip
+                            if (Utils.isGzip(entity))
+                                inputStream = new GZIPInputStream(inputStream);
 
                             Header contentTypeHeader = entity.getContentType();
                             if (contentTypeHeader != null) {
@@ -100,47 +114,42 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                                     }
                                     reader.finish();
                                     fullBody = reader.getDocumentProperties();
-                                    respondWithResult(fullBody, error, response);
                                 }
                                 // non-multipart
                                 else {
-                                    GZIPInputStream gzipStream = null;
-                                    try {
-                                        // decompress if contentEncoding is gzip
-                                        Header contentEncoding = entity.getContentEncoding();
-                                        if (contentEncoding != null && contentEncoding.getValue().contains("gzip")) {
-                                            gzipStream = new GZIPInputStream(inputStream);
-                                            fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
-                                        } else {
-                                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
-                                        }
-                                        respondWithResult(fullBody, error, response);
-                                    } finally {
-                                        try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
-                                        gzipStream = null;
-                                    }
+                                    fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
                                 }
+                                respondWithResult(fullBody, error, response);
+                                return;
                             }
                         }
                         finally {
-                            try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
-                            inputStream = null;
+                            try {
+                                if (inputStream != null) {
+                                    inputStream.close();
+                                }
+                            } catch (IOException e) {
+                            }
                         }
                     }
                 }
                 finally{
-                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
-                    entity = null;
+                    if (entity != null) {
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: io exception", e, this);
-            respondWithResult(fullBody, e, response);
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             respondWithResult(fullBody, e, response);
         } finally {
-            Log.d(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
+            Log.v(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);
         }
+
+        // error scenario
+        respondWithResult(fullBody, error, response);
     }
 }

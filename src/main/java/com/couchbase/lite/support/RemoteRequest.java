@@ -82,12 +82,9 @@ public class RemoteRequest implements Runnable {
 
     @Override
     public void run() {
-
+        Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
+        HttpClient httpClient = clientFactory.getHttpClient();
         try {
-            Log.v(Log.TAG_SYNC, "%s: RemoteRequest run() called, url: %s", this, url);
-
-            HttpClient httpClient = clientFactory.getHttpClient();
-
             preemptivelySetAuthCredentials(httpClient);
 
             request.addHeader("Accept", "multipart/related, application/json");
@@ -104,9 +101,11 @@ public class RemoteRequest implements Runnable {
 
         } catch (Throwable e) {
             Log.e(Log.TAG_SYNC, "RemoteRequest.run() exception: %s", e);
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
         }
-
-
     }
 
     public void abort() {
@@ -158,16 +157,10 @@ public class RemoteRequest implements Runnable {
     }
 
     protected void executeRequest(HttpClient httpClient, HttpUriRequest requestParam) {
-
         Object fullBody = null;
         Throwable error = null;
         HttpResponse response = null;
-
         try {
-            fullBody = null;
-            error = null;
-            response = null;
-
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
 
             if (requestParam.isAborted()) {
@@ -195,45 +188,53 @@ public class RemoteRequest implements Runnable {
             StatusLine status = response.getStatusLine();
 
             if (status.getStatusCode() >= 300) {
-                if (!dontLog404) {
-                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
-                }
-                error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
-                respondWithResult(fullBody, error, response);
-                return;
-            } else {
-                HttpEntity entity = null;
-                InputStream inputStream = null;
-                GZIPInputStream gzipStream = null;
                 try {
-                    entity = response.getEntity();
+                    if (!dontLog404) {
+                        Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                    }
+                    error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
+                    respondWithResult(fullBody, error, response);
+                    return;
+                } finally {
+                    HttpEntity entity = response.getEntity();
                     if (entity != null) {
-                        inputStream = entity.getContent();
-                        // decompress if contentEncoding is gzip
-                        if (Utils.isGzip(entity)) {
-                            gzipStream = new GZIPInputStream(inputStream);
-                            fullBody = Manager.getObjectMapper().readValue(gzipStream, Object.class);
-                        } else {
-                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
                         }
                     }
-                }finally {
-                    try { if (gzipStream != null) { gzipStream.close(); } } catch (IOException e) { }
-                    gzipStream = null;
-                    try { if (inputStream != null) { inputStream.close(); } } catch (IOException e) { }
-                    inputStream = null;
-                    if(entity != null){try{ entity.consumeContent(); }catch (IOException e){}}
-                    entity = null;
+                }
+            } else {
+                HttpEntity entity = response.getEntity();
+                try {
+                    if (entity != null) {
+                        InputStream inputStream = entity.getContent();
+                        try {
+                            // decompress if contentEncoding is gzip
+                            if (Utils.isGzip(entity))
+                                inputStream = new GZIPInputStream(inputStream);
+
+                            fullBody = Manager.getObjectMapper().readValue(inputStream, Object.class);
+                            respondWithResult(fullBody, error, response);
+                            return;
+                        } finally {
+                            try {
+                                if (inputStream != null) {
+                                    inputStream.close();
+                                }
+                            } catch (IOException e) {
+                            }
+                        }
+                    }
+                } finally {
+                    if (entity != null) {
+                        try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception.  url: %s", e, url);
-            error = e;
-            // Treat all IOExceptions as transient, per:
-            // http://hc.apache.org/httpclient-3.x/exception-handling.html
-        } catch (IllegalStateException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
-            error = e;
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
             error = e;
@@ -242,10 +243,8 @@ public class RemoteRequest implements Runnable {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
         }
 
-
-        Log.v(Log.TAG_SYNC, "%s: RemoteRequest calling respondWithResult.  url: %s, error: %s", this, url, error);
+        // error scenario
         respondWithResult(fullBody, error, response);
-
     }
 
     protected void preemptivelySetAuthCredentials(HttpClient httpClient) {

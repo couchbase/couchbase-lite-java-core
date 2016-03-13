@@ -75,20 +75,21 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     @Override
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
-
-        preemptivelySetAuthCredentials(httpClient);
-
-        request.addHeader("Content-Type", "application/json");
-        request.addHeader("Accept", "multipart/related");
-        request.addHeader("User-Agent", Manager.getUserAgent());
-        request.addHeader("X-Accept-Part-Encoding", "gzip");
-        request.addHeader("Accept-Encoding", "gzip, deflate");
-
-        addRequestHeaders(request);
-
-        setBody(request);
-
-        executeRequest(httpClient, request);
+        try {
+            preemptivelySetAuthCredentials(httpClient);
+            request.addHeader("Content-Type", "application/json");
+            request.addHeader("Accept", "multipart/related");
+            request.addHeader("User-Agent", Manager.getUserAgent());
+            request.addHeader("X-Accept-Part-Encoding", "gzip");
+            request.addHeader("Accept-Encoding", "gzip, deflate");
+            addRequestHeaders(request);
+            setBody(request);
+            executeRequest(httpClient, request);
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
+        }
     }
 
     public String toString() {
@@ -120,29 +121,39 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
             }
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
-                // conflict could be happen. So ERROR prints make developer confused.
-                if (status.getStatusCode() == 409)
-                    Log.w(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
-                            status.getStatusCode(), request, status.getReasonPhrase());
-                else
-                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
-                            status.getStatusCode(), request, status.getReasonPhrase());
-                error = new HttpResponseException(status.getStatusCode(),
-                        status.getReasonPhrase());
-            } else {
-                HttpEntity entity = null;
                 try {
-                    entity = response.getEntity();
+                    // conflict could be happen. So ERROR prints make developer confused.
+                    if (status.getStatusCode() == 409)
+                        Log.w(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
+                                status.getStatusCode(), request, status.getReasonPhrase());
+                    else
+                        Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
+                                status.getStatusCode(), request, status.getReasonPhrase());
+                    error = new HttpResponseException(status.getStatusCode(),
+                            status.getReasonPhrase());
+                    respondWithResult(fullBody, error, response);
+                    return;
+                } finally {
+                    HttpEntity entity = response.getEntity();
                     if (entity != null) {
-                        InputStream inputStream = null;
                         try {
+                            entity.consumeContent();
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+            } else {
+                HttpEntity entity = response.getEntity();
+                try {
+                    if (entity != null) {
+                        InputStream inputStream = entity.getContent();
+                        try {
+                            // decompress if contentEncoding is gzip
+                            if (Utils.isGzip(entity))
+                                inputStream = new GZIPInputStream(inputStream);
+
                             Header contentTypeHeader = entity.getContentType();
                             if (contentTypeHeader != null) {
-                                inputStream = entity.getContent();
-                                // decompress if contentEncoding is gzip
-                                if (Utils.isGzip(entity)) {
-                                    inputStream = new GZIPInputStream(inputStream);
-                                }
                                 // multipart
                                 if (contentTypeHeader.getValue().contains("multipart/")) {
                                     Log.v(TAG, "contentTypeHeader = %s",
@@ -155,7 +166,6 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                         _topReader.appendData(buffer, 0, nBytesRead);
                                     }
                                     _topReader.finished();
-                                    respondWithResult(fullBody, error, response);
                                 }
                                 // non-multipart
                                 else {
@@ -163,8 +173,9 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                                             contentTypeHeader.getValue());
                                     fullBody = Manager.getObjectMapper().readValue(
                                             inputStream, Object.class);
-                                    respondWithResult(fullBody, error, response);
                                 }
+                                respondWithResult(fullBody, error, response);
+                                return;
                             }
                         } finally {
                             try {
@@ -184,16 +195,14 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                     }
                 }
             }
-        } catch (IOException e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "io exception", e);
-            error = e;
         } catch (Exception e) {
             Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             error = e;
         } finally {
             Log.v(TAG, "%s: BulkDownloader finally block.  url: %s", this, url);
         }
-        Log.v(TAG, "%s: BulkDownloader calling respondWithResult.  url: %s, error: %s", this, url, error);
+
+        // error scenario
         respondWithResult(fullBody, error, response);
     }
 

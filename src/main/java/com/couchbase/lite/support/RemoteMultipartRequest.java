@@ -26,25 +26,30 @@ public class RemoteMultipartRequest extends RemoteRequest {
     @Override
     public void run() {
         HttpClient httpClient = clientFactory.getHttpClient();
+        try {
+            preemptivelySetAuthCredentials(httpClient);
 
-        preemptivelySetAuthCredentials(httpClient);
+            HttpUriRequest request = null;
+            if ("PUT".equalsIgnoreCase(method)) {
+                HttpPut putRequest = new HttpPut(url.toExternalForm());
+                putRequest.setEntity(multiPart);
+                request = putRequest;
+            } else if ("POST".equalsIgnoreCase(method)) {
+                HttpPost postRequest = new HttpPost(url.toExternalForm());
+                postRequest.setEntity(multiPart);
+                request = postRequest;
+            } else {
+                throw new IllegalArgumentException("Invalid request method: " + method);
+            }
 
-        HttpUriRequest request = null;
-        if ("PUT".equalsIgnoreCase(method)) {
-            HttpPut putRequest = new HttpPut(url.toExternalForm());
-            putRequest.setEntity(multiPart);
-            request = putRequest;
-        } else if ("POST".equalsIgnoreCase(method)) {
-            HttpPost postRequest = new HttpPost(url.toExternalForm());
-            postRequest.setEntity(multiPart);
-            request = postRequest;
-        } else {
-            throw new IllegalArgumentException("Invalid request method: " + method);
+            addRequestHeaders(request);
+            request.addHeader("Accept", "*/*");
+
+            executeRequest(httpClient, request);
+        } finally {
+            // shutdown connection manager (close all connections)
+            if (httpClient != null && httpClient.getConnectionManager() != null)
+                httpClient.getConnectionManager().shutdown();
         }
-
-        addRequestHeaders(request);
-        request.addHeader("Accept", "*/*");
-
-        executeRequest(httpClient, request);
     }
 }
