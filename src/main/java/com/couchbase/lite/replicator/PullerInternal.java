@@ -92,15 +92,19 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      * Actual work of starting the replication process.
      */
     protected void beginReplicating() {
-        Log.d(TAG, "startReplicating()");
-
-        initPendingSequences();
-
-        initDownloadsToInsert();
-
-        startChangeTracker();
-
-        // start replicator ..
+        Log.v(TAG, "submit startReplicating()");
+        workExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                if(isRunning()) {
+                    Log.v(TAG, "start startReplicating()");
+                    initPendingSequences();
+                    initDownloadsToInsert();
+                    startChangeTracker();
+                }
+                // start replicator ...
+            }
+        });
     }
 
     private void initDownloadsToInsert() {
