@@ -60,7 +60,8 @@ public class Utils {
         // 406 - in Test cases, server return 406 because of CouchDB API
         //       http://docs.couchdb.org/en/latest/api/database/bulk-api.html
         //       GET /{db}/_all_docs or POST /{db}/_all_docs
-        return (code >= 400 && code <= 405) || (code >= 407 && code <= 499);
+        // 408 - Listener might encounter SocketTimeout under weak network connectivity
+        return (code >= 400 && code <= 405) || (code == 407) || (code >= 409 && code <= 499);
     }
 
     /**
@@ -105,7 +106,8 @@ public class Utils {
     }
 
     public static boolean isTransientError(int statusCode) {
-        if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504) {
+        if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504 ||
+                statusCode == Status.REQUEST_TIMEOUT) {
             return true;
         }
         return false;
