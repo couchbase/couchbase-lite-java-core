@@ -34,6 +34,8 @@ import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 
 import org.apache.http.client.HttpResponseException;
 
@@ -194,14 +196,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return eTag.equals(requestIfNoneMatch);
     }
 
-    private Map<String, Object> getBodyAsDictionary() {
+    private Map<String, Object> getBodyAsDictionary() throws CouchbaseLiteException {
+        InputStream contentStream = connection.getRequestInputStream();
         try {
-            InputStream contentStream = connection.getRequestInputStream();
-            Map<String, Object> bodyMap = Manager.getObjectMapper().readValue(contentStream, Map.class);
-            return bodyMap;
-        } catch (IOException e) {
-            Log.w(Log.TAG_ROUTER, "WARNING: Exception parsing body into dictionary", e);
-            return null;
+            return Manager.getObjectMapper().readValue(contentStream, Map.class);
+        } catch (JsonParseException jpe) {
+            throw new CouchbaseLiteException(Status.BAD_JSON);
+        } catch (JsonMappingException jme) {
+            throw new CouchbaseLiteException(Status.BAD_JSON);
+        } catch (IOException ioe) {
+            throw new CouchbaseLiteException(Status.REQUEST_TIMEOUT);
         }
     }
 
@@ -700,9 +704,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         // Extract the parameters from the JSON request body:
         // http://wiki.apache.org/couchdb/Replication
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
-            return new Status(Status.BAD_REQUEST);
+        Map<String, Object> body = null;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
 
         try {
@@ -1053,11 +1059,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (!status.isSuccessful()) {
             return status;
         }
-        Map<String, Object> bodyDict = getBodyAsDictionary();
-        if (bodyDict == null) {
-            return new Status(Status.BAD_REQUEST);
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
-        return update(db, null, new Body(bodyDict), false);
+        return update(db, null, new Body(body), false);
     }
 
     public Status do_GET_Document_all_docs(Database _db, String _docID, String _attachmentName) throws CouchbaseLiteException {
@@ -1100,10 +1108,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_POST_facebook_token(Database _db, String _docID, String _attachmentName) {
-
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
-            return new Status(Status.BAD_REQUEST);
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
 
         String email = (String) body.get("email");
@@ -1141,10 +1150,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_POST_persona_assertion(Database _db, String _docID, String _attachmentName) {
-
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
-            return new Status(Status.BAD_REQUEST);
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
 
         String assertion = (String) body.get("assertion");
@@ -1178,14 +1188,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public Status do_POST_Document_bulk_docs(Database _db, String _docID, String _attachmentName) {
         // http://wiki.apache.org/couchdb/HTTP_Bulk_Document_API
-        Map<String, Object> bodyDict = getBodyAsDictionary();
-        if (bodyDict == null) {
-            return new Status(Status.BAD_REQUEST);
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
-        final List<Map<String, Object>> docs = (List<Map<String, Object>>) bodyDict.get("docs");
+        final List<Map<String, Object>> docs = (List<Map<String, Object>>) body.get("docs");
 
-        final boolean noNewEdits = getBooleanValueFromBody("new_edits", bodyDict, true) == false;
-        final boolean allOrNothing = getBooleanValueFromBody("all_or_nothing", bodyDict, false);
+        final boolean noNewEdits = getBooleanValueFromBody("new_edits", body, true) == false;
+        final boolean allOrNothing = getBooleanValueFromBody("all_or_nothing", body, false);
 
         final Status status = new Status(Status.OK);
         final List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
@@ -1263,10 +1275,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // http://wiki.apache.org/couchdb/HttpPostRevsDiff
         // Collect all of the input doc/revision IDs as TDRevisions:
         RevisionList revs = new RevisionList();
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
-            return new Status(Status.BAD_JSON);
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
+
         for (String docID : body.keySet()) {
             List<String> revIDs = (List<String>) body.get(docID);
             for (String revID : revIDs) {
@@ -1331,10 +1346,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_POST_Document_purge(Database _db, String ignored1, String ignored2) {
-
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
-            return new Status(Status.BAD_REQUEST);
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
 
         // convert from Map<String,Object> -> Map<String, List<String>> - is there a cleaner way?
@@ -2062,24 +2078,23 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_PUT_Document(Database _db, String docID, String _attachmentName) throws CouchbaseLiteException {
-
         Status status = new Status(Status.CREATED);
-        Map<String, Object> bodyDict = getBodyAsDictionary();
-        if (bodyDict == null) {
+        Map<String, Object> body = getBodyAsDictionary();
+        if (body == null) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
         if (getQuery("new_edits") == null || (getQuery("new_edits") != null && (Boolean.valueOf(getQuery("new_edits"))))) {
             // Regular PUT
-            status = update(_db, docID, new Body(bodyDict), false);
+            status = update(_db, docID, new Body(body), false);
         } else {
             // PUT with new_edits=false -- forcible insertion of existing revision:
-            Body body = new Body(bodyDict);
-            RevisionInternal rev = new RevisionInternal(body);
+            Body revBody = new Body(body);
+            RevisionInternal rev = new RevisionInternal(revBody);
             if (rev.getRevID() == null || rev.getDocID() == null || !rev.getDocID().equals(docID)) {
                 throw new CouchbaseLiteException(Status.BAD_REQUEST);
             }
-            List<String> history = Database.parseCouchDBRevisionHistory(body.getProperties());
+            List<String> history = Database.parseCouchDBRevisionHistory(revBody.getProperties());
             // forceInsert uses transaction internally, not necessary to apply synchronized
             db.forceInsert(rev, history, source);
         }
@@ -2251,11 +2266,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_POST_DesignDocument(Database _db, String designDocID, String viewName) throws CouchbaseLiteException {
-        Map<String, Object> bodyDict = getBodyAsDictionary();
-        if (bodyDict == null) {
+        Map<String, Object> body = getBodyAsDictionary();
+        if (body == null) {
             return new Status(Status.BAD_REQUEST);
         }
-        List<Object> keys = (List<Object>) bodyDict.get("keys");
+        List<Object> keys = (List<Object>) body.get("keys");
         return queryDesignDoc(designDocID, viewName, keys);
     }
 

@@ -289,7 +289,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
         }
 
-        Log.d(Log.TAG_SYNC, "%s: return false");
+        Log.d(Log.TAG_SYNC, "%s: return false", this);
         return false;
 
     }
