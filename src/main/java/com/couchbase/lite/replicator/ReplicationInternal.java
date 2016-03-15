@@ -1199,6 +1199,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
         // ignored transitions
         stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.START);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.STOP_GRACEFUL);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_GRACEFUL);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);

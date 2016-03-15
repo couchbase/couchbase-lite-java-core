@@ -76,6 +76,7 @@ public class ChangeTracker implements Runnable {
     private Thread thread;
     private boolean running = false;
     private HttpUriRequest request;
+    private InputStream inputStream = null;
     protected ChangeTrackerBackoff backoff;
     private long startTime = 0;
 
@@ -351,7 +352,6 @@ public class ChangeTracker implements Runnable {
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
                         if (entity != null) {
-                            InputStream inputStream = null;
                             try {
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: /entity.getContent().  mode: %s", this, mode);
                                 inputStream = entity.getContent();
@@ -443,6 +443,7 @@ public class ChangeTracker implements Runnable {
                                 try {
                                     if (inputStream != null) {
                                         inputStream.close();
+                                        inputStream = null;
                                     }
                                 } catch (IOException e) {
                                 }
@@ -537,16 +538,24 @@ public class ChangeTracker implements Runnable {
         // Awake thread if it is wait for pause
         setPaused(false);
 
+        if(request != null) {
+            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
+            request.abort();
+        }
+        if (inputStream != null) {
+            try {
+                inputStream.close();
+                inputStream = null;
+            } catch (IOException ex) {
+            }
+        }
+
         try {
             if (thread != null) {
                 thread.interrupt(); // wake thread if it sleeps, waits, ...
             }
         } catch (Exception e) {
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Exception interrupting thread: %s", this);
-        }
-        if(request != null) {
-            Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
-            request.abort();
         }
     }
 
