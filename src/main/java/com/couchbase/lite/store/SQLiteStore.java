@@ -1632,7 +1632,9 @@ public class SQLiteStore implements Store, EncryptableStore {
                         json = RevisionUtils.asCanonicalJSON(inRev);
                         if (json == null)
                             throw new CouchbaseLiteException(Status.BAD_JSON);
-                        docType = (String) rev.getObject("type");
+                        Object obj = rev.getObject("type");
+                        if (obj != null && obj instanceof String)
+                            docType = (String) obj;
                         current = true;
                     } else {
                         // It's an intermediate parent, so insert a stub:
