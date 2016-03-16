@@ -129,6 +129,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     protected void startChangeTracker() {
+        // make sure not start new changeTracker if pull replicator is not running or idle
+        if (!(stateMachine.isInState(ReplicationState.RUNNING) ||
+                stateMachine.isInState(ReplicationState.IDLE)))
+            return;
 
         ChangeTracker.ChangeTrackerMode changeTrackerMode;
 
