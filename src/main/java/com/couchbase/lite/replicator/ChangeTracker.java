@@ -80,7 +80,6 @@ public class ChangeTracker implements Runnable {
     protected ChangeTrackerBackoff backoff;
     private long startTime = 0;
     private String str = null;
-    final private Object mutex = new Object();
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -526,18 +525,14 @@ public class ChangeTracker implements Runnable {
         maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
         thread = new Thread(this, "ChangeTracker-" + maskedRemoteWithoutCredentials);
         thread.start();
-        synchronized (mutex) {
-            running = true;
-        }
+        running = true;
         return true;
     }
 
     public void stop() {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to stop", this);
 
-        synchronized (mutex) {
-            running = false;
-        }
+        running = false;
 
         // Awake thread if it is wait for pause
         setPaused(false);
@@ -572,9 +567,7 @@ public class ChangeTracker implements Runnable {
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker not calling changeTrackerStopped, client == null", this);
         }
         client = null;
-        synchronized (mutex) {
-            running = false; // in case stop() method was not called to stop
-        }
+        running = false; // in case stop() method was not called to stop
     }
 
     public void setRequestHeaders(Map<String, Object> requestHeaders) {
@@ -595,9 +588,7 @@ public class ChangeTracker implements Runnable {
     }
 
     public boolean isRunning() {
-        synchronized (mutex) {
-            return running;
-        }
+        return running;
     }
 
     public void setDocIDs(List<String> docIDs) {
