@@ -124,7 +124,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     // for waitingPendingFutures
     protected boolean waitingForPendingFutures = false;
-    protected Object lockWaitForPendingFutures = new Object();
+    final protected Object lockWaitForPendingFutures = new Object();
 
     /**
      * Constructor
@@ -1706,7 +1706,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     fireTrigger(ReplicationTrigger.RESUME);
 
                 // run waitForPendingFutures.
-                String threadName = String.format("Thread.waitForPendingFutures[%s]", toString());
+                String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
