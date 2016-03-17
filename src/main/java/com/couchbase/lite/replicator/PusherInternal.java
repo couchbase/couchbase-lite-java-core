@@ -158,7 +158,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
-        String threadName = String.format("Thread.waitForPendingFutures[%s]", toString());
+        String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {

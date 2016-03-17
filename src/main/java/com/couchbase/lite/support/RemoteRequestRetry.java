@@ -52,7 +52,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
     private Database db;
     protected HttpUriRequest request;
 
-    private AtomicBoolean completedSuccessfully = new AtomicBoolean(false);
+    private AtomicBoolean completed = new AtomicBoolean(false);
     private HttpResponse requestHttpResponse;
     private Object requestResult;
     private Throwable requestThrowable;
@@ -112,7 +112,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
         validateParameters();
 
         Log.v(Log.TAG_SYNC, "%s: RemoteRequestRetry created, url: %s", this, url);
-
     }
 
     public CustomFuture submit() {
@@ -123,20 +122,16 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
      * @param gzip true - send gzipped request
      */
     public CustomFuture submit(boolean gzip) {
-
         RemoteRequest request = generateRemoteRequest();
-
         if (gzip) {
             request.setCompressedRequest(true);
         }
-
         synchronized (requestExecutor) {
             if (!requestExecutor.isShutdown()) {
                 Future future = requestExecutor.submit(request);
                 pendingRequests.add(future);
             }
         }
-
         return this;
     }
 
@@ -208,15 +203,12 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
             requestHttpResponse = httpResponse;
             requestResult = result;
             requestThrowable = e;
-            completedSuccessfully.set(true);
-
+            completed.set(true);
             onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
-            
             // release unnecessary references to reduce memory usage as soon as called onComplete().
             requestHttpResponse = null;
             requestResult = null;
             requestThrowable = null;
-
             removeFromQueue();
         }
 
@@ -229,7 +221,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
                 // just propagate completion block call back to the original caller
                 completed(httpResponse, result, e);
-
             } else {
 
                 // Only retry if error is  TransientError (5xx).
@@ -260,7 +251,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                             }
                         }, delay, TimeUnit.MILLISECONDS); // delay init_delay * 2^retry ms
                     }
-
                 } else {
                     Log.d(Log.TAG_SYNC, "%s: RemoteRequestRetry failed, non-transient error.  NOT retrying. url: %s", this, url);
                     // this isn't a transient error, so there's no point in retrying
@@ -271,27 +261,20 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
     };
 
     private boolean isTransientError(HttpResponse httpResponse, Throwable e) {
-
         Log.d(Log.TAG_SYNC, "%s: isTransientError called, httpResponse: %s e: %s", this, httpResponse, e);
-
         if (httpResponse != null) {
-
             if (Utils.isTransientError(httpResponse.getStatusLine())) {
                 Log.d(Log.TAG_SYNC, "%s: its a transient error, return true", this);
                 return true;
             }
-
         } else {
             if (e instanceof IOException) {
                 Log.d(Log.TAG_SYNC, "%s: its an ioexception, return true", this);
                 return true;
             }
-
         }
-
         Log.d(Log.TAG_SYNC, "%s: return false", this);
         return false;
-
     }
 
     /**
@@ -311,7 +294,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
         if(retryFuture != null && !retryFuture.isCancelled()){
             retryFuture.cancel(mayInterruptIfRunning);
         }
-
         return false;
     }
 
@@ -327,21 +309,15 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
     @Override
     public T get() throws InterruptedException, ExecutionException {
-
         while (retryCount <= MAX_RETRIES) {
-
             // requestExecutor was shutdown, no more retry.
-            if (requestExecutor == null || requestExecutor.isShutdown()) {
+            if (requestExecutor == null || requestExecutor.isShutdown() || completed.get())
                 return null;
-            }
-
             // Take a future from the queue
-            Future future = pendingRequests.take();
+            Future future = pendingRequests.poll(500, TimeUnit.MILLISECONDS);
+            if (future == null)
+                continue;
             future.get();
-            if (completedSuccessfully.get() == true) {
-                // we're done
-                return null;
-            }
         }
 
         // exhausted attempts, callback to original caller with result.  requestThrowable
@@ -352,7 +328,8 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
     }
 
     @Override
-    public T get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+    public T get(long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException {
         return get();
     }
 
@@ -363,14 +340,13 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
         switch (requestType) {
             case REMOTE_MULTIPART_REQUEST:
                 if ( !(body instanceof MultipartEntity) ) {
-                    throw new IllegalArgumentException("body must be a MultipartEntity for REMOTE_MULTIPART_REQUESTs");
+                    throw new IllegalArgumentException(
+                            "body must be a MultipartEntity for REMOTE_MULTIPART_REQUESTs");
                 }
                 break;
             default:
                 break;
-
         }
-
     }
 
     public void setDontLog404(boolean dontLog404) {
