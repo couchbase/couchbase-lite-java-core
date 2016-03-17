@@ -520,12 +520,12 @@ public class ChangeTracker implements Runnable {
 
     public boolean start() {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to start", this);
+        running = true;
         this.error = null;
         String maskedRemoteWithoutCredentials = databaseURL.toExternalForm();
         maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
         thread = new Thread(this, "ChangeTracker-" + maskedRemoteWithoutCredentials);
         thread.start();
-        running = true;
         return true;
     }
 
