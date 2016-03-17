@@ -96,7 +96,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         workExecutor.submit(new Runnable() {
             @Override
             public void run() {
-                if(isRunning()) {
+                if (isRunning()) {
                     Log.v(TAG, "start startReplicating()");
                     initPendingSequences();
                     initDownloadsToInsert();
@@ -132,6 +132,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // make sure not start new changeTracker if pull replicator is not running or idle
         if (!(stateMachine.isInState(ReplicationState.RUNNING) ||
                 stateMachine.isInState(ReplicationState.IDLE)))
+            return;
+
+        // if changeTracker is already running, not start new one.
+        if (changeTracker != null && changeTracker.isRunning())
             return;
 
         ChangeTracker.ChangeTrackerMode changeTrackerMode;
@@ -691,40 +695,39 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         CustomFuture future = sendAsyncMultipartDownloaderRequest("GET", pathInside,
                 null, db, new RemoteRequestCompletionBlock() {
 
-            @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                if (e != null) {
-                    Log.e(TAG, "Error pulling remote revision", e);
-                    if(Utils.isDocumentError(e)){
-                        // Revision is missing or not accessible:
-                        revisionFailed(rev, e);
+                    @Override
+                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                        if (e != null) {
+                            Log.e(TAG, "Error pulling remote revision", e);
+                            if (Utils.isDocumentError(e)) {
+                                // Revision is missing or not accessible:
+                                revisionFailed(rev, e);
+                            } else {
+                                // Request failed:
+                                setError(e);
+                            }
+                        } else {
+                            Map<String, Object> properties = (Map<String, Object>) result;
+                            PulledRevision gotRev = new PulledRevision(properties);
+                            gotRev.setSequence(rev.getSequence());
+
+                            Log.d(TAG, "%s: pullRemoteRevision add rev: %s to batcher: %s",
+                                    PullerInternal.this, gotRev, downloadsToInsert);
+
+                            if (gotRev.getBody() != null)
+                                gotRev.getBody().compact();
+
+                            // Add to batcher ... eventually it will be fed to -insertRevisions:.
+                            downloadsToInsert.queueObject(gotRev);
+                        }
+
+                        // Note that we've finished this task:
+                        --httpConnectionCount;
+
+                        // Start another task if there are still revisions waiting to be pulled:
+                        pullRemoteRevisions();
                     }
-                    else{
-                        // Request failed:
-                        setError(e);
-                    }
-                } else {
-                    Map<String, Object> properties = (Map<String, Object>) result;
-                    PulledRevision gotRev = new PulledRevision(properties);
-                    gotRev.setSequence(rev.getSequence());
-
-                    Log.d(TAG, "%s: pullRemoteRevision add rev: %s to batcher: %s",
-                            PullerInternal.this, gotRev, downloadsToInsert);
-
-                    if (gotRev.getBody() != null)
-                        gotRev.getBody().compact();
-
-                    // Add to batcher ... eventually it will be fed to -insertRevisions:.
-                    downloadsToInsert.queueObject(gotRev);
-                }
-
-                // Note that we've finished this task:
-                --httpConnectionCount;
-
-                // Start another task if there are still revisions waiting to be pulled:
-                pullRemoteRevisions();
-            }
-        });
+                });
         future.setQueue(pendingFutures);
         pendingFutures.add(future);
     }
@@ -825,7 +828,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             // based on the order in which it appeared in the _changes feed:
             rev.setRemoteSequenceID(lastSequence);
 
-            if(changes.size() > 1)
+            if (changes.size() > 1)
                 rev.setConflicted(true);
 
             Log.d(TAG, "%s: adding rev to inbox %s", this, rev);

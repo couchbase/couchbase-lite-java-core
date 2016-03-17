@@ -79,7 +79,6 @@ public class ChangeTracker implements Runnable {
     private InputStream inputStream = null;
     protected ChangeTrackerBackoff backoff;
     private long startTime = 0;
-
     private String str = null;
 
     public enum ChangeTrackerMode {
@@ -205,21 +204,21 @@ public class ChangeTracker implements Runnable {
 
     public URL getChangesFeedURL() {
         String dbURLString = databaseURL.toExternalForm();
-        if(!dbURLString.endsWith("/")) {
+        if (!dbURLString.endsWith("/")) {
             dbURLString += "/";
         }
         dbURLString += getChangesFeedPath();
         URL result = null;
         try {
             result = new URL(dbURLString);
-        } catch(MalformedURLException e) {
+        } catch (MalformedURLException e) {
             Log.e(Log.TAG_CHANGE_TRACKER, this + ": Changes feed ULR is malformed", e);
         }
         return result;
     }
 
     /**
-     *  Set Authenticator for BASIC Authentication
+     * Set Authenticator for BASIC Authentication
      */
     public void setAuthenticator(Authenticator authenticator) {
         this.authenticator = authenticator;
@@ -238,7 +237,6 @@ public class ChangeTracker implements Runnable {
 
     protected void runLoop() {
         paused = false;
-        running = true;
 
         if (client == null) {
             // This is a race condition that can be reproduced by calling cbpuller.start() and cbpuller.stop()
@@ -478,11 +476,11 @@ public class ChangeTracker implements Runnable {
         Log.v(Log.TAG_CHANGE_TRACKER, "%s: Change tracker run loop exiting", this);
     }
 
-    public boolean receivedChange(final Map<String,Object> change) {
+    public boolean receivedChange(final Map<String, Object> change) {
         // wait if paused flag is on.
         waitIfPaused();
         // check if still running
-        if(running) {
+        if (running) {
             Object seq = change.get("seq");
             if (seq == null) {
                 return false;
@@ -499,17 +497,17 @@ public class ChangeTracker implements Runnable {
         return true;
     }
 
-    public boolean receivedPollResponse(Map<String,Object> response) {
-        List<Map<String,Object>> changes = (List)response.get("results");
-        if(changes == null) {
+    public boolean receivedPollResponse(Map<String, Object> response) {
+        List<Map<String, Object>> changes = (List) response.get("results");
+        if (changes == null) {
             return false;
         }
-        for (Map<String,Object> change : changes) {
-            if(!receivedChange(change)) {
+        for (Map<String, Object> change : changes) {
+            if (!receivedChange(change)) {
                 return false;
             }
             // if not running state anymore, exit from loop.
-            if(!running)
+            if (!running)
                 break;
         }
         return true;
@@ -527,6 +525,7 @@ public class ChangeTracker implements Runnable {
         maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
         thread = new Thread(this, "ChangeTracker-" + maskedRemoteWithoutCredentials);
         thread.start();
+        running = true;
         return true;
     }
 
@@ -538,7 +537,7 @@ public class ChangeTracker implements Runnable {
         // Awake thread if it is wait for pause
         setPaused(false);
 
-        if(request != null) {
+        if (request != null) {
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
             request.abort();
         }
@@ -628,11 +627,11 @@ public class ChangeTracker implements Runnable {
         post.put("feed", getFeed());
         post.put("heartbeat", getHeartbeatMilliseconds());
         if (includeConflicts) {
-            post.put("style","all_docs");
+            post.put("style", "all_docs");
         } else {
             post.put("style", null);
         }
-        
+
         if (lastSequenceID != null) {
             try {
                 post.put("since", Long.parseLong(lastSequenceID.toString()));
@@ -661,21 +660,22 @@ public class ChangeTracker implements Runnable {
     public void setPaused(boolean paused) {
         Log.v(Log.TAG, "setPaused: " + paused);
         synchronized (pausedObj) {
-            if(this.paused != paused) {
+            if (this.paused != paused) {
                 this.paused = paused;
                 pausedObj.notifyAll();
             }
         }
     }
 
-    protected void waitIfPaused(){
+    protected void waitIfPaused() {
         synchronized (pausedObj) {
             while (paused && running) {
                 Log.v(Log.TAG, "Waiting: " + paused);
                 try {
                     // every 5 sec, wake by myself to check if still needs to pause
                     pausedObj.wait(TIMEOUT_FOR_PAUSE);
-                } catch (InterruptedException e) { }
+                } catch (InterruptedException e) {
+                }
             }
         }
     }
