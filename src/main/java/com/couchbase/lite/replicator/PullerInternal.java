@@ -918,7 +918,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void waitForPendingFuturesWithNewThread() {
-        String threadName = String.format("Thread.waitForPendingFutures[%s]", toString());
+        String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
