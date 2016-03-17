@@ -203,13 +203,13 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
             requestHttpResponse = httpResponse;
             requestResult = result;
             requestThrowable = e;
-            completed.set(true);
             onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
             // release unnecessary references to reduce memory usage as soon as called onComplete().
             requestHttpResponse = null;
             requestResult = null;
             requestThrowable = null;
             removeFromQueue();
+            completed.set(true);
         }
 
         @Override
