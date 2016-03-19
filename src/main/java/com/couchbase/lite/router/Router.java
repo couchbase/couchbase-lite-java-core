@@ -530,14 +530,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             String errorMessage = "Router unable to route request to " + message;
             Log.e(Log.TAG_ROUTER, errorMessage, e);
             Map<String, Object> result = new HashMap<String, Object>();
-            result.put("error", "not_found");
-            result.put("reason", errorMessage + e.toString());
-            connection.setResponseBody(new Body(result));
-            if (e instanceof CouchbaseLiteException) {
-                status = ((CouchbaseLiteException) e).getCBLStatus();
+            if (e.getCause() != null && e.getCause() instanceof CouchbaseLiteException) {
+                status = ((CouchbaseLiteException) e.getCause()).getCBLStatus();
+                result.put("error", status.getHTTPMessage());
+                result.put("reason", errorMessage + e.getCause().toString());
             } else {
                 status = new Status(Status.NOT_FOUND);
+                result.put("error", status.getHTTPMessage());
+                result.put("reason", errorMessage + e.toString());
             }
+            connection.setResponseBody(new Body(result));
         }
 
         // If response is ready (nonzero status), tell my client about it:
