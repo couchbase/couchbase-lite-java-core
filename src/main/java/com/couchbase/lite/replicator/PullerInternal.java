@@ -897,7 +897,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         public void run() {
                             // the replication may have been stopped by the time this scheduled fires
                             // so we need to check the state here.
-                            if (stateMachine.isInState(ReplicationState.RUNNING)) {
+                            if (stateMachine.isInState(ReplicationState.RUNNING) ||
+                                    stateMachine.isInState(ReplicationState.IDLE)) {
                                 Log.d(TAG, "%s still running, restarting change tracker", this);
                                 startChangeTracker();
                             } else {
