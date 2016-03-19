@@ -899,4 +899,9 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             }
         }
     }
+
+    @Override
+    public String toString() {
+        return "Replication{" + remote + ", " + (isPull() ? "pull" : "push") + '}';
+    }
 }

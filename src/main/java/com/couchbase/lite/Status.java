@@ -109,6 +109,7 @@ public class Status {
         statusMap.put(NOT_FOUND,                new HTTPStatus(404, "not_found"));
         statusMap.put(METHOD_NOT_ALLOWED,       new HTTPStatus(405, "method_not_allowed"));
         statusMap.put(NOT_ACCEPTABLE,           new HTTPStatus(406, "not_acceptable"));
+        statusMap.put(REQUEST_TIMEOUT,          new HTTPStatus(408, "request_timeout"));
         statusMap.put(CONFLICT,                 new HTTPStatus(409, "conflict"));
         statusMap.put(GONE,                     new HTTPStatus(410, "gone"));
         statusMap.put(DUPLICATE,                new HTTPStatus(412, "file_exists"));

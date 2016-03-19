@@ -261,19 +261,23 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
     };
 
     private boolean isTransientError(HttpResponse httpResponse, Throwable e) {
-        Log.d(Log.TAG_SYNC, "%s: isTransientError called, httpResponse: %s e: %s", this, httpResponse, e);
+        Log.d(Log.TAG_SYNC, "%s: isTransientError, httpResponse: %s e: %s", this, httpResponse, e);
         if (httpResponse != null) {
+            Log.d(Log.TAG_SYNC, "%s: isTransientError, status code: %d",
+                    this, httpResponse.getStatusLine().getStatusCode());
             if (Utils.isTransientError(httpResponse.getStatusLine())) {
-                Log.d(Log.TAG_SYNC, "%s: its a transient error, return true", this);
-                return true;
-            }
-        } else {
-            if (e instanceof IOException) {
-                Log.d(Log.TAG_SYNC, "%s: its an ioexception, return true", this);
+                Log.d(Log.TAG_SYNC, "%s: isTransientError, detect a transient error", this);
                 return true;
             }
         }
-        Log.d(Log.TAG_SYNC, "%s: return false", this);
+        if (httpResponse == null || httpResponse.getStatusLine().getStatusCode() < 400) {
+            if (e instanceof IOException) {
+                Log.d(Log.TAG_SYNC, "%s: isTransientError, " +
+                        "detect an IOException which is a transient error", this);
+                return true;
+            }
+        }
+        Log.d(Log.TAG_SYNC, "%s: isTransientError, return false", this);
         return false;
     }
 
