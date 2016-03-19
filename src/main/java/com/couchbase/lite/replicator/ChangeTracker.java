@@ -560,6 +560,7 @@ public class ChangeTracker implements Runnable {
 
     private void stopped() {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker in stopped()", this);
+        running = false; // in case stop() method was not called to stop
         if (client != null) {
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker calling changeTrackerStopped, client: %s", this, client);
             client.changeTrackerStopped(ChangeTracker.this);
@@ -567,7 +568,6 @@ public class ChangeTracker implements Runnable {
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Change tracker not calling changeTrackerStopped, client == null", this);
         }
         client = null;
-        running = false; // in case stop() method was not called to stop
     }
 
     public void setRequestHeaders(Map<String, Object> requestHeaders) {
@@ -684,7 +684,7 @@ public class ChangeTracker implements Runnable {
     public String toString() {
         if (str == null) {
             String remoteURL = databaseURL.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
-            str = String.format("ChangeTracker{%s, %s}", remoteURL, mode);
+            str = String.format("ChangeTracker{%s, %s, @%s}", remoteURL, mode, Integer.toHexString(hashCode()));
         }
         return str;
     }
