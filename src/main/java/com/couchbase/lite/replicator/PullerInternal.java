@@ -1049,10 +1049,16 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     @Override
     public String toString() {
         if (str == null) {
-            String maskedRemote = remote.toExternalForm();
+            String maskedRemote = "unknown";
+            if (remote != null)
+                remote.toExternalForm();
             maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-            String type = parentReplication.isPull() ? "pull" : "push";
+            String type = "unknown";
+            if (parentReplication != null)
+                type = parentReplication.isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+            if (replicationIdentifier == null)
+                replicationIdentifier = "unknown";
             str = String.format("PullerInternal{%s, %s, %s}",
                     maskedRemote, type, replicationIdentifier);
         }
