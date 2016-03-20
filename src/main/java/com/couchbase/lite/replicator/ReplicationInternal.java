@@ -923,9 +923,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         if (remoteCheckpointDocID != null) {
             return remoteCheckpointDocID;
         } else {
-           if (db == null) {
+            if (db == null || !db.isOpen())
                 return null;
-            }
             return remoteCheckpointDocID(db.privateUUID());
         }
     }

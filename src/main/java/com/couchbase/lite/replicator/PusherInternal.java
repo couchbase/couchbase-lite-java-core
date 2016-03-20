@@ -85,7 +85,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
      * @exclude
      */
     @InterfaceAudience.Private
-    public PusherInternal(Database db, URL remote,
+    public PusherInternal(Database db,
+                          URL remote,
                           HttpClientFactory clientFactory,
                           ScheduledExecutorService workExecutor,
                           Replication.Lifecycle lifecycle,
@@ -873,10 +874,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @Override
     public String toString() {
         if (str == null) {
-            String maskedRemote = remote.toExternalForm();
+            String maskedRemote = "unknown";
+            if (remote != null)
+                maskedRemote = remote.toExternalForm();
             maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-            String type = parentReplication.isPull() ? "pull" : "push";
+            String type = "unknown";
+            if (parentReplication != null)
+                type = parentReplication.isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+            if (replicationIdentifier == null)
+                replicationIdentifier = "unknown";
             str = String.format("PusherInternal{%s, %s, %s}",
                     maskedRemote, type, replicationIdentifier);
         }
