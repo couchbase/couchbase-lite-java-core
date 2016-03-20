@@ -80,7 +80,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private static int lastSessionID = 0;
 
     public static int MAX_RETRIES = 10;  // total number of attempts = 11 (1 initial + MAX_RETRIES)
-    public static int RETRY_DELAY_SECONDS = 20; // #define kRetryDelay 60.0 in CBL_Replicator.m
+    public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
     protected Database db;
@@ -201,7 +201,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Fire a trigger to the state machine
      */
     protected void fireTrigger(final ReplicationTrigger trigger) {
-        Log.d(Log.TAG_SYNC, "[fireTrigger()] => " + trigger);
+        Log.d(Log.TAG_SYNC, "%s [fireTrigger()] => " + trigger, this);
         // All state machine triggers need to happen on the replicator thread
         synchronized (workExecutor) {
             if (!workExecutor.isShutdown()) {
@@ -287,6 +287,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Put the replication back online after being offline
      */
     protected void goOnline() {
+        this.error = null;
         this.retryCount = 0;
         checkSession();
     }
@@ -1228,7 +1229,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
                 start();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1237,13 +1238,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
             }
         });
         stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
                 retryReplicationIfError();
                 if (transition.getSource() == transition.getDestination()) {
                     // ignore IDLE to IDLE
@@ -1264,7 +1265,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.IDLE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
                 if (transition.getSource() == transition.getDestination()) {
                     // ignore IDLE to IDLE
                     return;
@@ -1275,7 +1276,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.OFFLINE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
                 goOffline();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1283,7 +1284,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.OFFLINE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onExit()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
                 goOnline();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1291,7 +1292,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
 
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
@@ -1309,7 +1310,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "[onEntry()] " + transition.getSource() + " => " + transition.getDestination());
+                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
 
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
@@ -1424,14 +1425,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * helper function to schedule retry future. no in iOS code.
      */
     private void scheduleRetryFuture() {
-        long delay = (long) (RETRY_DELAY_SECONDS * Math.pow(1.5, (double) retryCount));
-        Log.v(Log.TAG_SYNC, "%s: Failed to xfer; will retry in %d sec",
-                this, delay);
+        Log.v(Log.TAG_SYNC, "%s: Failed to xfer; will retry in %d sec", this, RETRY_DELAY_SECONDS);
         this.retryFuture = workExecutor.schedule(new Runnable() {
             public void run() {
                 retryIfReady();
             }
-        }, delay, TimeUnit.SECONDS);
+        }, RETRY_DELAY_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
