@@ -346,16 +346,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
-                                for (int i = 0; i < remainingRevs.size(); i++) {
-                                    RevisionInternal rev = remainingRevs.get(i);
-                                    if (shouldRetryDownload(rev.getDocID())) {
-                                        bulkRevsToPull.add(rev);
-                                    } else {
-                                        completedChangesCount.addAndGet(1);
-                                    }
-                                }
+                                completedChangesCount.addAndGet(remainingRevs.size());
                             }
-
                             --httpConnectionCount;
                             // Start another task if there are still revisions waiting to be pulled:
                             pullRemoteRevisions();
@@ -378,31 +370,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 pendingFutures.add(future);
             }
         }
-    }
-
-    /**
-     * BulkDownloader HTTP request timeouts not properly handled
-     * https://github.com/couchbase/couchbase-lite-net/issues/356
-     */
-    private boolean shouldRetryDownload(String docId) {
-        Map<String, Object> localDoc = getLocalDatabase().getExistingLocalDocument(docId);
-
-        if (localDoc == null) {
-            final Map<String, Object> props = new HashMap<String, Object>();
-            props.put("retryCount", 1L);
-            putLocalDocument(docId, props);
-            return true;
-        }
-
-        long retryCount = ((Number) localDoc.get("retryCount")).longValue();
-        if (retryCount >= MAX_RETRIES) {
-            pruneFailedDownload(docId);
-            return false;
-        }
-
-        localDoc.put("retryCount", retryCount + 1);
-        putLocalDocument(docId, localDoc);
-        return true;
     }
 
     private void putLocalDocument(final String docId, final Map<String, Object> localDoc) {
