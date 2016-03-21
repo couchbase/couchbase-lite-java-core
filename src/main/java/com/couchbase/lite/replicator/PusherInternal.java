@@ -40,11 +40,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 
 /**
  * @exclude
@@ -56,10 +53,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     // Max in-memory size of buffered bulk_docs dictionary
     private static long kMaxBulkDocsObjectSize = 5*1000*1000;
 
-    public static final int MAX_PENDING_DOCS = 200;
-
-    private static final int TIMEOUT_FOR_PAUSE = 5 * 1000; // 5 sec
-
     private boolean createTarget;
     private boolean creatingTarget;
     private boolean observing;
@@ -67,17 +60,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private boolean dontSendMultipart = false;
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
-
-    private ExecutorService supportExecutor;
-
-    private boolean paused = false;
-    private final Object pausedObj = new Object();
-
     final Object changesLock = new Object();
     boolean doneBeginReplicating = false;
     List<RevisionInternal> queueChanges = new ArrayList<RevisionInternal>();
-
-    private String str = null;
+    private String str = null; // for toString()
 
     /**
      * Constructor
@@ -92,16 +78,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                           Replication.Lifecycle lifecycle,
                           Replication parentReplication) {
         super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
-    }
-
-    @Override
-    protected void finalize() throws Throwable {
-        // make sure supportExecutor is shut down
-        if (supportExecutor != null && !supportExecutor.isShutdown()) {
-            supportExecutor.shutdownNow();
-        }
-
-        super.finalize();
     }
 
     @Override
@@ -121,23 +97,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     @Override
-    protected void start() {
-        // create single thread supportExecutor for push relication
-        if (supportExecutor == null || supportExecutor.isShutdown()) {
-            supportExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    String maskedRemote = remote.toExternalForm();
-                    maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-                    return new Thread(r, "CBLPusherSupportExecutor-" + maskedRemote);
-                }
-            });
-        }
-
-        super.start();
-    }
-
-    @Override
     protected void stop() {
         if (stateMachine.isInState(ReplicationState.STOPPED))
             return;
@@ -145,14 +104,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Log.d(Log.TAG_SYNC, "%s STOPPING...", toString());
 
         stopObserving();
-
-        // Awake thread if it is wait for pause
-        setPaused(false);
-
-        // shutdown supportExecutor immediately, does not add any more tasks.
-        if (supportExecutor != null && !supportExecutor.isShutdown()) {
-            supportExecutor.shutdownNow();
-        }
 
         super.stop();
 
@@ -271,8 +222,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         synchronized (changesLock) {
             for (RevisionInternal rev : queueChanges) {
                 if (!changes.contains(rev)) {
-                    pauseOrResume();
-                    waitIfPaused();
                     addToInbox(rev);
                 }
             }
@@ -286,13 +235,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @Override
     @InterfaceAudience.Private
     public void changed(Database.ChangeEvent event) {
-        final List<DocumentChange> changes = event.getChanges();
-        supportExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                submitRevisions(changes);
-            }
-        });
+        submitRevisions(event.getChanges());
     }
 
     /**
@@ -340,7 +283,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     this, revisionInternal);
             if(revisionInternal.getBody()!=null)
                 revisionInternal.getBody().release();
-            pauseOrResume();
             return;
         }
         boolean wasFirst = (seq == pendingSequences.first());
@@ -360,9 +302,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
             setLastSequence(Long.toString(maxCompleted));
         }
-        if(revisionInternal.getBody()!=null)
+        if (revisionInternal.getBody() != null)
             revisionInternal.getBody().release();
-        pauseOrResume();
     }
 
     /**
@@ -436,7 +377,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             }
 
                             RevisionInternal populatedRev = transformRevision(loadedRev);
-                            loadedRev = null;
 
                             List<String> possibleAncestors = (List<String>) revResults.get("possible_ancestors");
 
@@ -493,8 +433,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         });
         future.setQueue(pendingFutures);
         pendingFutures.add(future);
-
-        pauseOrResume();
     }
 
     /**
@@ -782,34 +720,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
     }
 
-    private void pauseOrResume() {
-        int pending = batcher.count() + pendingSequences.size();
-        setPaused(pending >= MAX_PENDING_DOCS);
-    }
-
-    private void setPaused(boolean paused) {
-        Log.v(Log.TAG, "setPaused: " + paused);
-        synchronized (pausedObj) {
-            if(this.paused != paused) {
-                this.paused = paused;
-                pausedObj.notifyAll();
-            }
-        }
-    }
-
-    private void waitIfPaused(){
-        synchronized (pausedObj) {
-            while (paused && isRunning()) {
-                Log.v(Log.TAG, "Waiting: " + paused);
-                try {
-                    // every 5 sec, wake by myself to check if still needs to pause
-                    pausedObj.wait(TIMEOUT_FOR_PAUSE);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
-    }
-
     /**
      * Submit revisions into inbox for changes from changesSince()
      */
@@ -824,8 +734,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             batcher.queueObjects(subChanges);
             start += size;
             remaining -= size;
-            pauseOrResume();
-            waitIfPaused();
             // if not running state anymore, exit from loop.
             if(!isRunning())
                 break;
@@ -847,8 +755,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     RevisionInternal rev = change.getAddedRevision();
                     if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
                         if (doneBeginReplicating) {
-                            pauseOrResume();
-                            waitIfPaused();
                             // if not running state anymore, exit from loop.
                             if (!isRunning())
                                 break;
