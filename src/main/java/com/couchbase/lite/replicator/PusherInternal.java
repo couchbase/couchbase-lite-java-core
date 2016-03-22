@@ -60,6 +60,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private boolean dontSendMultipart = false;
     SortedSet<Long> pendingSequences;
     Long maxPendingSequence;
+    final Object pendingSequencesLock = new Object();
     final Object changesLock = new Object();
     boolean doneBeginReplicating = false;
     List<RevisionInternal> queueChanges = new ArrayList<RevisionInternal>();
@@ -264,10 +265,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
      */
     @InterfaceAudience.Private
     private void addPending(RevisionInternal revisionInternal) {
-        long seq = revisionInternal.getSequence();
-        pendingSequences.add(seq);
-        if (seq > maxPendingSequence) {
-            maxPendingSequence = seq;
+        synchronized (pendingSequencesLock) {
+            long seq = revisionInternal.getSequence();
+            pendingSequences.add(seq);
+            if (seq > maxPendingSequence) {
+                maxPendingSequence = seq;
+            }
         }
     }
 
@@ -277,33 +280,35 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
      */
     @InterfaceAudience.Private
     private void removePending(RevisionInternal revisionInternal) {
-        long seq = revisionInternal.getSequence();
-        if (pendingSequences == null || pendingSequences.isEmpty()) {
-            Log.w(Log.TAG_SYNC, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
-                    this, revisionInternal);
-            if(revisionInternal.getBody()!=null)
-                revisionInternal.getBody().release();
-            return;
-        }
-        boolean wasFirst = (seq == pendingSequences.first());
-        if (!pendingSequences.contains(seq)) {
-            Log.w(Log.TAG_SYNC, "%s: removePending: sequence %s not in set, for rev %s",
-                    this, seq, revisionInternal);
-        }
-        pendingSequences.remove(seq);
-        if (wasFirst) {
-            // If I removed the first pending sequence, can advance the checkpoint:
-            long maxCompleted;
-            if (pendingSequences.size() == 0) {
-                maxCompleted = maxPendingSequence;
-            } else {
-                maxCompleted = pendingSequences.first();
-                --maxCompleted;
+        synchronized (pendingSequencesLock) {
+            long seq = revisionInternal.getSequence();
+            if (pendingSequences == null || pendingSequences.isEmpty()) {
+                Log.w(Log.TAG_SYNC, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
+                        this, revisionInternal);
+                if (revisionInternal.getBody() != null)
+                    revisionInternal.getBody().release();
+                return;
             }
-            setLastSequence(Long.toString(maxCompleted));
+            boolean wasFirst = (seq == pendingSequences.first());
+            if (!pendingSequences.contains(seq)) {
+                Log.w(Log.TAG_SYNC, "%s: removePending: sequence %s not in set, for rev %s",
+                        this, seq, revisionInternal);
+            }
+            pendingSequences.remove(seq);
+            if (wasFirst) {
+                // If I removed the first pending sequence, can advance the checkpoint:
+                long maxCompleted;
+                if (pendingSequences.size() == 0) {
+                    maxCompleted = maxPendingSequence;
+                } else {
+                    maxCompleted = pendingSequences.first();
+                    --maxCompleted;
+                }
+                setLastSequence(Long.toString(maxCompleted));
+            }
+            if (revisionInternal.getBody() != null)
+                revisionInternal.getBody().release();
         }
-        if (revisionInternal.getBody() != null)
-            revisionInternal.getBody().release();
     }
 
     /**
