@@ -172,6 +172,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         Log.d(Log.TAG_SYNC, "%s: beginReplicating() called", this);
 
+        // reset doneBeginReplicating
+        doneBeginReplicating = false;
+
         // If we're still waiting to create the remote db, do nothing now. (This method will be
         // re-invoked after that request finishes; see maybeCreateRemoteDB() above.)
         if (creatingTarget) {
@@ -778,6 +781,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
             }
         }
+    }
+
+    @Override
+    protected void retry() {
+        stopObserving();
+        super.retry();
     }
 
     @Override
