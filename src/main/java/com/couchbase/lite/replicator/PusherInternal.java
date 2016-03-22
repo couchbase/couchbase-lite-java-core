@@ -758,12 +758,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             // if not running state anymore, exit from loop.
                             if (!isRunning())
                                 break;
-                            RevisionInternal nuRev = rev.copy();
-                            nuRev.setBody(null); //save memory
+                            RevisionInternal nuRev = rev.copyWithoutBody();
                             addToInbox(nuRev);
                         } else {
-                            RevisionInternal nuRev = rev.copy();
-                            nuRev.setBody(null); //save memory
+                            RevisionInternal nuRev = rev.copyWithoutBody();
                             queueChanges.add(nuRev);
                         }
                     }
