@@ -162,7 +162,7 @@ public class RevisionInternal {
     public RevisionInternal copyWithDocID(String docID, String revID) {
         assert (docID != null);
         assert ((this.docID == null) || (this.docID.equals(docID)));
-        RevisionInternal result = new RevisionInternal(docID, revID, deleted);
+        RevisionInternal rev = new RevisionInternal(docID, revID, deleted);
         Map<String, Object> unmodifiableProperties = getProperties();
         Map<String, Object> properties = new HashMap<String, Object>();
         if (unmodifiableProperties != null) {
@@ -170,8 +170,8 @@ public class RevisionInternal {
         }
         properties.put("_id", docID);
         properties.put("_rev", revID);
-        result.setProperties(properties);
-        return result;
+        rev.setProperties(properties);
+        return rev;
     }
 
     public RevisionInternal copyWithoutBody() {
@@ -194,7 +194,7 @@ public class RevisionInternal {
 
     @Override
     public String toString() {
-        return '{' + this.docID + " #" + this.revID + (deleted ? "DEL" : "") + '}';
+        return '{' + this.docID + " #" + this.revID + " @" + sequence + (deleted ? " DEL" : "") + '}';
     }
 
     /**
