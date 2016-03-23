@@ -784,9 +784,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     @Override
-    protected void retry() {
+    protected void onBeforeScheduleRetry() {
         stopObserving();
-        super.retry();
     }
 
     @Override
