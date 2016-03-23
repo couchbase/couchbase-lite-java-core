@@ -120,7 +120,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
 
     private Future retryFuture = null;  // future obj of retry task
-    private int retryCount = 0;         // counter for retry.
 
     // for waitingPendingFutures
     protected boolean waitingForPendingFutures = false;
@@ -165,8 +164,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         pendingFutures = new CustomLinkedBlockingQueue<Future>(this);
 
         initializeStateMachine();
-
-        this.retryCount = 0;
     }
 
     /**
@@ -287,8 +284,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Put the replication back online after being offline
      */
     protected void goOnline() {
-        this.error = null;
-        this.retryCount = 0;
+        error = null;
         checkSession();
     }
 
@@ -1401,8 +1397,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     protected void retry() {
         Log.v(Log.TAG_SYNC, "[retry()]");
-        retryCount++;
-        this.error = null;
+        error = null;
         checkSession();
     }
 
@@ -1443,11 +1438,17 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     /**
+     * If sub-class of ReplicationInternal needs to do additional steps before scheduling retry,
+     * you need to implement in onBeforeScheduleRetry();
+     * https://github.com/couchbase/couchbase-lite-java-core/issues/1149
+     */
+    protected abstract void onBeforeScheduleRetry();
+
+    /**
      * Retry replication if previous attempt ends with error
      */
     protected void retryReplicationIfError() {
-        Log.d(TAG, "retryReplicationIfError() retryCount=" + retryCount +
-                ", state=" + stateMachine.getState() +
+        Log.d(TAG, "retryReplicationIfError() state=" + stateMachine.getState() +
                 ", error=" + this.error +
                 ", isContinuous()=" + isContinuous() +
                 ", isTransientError()=" + Utils.isTransientError(this.error));
@@ -1456,15 +1457,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         if (!stateMachine.getState().equals(ReplicationState.IDLE))
             return;
 
-        if (this.error == null)
-            // IDLE_OK
-            retryCount = 0;
-        else {
+        if (this.error != null) {
             // IDLE_ERROR
             if (isContinuous()) {
                 // 12/16/2014 - only retry if error is transient error 50x http error
                 // It may need to retry for any kind of errors
                 if (Utils.isTransientError(this.error)) {
+                    onBeforeScheduleRetry();
                     cancelRetryFuture();
                     scheduleRetryFuture();
                 }

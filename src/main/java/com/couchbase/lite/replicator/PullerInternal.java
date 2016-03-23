@@ -120,6 +120,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
     }
 
+    @Override
+    protected void onBeforeScheduleRetry() {
+        // do nothing
+    }
+
     public boolean isPull() {
         return true;
     }
