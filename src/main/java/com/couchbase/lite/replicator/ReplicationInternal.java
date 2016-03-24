@@ -1086,9 +1086,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Actual work of stopping the replication process.
      */
     protected void stop() {
-        if (!isRunning())
-            return;
-
         // clear batcher
         batcher.clear();
         // set non-continuous
