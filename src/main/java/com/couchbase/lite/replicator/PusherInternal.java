@@ -795,9 +795,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             if (remote != null)
                 maskedRemote = remote.toExternalForm();
             maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-            String type = "unknown";
-            if (parentReplication != null)
-                type = parentReplication.isPull() ? "pull" : "push";
+            String type = isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
             if (replicationIdentifier == null)
                 replicationIdentifier = "unknown";

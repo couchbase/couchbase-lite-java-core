@@ -1027,9 +1027,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (remote != null)
                 remote.toExternalForm();
             maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-            String type = "unknown";
-            if (parentReplication != null)
-                type = parentReplication.isPull() ? "pull" : "push";
+            String type = isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
             if (replicationIdentifier == null)
                 replicationIdentifier = "unknown";
