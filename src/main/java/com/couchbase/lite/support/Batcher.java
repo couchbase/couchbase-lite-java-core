@@ -124,7 +124,7 @@ public class Batcher<T> {
             Log.v(Log.TAG_BATCHER, "%s: queueObjects called with %d objects (current inbox size = %d)",
                     this, objects.size(), inbox.size());
             inbox.addAll(objects);
-            mutex.notify();
+            mutex.notifyAll();
 
             if (isFlushing) {
                 // Skip scheduling as flushing is processing all the queue objects:
@@ -173,7 +173,7 @@ public class Batcher<T> {
 
                 final List<T> toProcess = new ArrayList<T>(inbox);
                 inbox.clear();
-                mutex.notify();
+                mutex.notifyAll();
 
                 future = workExecutor.schedule(new Runnable() {
                     @Override
@@ -210,7 +210,7 @@ public class Batcher<T> {
         synchronized (mutex) {
             unschedule();
             inbox.clear();
-            mutex.notify();
+            mutex.notifyAll();
         }
     }
 
@@ -231,7 +231,7 @@ public class Batcher<T> {
                     try {
                         Log.v(Log.TAG_BATCHER, "%s: waitForPendingFutures, inbox size: %d",
                                 this, inbox.size());
-                        mutex.wait();
+                        mutex.wait(300);
                     } catch (InterruptedException e) {}
                 }
                 future = pendingFuture;
@@ -373,7 +373,7 @@ public class Batcher<T> {
                     inbox.remove(0);
                 scheduleNextBatchImmediately = true;
             }
-            mutex.notify();
+            mutex.notifyAll();
         }
 
         synchronized (processMutex) {
@@ -391,7 +391,7 @@ public class Batcher<T> {
                 Log.v(Log.TAG_BATCHER, "%s: invoking processor done",
                         this, processor, toProcess.size());
             }
-            processMutex.notify();
+            processMutex.notifyAll();
         }
     }
 }
