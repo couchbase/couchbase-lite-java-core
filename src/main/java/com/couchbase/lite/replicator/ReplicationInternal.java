@@ -356,7 +356,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     try {
                         String maskedRemote = remote.toExternalForm();
                         maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-                        String type = parentReplication.isPull()?"pull":"push";
+                        String type = isPull() ? "pull" : "push";
                         String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
                         threadName = String.format("CBLRequestWorker-%s-%s-%s-%d",
                                 maskedRemote, type, replicationIdentifier, counter++);
