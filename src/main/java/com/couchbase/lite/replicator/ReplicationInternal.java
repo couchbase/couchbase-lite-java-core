@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -145,7 +144,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
         this.requestHeaders = new HashMap<String, Object>();
 
-        changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+        changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
 
         // The reason that notifications are ASYNC is to make the public API call
         // Replication.getStatus() work as expected.  Because if this is set to SYNC,
@@ -481,8 +480,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
             // iOS version sends notification from stop() method, but java version does not.
             // following codes are always executed.
-            Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
-            changeEvent.setError(this.error);
+            Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this, this.error);
             notifyChangeListeners(changeEvent);
         }
     }
@@ -1105,12 +1103,15 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Notify all change listeners of a ChangeEvent
      */
     private void notifyChangeListeners(final Replication.ChangeEvent changeEvent) {
+        Log.e(TAG, "notifyChangeListeners() %s", changeEvent);
         if (changeListenerNotifyStyle == ChangeListenerNotifyStyle.SYNC) {
-            for (ChangeListener changeListener : changeListeners) {
-                try {
-                    changeListener.changed(changeEvent);
-                } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "Unknown Error in changeListener.changed(changeEvent)", e);
+            synchronized (changeListeners) {
+                for (ChangeListener changeListener : changeListeners) {
+                    try {
+                        changeListener.changed(changeEvent);
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_SYNC, "Unknown Error in changeListener.changed(changeEvent)", e);
+                    }
                 }
             }
         } else {
@@ -1120,9 +1121,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     workExecutor.submit(new Runnable() {
                         @Override
                         public void run() {
+                            Log.e(TAG, "run() count=%d changeEvent=%s", changeListeners.size(), changeEvent);
                             try {
-                                for (ChangeListener changeListener : changeListeners) {
-                                    changeListener.changed(changeEvent);
+                                synchronized (changeListeners) {
+                                    for (ChangeListener changeListener : changeListeners) {
+                                        changeListener.changed(changeEvent);
+                                    }
                                 }
                             } catch (Exception e) {
                                 Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
@@ -1191,31 +1195,31 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         );
 
         // ignored transitions
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_OFFLINE);
         stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.GO_ONLINE);
         stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.GO_ONLINE);
         stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
+        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.GO_OFFLINE);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.START);
-        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_OFFLINE);
         stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.STOP_GRACEFUL);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.START);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.RESUME);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_ONLINE);
+        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_OFFLINE);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_GRACEFUL);
         stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.STOP_IMMEDIATE);
-        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
-        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
-        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.WAITING_FOR_CHANGES);
-        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_OFFLINE);
-        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_OFFLINE);
-        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_OFFLINE);
-        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.GO_OFFLINE);
-        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.GO_ONLINE);
-        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.GO_ONLINE);
-        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.GO_ONLINE);
-        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.GO_ONLINE);
-        stateMachine.configure(ReplicationState.IDLE).ignore(ReplicationTrigger.GO_ONLINE);
-        stateMachine.configure(ReplicationState.OFFLINE).ignore(ReplicationTrigger.RESUME);
-        stateMachine.configure(ReplicationState.INITIAL).ignore(ReplicationTrigger.RESUME);
-        stateMachine.configure(ReplicationState.RUNNING).ignore(ReplicationTrigger.RESUME);
-        stateMachine.configure(ReplicationState.STOPPING).ignore(ReplicationTrigger.RESUME);
-        stateMachine.configure(ReplicationState.STOPPED).ignore(ReplicationTrigger.RESUME);
 
         // actions
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
@@ -1334,9 +1338,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
         logTransition(transition);
-        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this);
-        ReplicationStateTransition replicationStateTransition = new ReplicationStateTransition(transition);
-        changeEvent.setTransition(replicationStateTransition);
+        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this, new ReplicationStateTransition(transition));
         notifyChangeListeners(changeEvent);
     }
 

@@ -15,6 +15,8 @@ import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -22,7 +24,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -159,7 +160,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         this.db = db;
         this.remote = remote;
         this.workExecutor = workExecutor;
-        this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+        this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
         this.lifecycle = Lifecycle.ONESHOT;
         this.direction = direction;
         this.properties = new EnumMap<ReplicationField, Object>(ReplicationField.class);
@@ -424,11 +425,14 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             });
         }
 
-        for (ChangeListener changeListener : changeListeners) {
-            try {
-                changeListener.changed(event);
-            } catch (Exception e) {
-                Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
+        synchronized (changeListeners) {
+            Log.e(Log.TAG_SYNC, "changed(ChangeEvent) count=%d event=%s", changeListeners.size(), event);
+            for (ChangeListener changeListener : changeListeners) {
+                try {
+                    changeListener.changed(event);
+                } catch (Exception e) {
+                    Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
+                }
             }
         }
     }
@@ -536,18 +540,35 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public static class ChangeEvent {
 
-        private Replication source;
-        private ReplicationStateTransition transition;
-        private int changeCount;
-        private int completedChangeCount;
-        private Throwable error;
+        final private Replication source;
+        final private int changeCount;
+        final private int completedChangeCount;
+        final private ReplicationStateTransition transition;
+        final private Throwable error;
 
         protected ChangeEvent(ReplicationInternal replInternal) {
             this.source = replInternal.parentReplication;
             this.changeCount = replInternal.getChangesCount().get();
-            this.completedChangeCount =replInternal.getCompletedChangesCount().get();
+            this.completedChangeCount = replInternal.getCompletedChangesCount().get();
+            this.transition = null;
+            this.error = null;
         }
 
+        protected ChangeEvent(ReplicationInternal replInternal, ReplicationStateTransition transition) {
+            this.source = replInternal.parentReplication;
+            this.changeCount = replInternal.getChangesCount().get();
+            this.completedChangeCount = replInternal.getCompletedChangesCount().get();
+            this.transition = transition;
+            this.error = null;
+        }
+
+        protected ChangeEvent(ReplicationInternal replInternal, Throwable error) {
+            this.source = replInternal.parentReplication;
+            this.changeCount = replInternal.getChangesCount().get();
+            this.completedChangeCount = replInternal.getCompletedChangesCount().get();
+            this.transition = null;
+            this.error = error;
+        }
         /**
          * Get the owner Replication object that generated this ChangeEvent.
          */
@@ -563,10 +584,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
          */
         public ReplicationStateTransition getTransition() {
             return transition;
-        }
-
-        protected void setTransition(ReplicationStateTransition transition) {
-            this.transition = transition;
         }
 
         /**
@@ -594,10 +611,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
          */
         public Throwable getError() {
             return error;
-        }
-
-        protected void setError(Throwable error) {
-            this.error = error;
         }
 
         public String toString() {
