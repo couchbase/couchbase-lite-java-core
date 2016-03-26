@@ -97,19 +97,20 @@ public class TextUtils {
             return "";
         }
 
-        String result = "'";
+        StringBuilder result = new StringBuilder();
+        result.append("'");
         boolean first = true;
         for (String string : strings) {
             if (first) {
                 first = false;
             } else {
-                result = result + "','";
+                result.append("','");
             }
-            result = result + quote(string);
+            result.append(quote(string));
         }
-        result = result + '\'';
+        result.append('\'');
 
-        return result;
+        return result.toString();
     }
 
     /**
