@@ -2226,16 +2226,26 @@ public class Database implements StoreDelegate {
 
                 final ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
                 synchronized (changeListeners) {
-                    for (ChangeListener changeListener : changeListeners)
-                        changeListener.changed(changeEvent);
+                    for (ChangeListener changeListener : changeListeners) {
+                        if (changeListener != null) {
+                            try {
+                                changeListener.changed(changeEvent);
+                            } catch (Exception ex) {
+                                // Implementation of ChangeListener might throw RuntimeException,
+                                // ignore it.
+                                Log.e(TAG, "%s got exception posting change notification: %s",
+                                        ex, this, changeListener);
+                            }
+                        }
+                    }
                 }
                 posted = true;
             }
             return posted;
         } catch (Exception e) {
             // In general, non of methods that are used in this method throws Exception.
-            // This catch block is just in case RuntimeExcepiton is thrown.
-            Log.e(TAG, "%s got exception posting change notifications", e, this);
+            // This catch block is just in case RuntimeException is thrown.
+            Log.e(TAG, "Unknown Exception: %s got exception posting change notifications", e, this);
             return false;
         } finally {
             synchronized (lockPostingChangeNotifications) {
