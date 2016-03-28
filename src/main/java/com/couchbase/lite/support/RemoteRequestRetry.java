@@ -321,7 +321,13 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
             Future future = pendingRequests.poll(500, TimeUnit.MILLISECONDS);
             if (future == null)
                 continue;
-            future.get();
+            while (!future.isDone() && !future.isCancelled()) {
+                try {
+                    future.get(500, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException te) {
+                    // ignore TimeoutException
+                }
+            }
         }
 
         // exhausted attempts, callback to original caller with result.  requestThrowable
