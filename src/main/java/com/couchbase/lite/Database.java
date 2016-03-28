@@ -58,7 +58,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -90,7 +89,7 @@ public class Database implements StoreDelegate {
     private Store store = null;
     private String path;
     private String name;
-    private boolean open = false;
+    final private AtomicBoolean open = new AtomicBoolean(false);
 
     private Map<String, View> views;
     private Map<String, String> viewDocTypes;
@@ -103,11 +102,12 @@ public class Database implements StoreDelegate {
 
     private BlobStore attachments;
     private Manager manager;
-    final private CopyOnWriteArrayList<ChangeListener> changeListeners;
-    final private CopyOnWriteArrayList<DatabaseListener> databaseListeners;
+    final private Set<ChangeListener> changeListeners;
+    final private Set<DatabaseListener> databaseListeners;
     private Cache<String, Document> docCache;
-    private List<DocumentChange> changesToNotify;
+    final private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
+    final private Object lockPostingChangeNotifications = new Object();
     private long startTime;
 
     /**
@@ -140,12 +140,13 @@ public class Database implements StoreDelegate {
         this.name = name != null ? name : FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
         this.startTime = System.currentTimeMillis();
-        this.changeListeners = new CopyOnWriteArrayList<ChangeListener>();
-        this.databaseListeners = new CopyOnWriteArrayList<DatabaseListener>();
+        this.changeListeners = Collections.synchronizedSet(new HashSet<ChangeListener>());
+        this.databaseListeners = Collections.synchronizedSet(new HashSet<DatabaseListener>());
         this.docCache = new Cache<String, Document>();
-        this.changesToNotify = new ArrayList<DocumentChange>();
+        this.changesToNotify = Collections.synchronizedList(new ArrayList<DocumentChange>());
         this.activeReplicators = Collections.synchronizedSet(new HashSet());
         this.allReplicators = Collections.synchronizedSet(new HashSet());
+        this.postingChangeNotifications = false;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -235,7 +236,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void addChangeListener(ChangeListener listener) {
-        changeListeners.addIfAbsent(listener);
+        changeListeners.add(listener);
     }
 
     /**
@@ -332,7 +333,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void delete() throws CouchbaseLiteException {
-        if (open) {
+        if (open.get()) {
             if (!close()) {
                 throw new CouchbaseLiteException("The database was open, and could not be closed",
                         Status.INTERNAL_SERVER_ERROR);
@@ -683,13 +684,14 @@ public class Database implements StoreDelegate {
     public void storageExitedTransaction(boolean committed) {
         if (!committed) {
             // I already told cached CBLDocuments about these new revisions. Back that out:
-            for (DocumentChange change : changesToNotify) {
-                Document doc = cachedDocumentWithID(change.getDocumentId());
-                if (doc != null) {
-                    doc.forgetCurrentRevision();
+            synchronized (changesToNotify) {
+                for (DocumentChange change : changesToNotify) {
+                    Document doc = cachedDocumentWithID(change.getDocumentId());
+                    if (doc != null)
+                        doc.forgetCurrentRevision();
                 }
+                changesToNotify.clear();
             }
-            changesToNotify.clear();
         }
         postChangeNotifications();
     }
@@ -701,9 +703,6 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public void databaseStorageChanged(DocumentChange change) {
         Log.v(Log.TAG_DATABASE, "Added: " + change.getAddedRevision());
-        if (changesToNotify == null) {
-            changesToNotify = new ArrayList<DocumentChange>();
-        }
         changesToNotify.add(change);
         if (!postChangeNotifications()) {
             // The notification wasn't posted yet, probably because a transaction is open.
@@ -719,8 +718,9 @@ public class Database implements StoreDelegate {
         // Squish the change objects if too many of them are piling up:
         if (changesToNotify.size() >= MANY_CHANGES_TO_NOTIFY) {
             if (changesToNotify.size() == MANY_CHANGES_TO_NOTIFY) {
-                for (DocumentChange c : changesToNotify) {
-                    c.reduceMemoryUsage();
+                synchronized (changesToNotify) {
+                    for (DocumentChange c : changesToNotify)
+                        c.reduceMemoryUsage();
                 }
             } else {
                 change.reduceMemoryUsage();
@@ -1016,7 +1016,7 @@ public class Database implements StoreDelegate {
     // NOTE: router-only
     @InterfaceAudience.Private
     public void addDatabaseListener(DatabaseListener listener) {
-        databaseListeners.addIfAbsent(listener);
+        databaseListeners.add(listener);
     }
 
     // NOTE: router-only
@@ -1080,7 +1080,7 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public synchronized void open(DatabaseOptions options) throws CouchbaseLiteException {
-        if (open)
+        if (open.get())
             return;
 
         Log.v(TAG, "Opening %s", this);
@@ -1199,7 +1199,7 @@ public class Database implements StoreDelegate {
                     Status.INTERNAL_SERVER_ERROR);
         }
 
-        open = true;
+        open.set(true);
 
         if (upgrade) {
             Log.i(TAG, "Upgrading to %s ...", storageType);
@@ -1251,14 +1251,16 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Public
     public boolean close() {
-        if (!open) {
+        if (!open.get()) {
             // Ensure that the database is forgotten:
             manager.forgetDatabase(this);
             return false;
         }
 
-        for (DatabaseListener listener : databaseListeners)
-            listener.databaseClosing();
+        synchronized (databaseListeners) {
+            for (DatabaseListener listener : databaseListeners)
+                listener.databaseClosing();
+        }
 
         if (views != null) {
             for (View view : views.values())
@@ -1303,7 +1305,7 @@ public class Database implements StoreDelegate {
         // Forget database:
         manager.forgetDatabase(this);
 
-        open = false;
+        open.set(false);
         return true;
     }
 
@@ -1846,7 +1848,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public boolean isOpen() {
-        return open;
+        return open.get();
     }
 
     @InterfaceAudience.Private
@@ -2194,48 +2196,62 @@ public class Database implements StoreDelegate {
     // Database+Insertion
 
     private boolean postChangeNotifications() {
-        boolean posted = false;
-        // This is a 'while' instead of an 'if' because when we finish posting notifications, there
-        // might be new ones that have arrived as a result of notification handlers making document
-        // changes of their own (the replicator manager will do this.) So we need to check again.
-        while (!store.inTransaction() && isOpen() && !postingChangeNotifications
-                && changesToNotify.size() > 0) {
-
-            try {
-                postingChangeNotifications = true; // Disallow re-entrant calls
-
+        synchronized (lockPostingChangeNotifications) {
+            if (postingChangeNotifications)
+                return false;
+            postingChangeNotifications = true;
+        }
+        try {
+            boolean posted = false;
+            // This is a 'while' instead of an 'if' because when we finish posting notifications, there
+            // might be new ones that have arrived as a result of notification handlers making document
+            // changes of their own (the replicator manager will do this.) So we need to check again.
+            while (!store.inTransaction() && open.get() && changesToNotify.size() > 0) {
                 List<DocumentChange> outgoingChanges = new ArrayList<DocumentChange>();
-                outgoingChanges.addAll(changesToNotify);
-                changesToNotify.clear();
+                synchronized (changesToNotify) {
+                    outgoingChanges.addAll(changesToNotify);
+                    changesToNotify.clear();
+                }
 
                 // TODO: postPublicChangeNotification in CBLDatabase+Internal.m should replace
                 // following lines of code.
-
                 boolean isExternal = false;
                 for (DocumentChange change : outgoingChanges) {
                     Document doc = cachedDocumentWithID(change.getDocumentId());
-                    if (doc != null) {
+                    if (doc != null)
                         doc.revisionAdded(change, true);
-                    }
-                    if (change.getSource() != null) {
+                    if (change.getSource() != null)
                         isExternal = true;
+                }
+
+                final ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
+                synchronized (changeListeners) {
+                    for (ChangeListener changeListener : changeListeners) {
+                        if (changeListener != null) {
+                            try {
+                                changeListener.changed(changeEvent);
+                            } catch (Exception ex) {
+                                // Implementation of ChangeListener might throw RuntimeException,
+                                // ignore it.
+                                Log.e(TAG, "%s got exception posting change notification: %s",
+                                        ex, this, changeListener);
+                            }
+                        }
                     }
                 }
-
-                ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
-
-                for (ChangeListener changeListener : changeListeners) {
-                    changeListener.changed(changeEvent);
-                }
-
                 posted = true;
-            } catch (Exception e) {
-                Log.e(Database.TAG, this + " got exception posting change notifications", e);
-            } finally {
+            }
+            return posted;
+        } catch (Exception e) {
+            // In general, non of methods that are used in this method throws Exception.
+            // This catch block is just in case RuntimeException is thrown.
+            Log.e(TAG, "Unknown Exception: %s got exception posting change notifications", e, this);
+            return false;
+        } finally {
+            synchronized (lockPostingChangeNotifications) {
                 postingChangeNotifications = false;
             }
         }
-        return posted;
     }
 
     // Database+Replication
