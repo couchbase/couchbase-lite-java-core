@@ -107,7 +107,7 @@ public class Database implements StoreDelegate {
     private Cache<String, Document> docCache;
     final private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
-    final protected Object lockPostingChangeNotifications = new Object();
+    final private Object lockPostingChangeNotifications = new Object();
     private long startTime;
 
     /**
