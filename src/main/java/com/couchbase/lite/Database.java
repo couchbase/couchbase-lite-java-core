@@ -89,7 +89,7 @@ public class Database implements StoreDelegate {
     private Store store = null;
     private String path;
     private String name;
-    private boolean open = false;
+    final private AtomicBoolean open = new AtomicBoolean(false);
 
     private Map<String, View> views;
     private Map<String, String> viewDocTypes;
@@ -333,7 +333,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void delete() throws CouchbaseLiteException {
-        if (open) {
+        if (open.get()) {
             if (!close()) {
                 throw new CouchbaseLiteException("The database was open, and could not be closed",
                         Status.INTERNAL_SERVER_ERROR);
@@ -1080,7 +1080,7 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public synchronized void open(DatabaseOptions options) throws CouchbaseLiteException {
-        if (open)
+        if (open.get())
             return;
 
         Log.v(TAG, "Opening %s", this);
@@ -1199,7 +1199,7 @@ public class Database implements StoreDelegate {
                     Status.INTERNAL_SERVER_ERROR);
         }
 
-        open = true;
+        open.set(true);
 
         if (upgrade) {
             Log.i(TAG, "Upgrading to %s ...", storageType);
@@ -1251,7 +1251,7 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Public
     public boolean close() {
-        if (!open) {
+        if (!open.get()) {
             // Ensure that the database is forgotten:
             manager.forgetDatabase(this);
             return false;
@@ -1305,7 +1305,7 @@ public class Database implements StoreDelegate {
         // Forget database:
         manager.forgetDatabase(this);
 
-        open = false;
+        open.set(false);
         return true;
     }
 
@@ -1848,7 +1848,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public boolean isOpen() {
-        return open;
+        return open.get();
     }
 
     @InterfaceAudience.Private
@@ -2201,45 +2201,42 @@ public class Database implements StoreDelegate {
                 return false;
             postingChangeNotifications = true;
         }
-
         try {
             boolean posted = false;
-
             // This is a 'while' instead of an 'if' because when we finish posting notifications, there
             // might be new ones that have arrived as a result of notification handlers making document
             // changes of their own (the replicator manager will do this.) So we need to check again.
-            while (!store.inTransaction() && isOpen() && changesToNotify.size() > 0) {
-                try {
-                    List<DocumentChange> outgoingChanges = new ArrayList<DocumentChange>();
-                    synchronized (changesToNotify) {
-                        outgoingChanges.addAll(changesToNotify);
-                        changesToNotify.clear();
-                    }
-
-                    // TODO: postPublicChangeNotification in CBLDatabase+Internal.m should replace
-                    // following lines of code.
-
-                    boolean isExternal = false;
-                    for (DocumentChange change : outgoingChanges) {
-                        Document doc = cachedDocumentWithID(change.getDocumentId());
-                        if (doc != null)
-                            doc.revisionAdded(change, true);
-                        if (change.getSource() != null)
-                            isExternal = true;
-                    }
-
-                    final ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
-                    synchronized (changeListeners) {
-                        for (ChangeListener changeListener : changeListeners)
-                            changeListener.changed(changeEvent);
-                    }
-
-                    posted = true;
-                } catch (Exception e) {
-                    Log.e(Database.TAG, this + " got exception posting change notifications", e);
+            while (!store.inTransaction() && open.get() && changesToNotify.size() > 0) {
+                List<DocumentChange> outgoingChanges = new ArrayList<DocumentChange>();
+                synchronized (changesToNotify) {
+                    outgoingChanges.addAll(changesToNotify);
+                    changesToNotify.clear();
                 }
+
+                // TODO: postPublicChangeNotification in CBLDatabase+Internal.m should replace
+                // following lines of code.
+                boolean isExternal = false;
+                for (DocumentChange change : outgoingChanges) {
+                    Document doc = cachedDocumentWithID(change.getDocumentId());
+                    if (doc != null)
+                        doc.revisionAdded(change, true);
+                    if (change.getSource() != null)
+                        isExternal = true;
+                }
+
+                final ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
+                synchronized (changeListeners) {
+                    for (ChangeListener changeListener : changeListeners)
+                        changeListener.changed(changeEvent);
+                }
+                posted = true;
             }
             return posted;
+        } catch (Exception e) {
+            // In general, non of methods that are used in this method throws Exception.
+            // This catch block is just in case RuntimeExcepiton is thrown.
+            Log.e(TAG, "%s got exception posting change notifications", e, this);
+            return false;
         } finally {
             synchronized (lockPostingChangeNotifications) {
                 postingChangeNotifications = false;
