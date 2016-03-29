@@ -12,7 +12,7 @@ public class Version {
 
     static {
         int versCode = getVersionCode();
-        if (versCode == -1) {
+        if (versCode != 0) {
             VERSION = String.format("%s-%s", getVersionName(), getVersionCode());
         } else{
             VERSION = String.format("%s", getVersionName());
@@ -37,12 +37,11 @@ public class Version {
         }
 
         try {
-            Integer.parseInt(VERSION_CODE);
+            return Integer.parseInt(VERSION_CODE);
         } catch (NumberFormatException e) {
             Log.w(Log.TAG, "Cannot parse version code: %s", VERSION_CODE);
             return 0;
         }
-        return -1;
     }
 
     public static String getVersion() {
