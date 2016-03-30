@@ -1121,7 +1121,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     workExecutor.submit(new Runnable() {
                         @Override
                         public void run() {
-                            Log.e(TAG, "run() count=%d changeEvent=%s", changeListeners.size(), changeEvent);
                             try {
                                 synchronized (changeListeners) {
                                     for (ChangeListener changeListener : changeListeners) {
