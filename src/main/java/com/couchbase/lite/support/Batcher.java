@@ -158,7 +158,7 @@ public class Batcher<T> {
      *                           deadlock.
      */
     public void flushAll(boolean waitForAllToFinish) {
-        Log.e(Log.TAG_BATCHER, "%s: flushing all objects (wait=%b)", this, waitForAllToFinish);
+        Log.v(Log.TAG_BATCHER, "%s: flushing all objects (wait=%b)", this, waitForAllToFinish);
 
         synchronized (mutex) {
             isFlushing = true;

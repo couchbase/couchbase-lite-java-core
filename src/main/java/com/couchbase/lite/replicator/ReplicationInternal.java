@@ -1103,7 +1103,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Notify all change listeners of a ChangeEvent
      */
     private void notifyChangeListeners(final Replication.ChangeEvent changeEvent) {
-        Log.e(TAG, "notifyChangeListeners() %s", changeEvent);
         if (changeListenerNotifyStyle == ChangeListenerNotifyStyle.SYNC) {
             synchronized (changeListeners) {
                 for (ChangeListener changeListener : changeListeners) {
@@ -1128,7 +1127,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                                     }
                                 }
                             } catch (Exception e) {
-                                Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e);
+                                Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e, this);
                                 throw new RuntimeException(e);
                             }
                         }
