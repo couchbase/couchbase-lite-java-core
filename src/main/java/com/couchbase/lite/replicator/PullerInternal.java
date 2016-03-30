@@ -672,7 +672,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     @Override
                     public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                         if (e != null) {
-                            Log.e(TAG, "Error pulling remote revision", e);
+                            Log.w(TAG, "Error pulling remote revision: %s", e, this);
                             if (Utils.isDocumentError(e)) {
                                 // Revision is missing or not accessible:
                                 revisionFailed(rev, e);
@@ -862,7 +862,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     // otherwise, try to restart the change tracker, since it should
                     // always be running in continuous replications
                     String msg = "Change tracker stopped during continuous replication";
-                    Log.e(TAG, msg);
+                    Log.w(TAG, msg);
                     parentReplication.setLastError(new Exception(msg));
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
                     Log.d(TAG, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);

@@ -426,7 +426,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         }
 
         synchronized (changeListeners) {
-            Log.e(Log.TAG_SYNC, "changed(ChangeEvent) count=%d event=%s", changeListeners.size(), event);
             for (ChangeListener changeListener : changeListeners) {
                 try {
                     changeListener.changed(event);
