@@ -330,13 +330,49 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
+    private void sendErrorResponse(Status status) {
+        Map<String, Object> result = new HashMap<String, Object>();
+        result.put("error", status.getHTTPMessage());
+        result.put("status", status.getHTTPCode());
+        connection.setResponseBody(new Body(result));
+        connection.setResponseCode(status.getCode());
+        sendResponseHeaders(status);
+        setResponse();
+        sendResponse();
+    }
+
+    private static String getContentType(URLConnection connection) {
+        String contentType = connection.getRequestProperty("Content-Type");
+        if (contentType == null)
+            // From Android: http://developer.android.com/reference/java/net/URLConnection.html
+            contentType = connection.getRequestProperty("content-type");
+        return contentType;
+    }
+
     public void start() {
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
 
+        String method = connection.getRequestMethod();
+
+        // check if Content-Type is ""application/json" in case method is PUSH or PUT.
+        // https://github.com/couchbase/couchbase-lite-java-core/issues/1110
+        if (method != null && (method.equals("PUT") || method.equals("PUT"))) {
+            String contentType = getContentType(connection);
+            if (contentType != null) {
+                // application/json; charset=utf-8
+                String[] fields = contentType.split(";");
+                if (fields.length > 0) {
+                    if (!fields[0].trim().equals("application/json")) {
+                        sendErrorResponse(new Status(Status.NOT_ACCEPTABLE));
+                        return;
+                    }
+                }
+            }
+        }
+
         // We're going to map the request into a method call using reflection based on the method and path.
         // Accumulate the method name into the string 'message':
-        String method = connection.getRequestMethod();
-        if ("HEAD".equals(method)) {
+         if ("HEAD".equals(method)) {
             method = "GET";
         }
         String message = String.format("do_%s", method);
@@ -2132,7 +2168,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         RevisionInternal rev = db.updateAttachment(
                 attachment,
                 body,
-                connection.getRequestProperty("content-type"),
+                getContentType(connection),
                 AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
                 docID,
                 revID,
