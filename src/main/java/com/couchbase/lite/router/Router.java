@@ -594,6 +594,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (status.getCode() != 0 && status.isSuccessful() == false && connection.getResponseBody() == null) {
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("status", status.getCode());
+                result.put("error", status.getHTTPMessage());
                 connection.setResponseBody(new Body(result));
             }
 
