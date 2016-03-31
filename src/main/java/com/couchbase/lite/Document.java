@@ -33,7 +33,7 @@ public class Document {
     /**
      * Change Listeners
      */
-    private List<ChangeListener> changeListeners = new ArrayList<ChangeListener>();
+    private List<ChangeListener> changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
 
     /**
      * Constructor
@@ -494,8 +494,10 @@ public class Document {
         }
 
         if (notify) {
-            for (ChangeListener listener : changeListeners) {
-                listener.changed(new ChangeEvent(this, change));
+            synchronized (changeListeners) {
+                for (ChangeListener listener : changeListeners) {
+                    listener.changed(new ChangeEvent(this, change));
+                }
             }
         }
     }
