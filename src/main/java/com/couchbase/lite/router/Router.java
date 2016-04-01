@@ -375,6 +375,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return accept;
     }
 
+    private static String getIfMatch(URLConnection connection) {
+        String ifMatch = connection.getRequestProperty("If-Match");
+        if (ifMatch == null)
+            // From Android: http://developer.android.com/reference/java/net/URLConnection.html
+            ifMatch = connection.getRequestProperty("if-match");
+        return ifMatch;
+    }
+
     public void start() {
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
 
@@ -2088,7 +2096,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (docID != null && docID.isEmpty() == false) {
             // On PUT/DELETE, get revision ID from either ?rev= query or doc body:
             String revParam = getQuery("rev");
-
+            String ifMatch = getIfMatch(connection);
+            if (ifMatch != null) {
+                if(revParam == null)
+                    revParam = ifMatch;
+                else if(!ifMatch.equals(revParam))
+                    return new Status(Status.BAD_REQUEST);
+            }
             if (revParam != null && body != null) {
                 String revProp = (String) body.getProperties().get("_rev");
                 if (revProp == null) {
