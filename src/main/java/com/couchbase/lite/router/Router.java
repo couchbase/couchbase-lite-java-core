@@ -548,10 +548,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Send myself a message based on the components:
         Status status = null;
         try {
-
             Method m = Router.class.getMethod(message, Database.class, String.class, String.class);
             status = (Status) m.invoke(this, db, docID, attachmentName);
-
         } catch (NoSuchMethodException msme) {
             try {
                 String errorMessage = String.format("Router unable to route request to %s", message);
@@ -565,11 +563,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             } catch (Exception e) {
                 //default status is internal server error
                 Log.e(Log.TAG_ROUTER, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
+                status = new Status(Status.NOT_FOUND);
                 Map<String, Object> result = new HashMap<String, Object>();
-                result.put("error", "not_found");
+                result.put("status", status.getHTTPCode());
+                result.put("error", status.getHTTPMessage());
                 result.put("reason", "Router unable to route request");
                 connection.setResponseBody(new Body(result));
-                status = new Status(Status.NOT_FOUND);
             }
         } catch (Exception e) {
             String errorMessage = "Router unable to route request to " + message;
@@ -577,10 +576,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             Map<String, Object> result = new HashMap<String, Object>();
             if (e.getCause() != null && e.getCause() instanceof CouchbaseLiteException) {
                 status = ((CouchbaseLiteException) e.getCause()).getCBLStatus();
+                result.put("status", status.getHTTPCode());
                 result.put("error", status.getHTTPMessage());
                 result.put("reason", errorMessage + e.getCause().toString());
             } else {
                 status = new Status(Status.NOT_FOUND);
+                result.put("status", status.getHTTPCode());
                 result.put("error", status.getHTTPMessage());
                 result.put("reason", errorMessage + e.toString());
             }
