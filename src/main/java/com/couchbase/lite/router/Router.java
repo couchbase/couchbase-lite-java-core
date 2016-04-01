@@ -348,6 +348,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             contentType = connection.getRequestProperty("content-type");
         return contentType;
     }
+    private static String getAccept(URLConnection connection) {
+        String accept = connection.getRequestProperty("Accept");
+        if (accept == null)
+            // From Android: http://developer.android.com/reference/java/net/URLConnection.html
+            accept = connection.getRequestProperty("accept");
+        return accept;
+    }
 
     public void start() {
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
@@ -594,6 +601,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (status.getCode() != 0 && status.isSuccessful() == false && connection.getResponseBody() == null) {
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("status", status.getCode());
+                result.put("error", status.getHTTPMessage());
                 connection.setResponseBody(new Body(result));
             }
 
@@ -665,10 +673,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         connection.getResHeader().add("Server", String.format("Couchbase Lite %s", getVersionString()));
 
         // Check for a mismatch between the Accept request header and the response type:
-        String accept = connection.getRequestProperty("Accept");
+        String accept = getAccept(connection);
         if (accept != null && !"*/*".equals(accept)) {
             String responseType = connection.getBaseContentType();
-            if (responseType != null && accept.indexOf(responseType) < 0) {
+            if (responseType != null && responseType.indexOf(accept) < 0) {
                 Log.e(Log.TAG_ROUTER, "Error 406: Can't satisfy request Accept: %s", accept);
                 status = new Status(Status.NOT_ACCEPTABLE);
             }
