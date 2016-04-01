@@ -197,6 +197,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     private Map<String, Object> getBodyAsDictionary() throws CouchbaseLiteException {
+        // check if content-type is `application/json`
+        String contentType = getContentType(connection);
+        if (contentType != null) {
+            if (!contentType.equals("application/json"))
+                throw new CouchbaseLiteException(Status.NOT_ACCEPTABLE);
+        }
+
+        // parse body text
         InputStream contentStream = connection.getRequestInputStream();
         try {
             return Manager.getObjectMapper().readValue(contentStream, Map.class);
@@ -341,13 +349,24 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         sendResponse();
     }
 
+    // get Content-Type from URLConnection
     private static String getContentType(URLConnection connection) {
         String contentType = connection.getRequestProperty("Content-Type");
         if (contentType == null)
             // From Android: http://developer.android.com/reference/java/net/URLConnection.html
             contentType = connection.getRequestProperty("content-type");
+
+        if (contentType != null) {
+            // remove parameter (Content-Type := type "/" subtype *[";" parameter] )
+            int index = contentType.indexOf(';');
+            if (index > 0)
+                contentType = contentType.substring(0, index);
+            contentType = contentType.trim();
+        }
+
         return contentType;
     }
+
     private static String getAccept(URLConnection connection) {
         String accept = connection.getRequestProperty("Accept");
         if (accept == null)
@@ -360,23 +379,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
 
         String method = connection.getRequestMethod();
-
-        // check if Content-Type is ""application/json" in case method is PUSH or PUT.
-        // https://github.com/couchbase/couchbase-lite-java-core/issues/1110
-        if (method != null && (method.equals("PUT") || method.equals("PUT"))) {
-            String contentType = getContentType(connection);
-            if (contentType != null) {
-                // application/json; charset=utf-8
-                String[] fields = contentType.split(";");
-                if (fields.length > 0) {
-                    if (!fields[0].trim().equals("application/json")) {
-                        sendErrorResponse(new Status(Status.NOT_ACCEPTABLE));
-                        return;
-                    }
-                }
-            }
-        }
-
         // We're going to map the request into a method call using reflection based on the method and path.
         // Accumulate the method name into the string 'message':
          if ("HEAD".equals(method)) {
@@ -546,10 +548,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Send myself a message based on the components:
         Status status = null;
         try {
-
             Method m = Router.class.getMethod(message, Database.class, String.class, String.class);
             status = (Status) m.invoke(this, db, docID, attachmentName);
-
         } catch (NoSuchMethodException msme) {
             try {
                 String errorMessage = String.format("Router unable to route request to %s", message);
@@ -563,11 +563,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             } catch (Exception e) {
                 //default status is internal server error
                 Log.e(Log.TAG_ROUTER, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
+                status = new Status(Status.NOT_FOUND);
                 Map<String, Object> result = new HashMap<String, Object>();
-                result.put("error", "not_found");
+                result.put("status", status.getHTTPCode());
+                result.put("error", status.getHTTPMessage());
                 result.put("reason", "Router unable to route request");
                 connection.setResponseBody(new Body(result));
-                status = new Status(Status.NOT_FOUND);
             }
         } catch (Exception e) {
             String errorMessage = "Router unable to route request to " + message;
@@ -575,10 +576,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             Map<String, Object> result = new HashMap<String, Object>();
             if (e.getCause() != null && e.getCause() instanceof CouchbaseLiteException) {
                 status = ((CouchbaseLiteException) e.getCause()).getCBLStatus();
+                result.put("status", status.getHTTPCode());
                 result.put("error", status.getHTTPMessage());
                 result.put("reason", errorMessage + e.getCause().toString());
             } else {
                 status = new Status(Status.NOT_FOUND);
+                result.put("status", status.getHTTPCode());
                 result.put("error", status.getHTTPMessage());
                 result.put("reason", errorMessage + e.toString());
             }
