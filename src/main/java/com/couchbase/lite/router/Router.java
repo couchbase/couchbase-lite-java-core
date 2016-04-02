@@ -198,11 +198,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private Map<String, Object> getBodyAsDictionary() throws CouchbaseLiteException {
         // check if content-type is `application/json`
-        String contentType = getContentType(connection);
-        if (contentType != null) {
-            if (!contentType.equals("application/json"))
-                throw new CouchbaseLiteException(Status.NOT_ACCEPTABLE);
-        }
+        String contentType = getRequestHeaderContentType();
+        if (contentType != null && !contentType.equals("application/json"))
+            throw new CouchbaseLiteException(Status.NOT_ACCEPTABLE);
 
         // parse body text
         InputStream contentStream = connection.getRequestInputStream();
@@ -289,7 +287,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     private String getMultipartRequestType() {
-        String accept = connection.getRequestProperty("Accept");
+        String accept = getRequestHeaderValue("Accept");
         if (accept.startsWith("multipart/")) {
             return accept;
         }
@@ -338,24 +336,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
-    private void sendErrorResponse(Status status) {
-        Map<String, Object> result = new HashMap<String, Object>();
-        result.put("error", status.getHTTPMessage());
-        result.put("status", status.getHTTPCode());
-        connection.setResponseBody(new Body(result));
-        connection.setResponseCode(status.getCode());
-        sendResponseHeaders(status);
-        setResponse();
-        sendResponse();
-    }
-
     // get Content-Type from URLConnection
-    private static String getContentType(URLConnection connection) {
-        String contentType = connection.getRequestProperty("Content-Type");
-        if (contentType == null)
-            // From Android: http://developer.android.com/reference/java/net/URLConnection.html
-            contentType = connection.getRequestProperty("content-type");
-
+    private String getRequestHeaderContentType() {
+        String contentType = getRequestHeaderValue("Content-Type");
         if (contentType != null) {
             // remove parameter (Content-Type := type "/" subtype *[";" parameter] )
             int index = contentType.indexOf(';');
@@ -363,16 +346,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 contentType = contentType.substring(0, index);
             contentType = contentType.trim();
         }
-
         return contentType;
     }
 
-    private static String getAccept(URLConnection connection) {
-        String accept = connection.getRequestProperty("Accept");
-        if (accept == null)
+    private String getRequestHeaderValue(String paramName) {
+        String value = connection.getRequestProperty(paramName);
+        if (value == null)
             // From Android: http://developer.android.com/reference/java/net/URLConnection.html
-            accept = connection.getRequestProperty("accept");
-        return accept;
+            value = connection.getRequestProperty(paramName.toLowerCase());
+        return value;
     }
 
     public void start() {
@@ -676,7 +658,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         connection.getResHeader().add("Server", String.format("Couchbase Lite %s", getVersionString()));
 
         // Check for a mismatch between the Accept request header and the response type:
-        String accept = getAccept(connection);
+        String accept = getRequestHeaderValue("Accept");
         if (accept != null && !"*/*".equals(accept)) {
             String responseType = connection.getBaseContentType();
             if (responseType != null && responseType.indexOf(accept) < 0) {
@@ -1748,7 +1730,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      */
 
     private String getRevIDFromIfMatchHeader() {
-        String ifMatch = connection.getRequestProperty("If-Match");
+        String ifMatch = getRequestHeaderValue("If-Match");
         if (ifMatch == null) {
             return null;
         }
@@ -2088,7 +2070,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (docID != null && docID.isEmpty() == false) {
             // On PUT/DELETE, get revision ID from either ?rev= query or doc body:
             String revParam = getQuery("rev");
-
+            String ifMatch = getRequestHeaderValue("If-Match");
+            if (ifMatch != null) {
+                if(revParam == null)
+                    revParam = ifMatch;
+                else if(!ifMatch.equals(revParam))
+                    return new Status(Status.BAD_REQUEST);
+            }
             if (revParam != null && body != null) {
                 String revProp = (String) body.getProperties().get("_rev");
                 if (revProp == null) {
@@ -2179,7 +2167,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         RevisionInternal rev = db.updateAttachment(
                 attachment,
                 body,
-                getContentType(connection),
+                getRequestHeaderContentType(),
                 AttachmentInternal.AttachmentEncoding.AttachmentEncodingNone,
                 docID,
                 revID,
