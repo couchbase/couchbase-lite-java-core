@@ -12,6 +12,7 @@ import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.support.BlobContentBody;
 import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequest;
@@ -21,14 +22,12 @@ import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
-import com.couchbase.org.apache.http.entity.mime.content.InputStreamBody;
 import com.couchbase.org.apache.http.entity.mime.content.StringBody;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpResponseException;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -516,23 +515,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
      */
     @InterfaceAudience.Private
     private boolean uploadMultipartRevision(final RevisionInternal revision) {
-
-        // holds inputStream for blob to close after using
-        final List<InputStream> streamList = new ArrayList<InputStream>();
-
         MultipartEntity multiPart = null;
-
         Map<String, Object> revProps = revision.getProperties();
-
         Map<String, Object> attachments = (Map<String, Object>) revProps.get("_attachments");
         for (String attachmentKey : attachments.keySet()) {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentKey);
             if (attachment.containsKey("follows")) {
-
                 if (multiPart == null) {
-
                     multiPart = new MultipartEntity();
-
                     try {
                         String json = Manager.getObjectMapper().writeValueAsString(revProps);
                         Charset utf8charset = Charset.forName("UTF-8");
@@ -540,15 +530,18 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         byte[] compressed = null;
                         byte[] data = uncompressed;
                         String contentEncoding = null;
-                        if (uncompressed.length > RemoteRequest.MIN_JSON_LENGTH_TO_COMPRESS && canSendCompressedRequests()) {
+                        if (uncompressed.length > RemoteRequest.MIN_JSON_LENGTH_TO_COMPRESS &&
+                                canSendCompressedRequests()) {
                             compressed = Utils.compressByGzip(uncompressed);
                             if (compressed.length < uncompressed.length) {
                                 data = compressed;
                                 contentEncoding = "gzip";
                             }
                         }
-                        // NOTE: StringBody.contentEncoding default value is null. Setting null value to contentEncoding does not cause any impact.
-                        multiPart.addPart("param1", new StringBody(data, "application/json", utf8charset, contentEncoding));
+                        // NOTE: StringBody.contentEncoding default value is null.
+                        // Setting null value to contentEncoding does not cause any impact.
+                        multiPart.addPart("param1", new StringBody(data, "application/json",
+                                utf8charset, contentEncoding));
                     } catch (IOException e) {
                         throw new IllegalArgumentException(e);
                     }
@@ -557,88 +550,65 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 BlobStore blobStore = this.db.getAttachmentStore();
                 String base64Digest = (String) attachment.get("digest");
                 BlobKey blobKey = new BlobKey(base64Digest);
-                InputStream blobStream = blobStore.blobStreamForKey(blobKey);
-                if (blobStream == null) {
-                    Log.w(Log.TAG_SYNC, "Unable to load the blob stream for blobKey: %s - Skipping upload of multipart revision.", blobKey);
-                    return false;
-                } else {
-                    streamList.add(blobStream);
-                    String contentType = null;
-                    if (attachment.containsKey("content_type")) {
-                        contentType = (String) attachment.get("content_type");
-                    } else if (attachment.containsKey("type")) {
-                        contentType = (String) attachment.get("type");
-                    } else if (attachment.containsKey("content-type")) {
-                        Log.w(Log.TAG_SYNC, "Found attachment that uses content-type" +
-                                " field name instead of content_type (see couchbase-lite-android" +
-                                " issue #80): %s", attachment);
-                    }
 
-                    // contentType = null causes Exception from FileBody of apache.
-                    if (contentType == null)
-                        contentType = "application/octet-stream"; // default
-
-                    // NOTE: Content-Encoding might not be necessary to set. Apache FileBody does not set Content-Encoding.
-                    //       FileBody always return null for getContentEncoding(), and Content-Encoding header is not set in multipart
-                    // CBL iOS: https://github.com/couchbase/couchbase-lite-ios/blob/feb7ff5eda1e80bd00e5eb19f1d46c793f7a1951/Source/CBL_Pusher.m#L449-L452
-                    String contentEncoding = null;
-                    if (attachment.containsKey("encoding")) {
-                        contentEncoding = (String) attachment.get("encoding");
-                    }
-
-                    InputStreamBody inputStreamBody =
-                            new CustomStreamBody(blobStream, contentType,
-                                    attachmentKey, contentEncoding);
-                    multiPart.addPart(attachmentKey, inputStreamBody);
+                String contentType = null;
+                if (attachment.containsKey("content_type")) {
+                    contentType = (String) attachment.get("content_type");
+                } else if (attachment.containsKey("type")) {
+                    contentType = (String) attachment.get("type");
+                } else if (attachment.containsKey("content-type")) {
+                    Log.w(Log.TAG_SYNC, "Found attachment that uses content-type" +
+                            " field name instead of content_type (see couchbase-lite-android" +
+                            " issue #80): %s", attachment);
                 }
+                // contentType = null causes Exception from FileBody of apache.
+                if (contentType == null)
+                    contentType = "application/octet-stream"; // default
+
+                // CBL iOS: https://github.com/couchbase/couchbase-lite-ios/blob/feb7ff5eda1e80bd00e5eb19f1d46c793f7a1951/Source/CBL_Pusher.m#L449-L452
+                String contentEncoding = null;
+                if (attachment.containsKey("encoding"))
+                    contentEncoding = (String) attachment.get("encoding");
+
+                BlobContentBody contentBody = new BlobContentBody(blobStore, blobKey,
+                        contentType, attachmentKey, contentEncoding);
+                multiPart.addPart(attachmentKey, contentBody);
             }
         }
-
-        if (multiPart == null) {
+        if (multiPart == null)
             return false;
-        }
-
-        final String path = String.format("/%s?new_edits=false", encodeDocumentId(revision.getDocID()));
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
-
         addToChangesCount(1);
-
-        CustomFuture future = sendAsyncMultipartRequest("PUT", path, multiPart, new RemoteRequestCompletionBlock() {
-            @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                try {
-                    if (e != null) {
-                        if (e instanceof HttpResponseException) {
-                            // Server doesn't like multipart, eh? Fall back to JSON.
-                            if (((HttpResponseException) e).getStatusCode() == 415) {
-                                //status 415 = "bad_content_type"
-                                dontSendMultipart = true;
-                                uploadJsonRevision(revision);
-                            }
-                        } else {
-                            Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
-                            setError(e);
-                        }
-                    } else {
-                        Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
-                        removePending(revision);
-                    }
-                } finally {
-                    // close all inputStreams for Blob
-                    for (InputStream stream : streamList) {
+        final String path = String.format("/%s?new_edits=false", encodeDocumentId(revision.getDocID()));
+        CustomFuture future = sendAsyncMultipartRequest("PUT", path, multiPart,
+                new RemoteRequestCompletionBlock() {
+                    @Override
+                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
                         try {
-                            stream.close();
-                        } catch (IOException ioe) {
+                            if (e != null) {
+                                if (e instanceof HttpResponseException) {
+                                    // Server doesn't like multipart, eh? Fall back to JSON.
+                                    if (((HttpResponseException) e).getStatusCode() == 415) {
+                                        //status 415 = "bad_content_type"
+                                        dontSendMultipart = true;
+                                        uploadJsonRevision(revision);
+                                    }
+                                } else {
+                                    Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
+                                    setError(e);
+                                }
+                            } else {
+                                Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
+                                removePending(revision);
+                            }
+                        } finally {
+                            addToCompletedChangesCount(1);
                         }
                     }
-                    addToCompletedChangesCount(1);
-                }
-            }
-        });
+                });
         future.setQueue(pendingFutures);
         pendingFutures.add(future);
-
         return true;
     }
 
@@ -697,35 +667,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         int generation = RevisionUtils.parseRevIDNumber(ancestorID);
 
         return generation;
-    }
-
-    // CustomFileBody to support contentEncoding. FileBody returns always null for getContentEncoding()
-    private static class CustomStreamBody extends InputStreamBody {
-        private String contentEncoding = null;
-
-        public CustomStreamBody(final InputStream in, final String mimeType,
-                                final String filename, String contentEncoding) {
-            super(in, mimeType, filename);
-            this.contentEncoding = contentEncoding;
-        }
-
-        @Override
-        protected void finalize() throws Throwable {
-            // close inputStream after used.
-            InputStream stream = getInputStream();
-            if (stream != null) {
-                try {
-                    stream.close();
-                } catch (IOException ioe) {
-                }
-            }
-            super.finalize();
-        }
-
-        @Override
-        public String getContentEncoding() {
-            return contentEncoding;
-        }
     }
 
     /**
