@@ -48,15 +48,17 @@ public class Document {
         this.documentId = documentId;
     }
 
+    /**
+     * in CBLDatabase+Insertion.m
+     * + (BOOL) isValidDocumentID: (NSString*)str
+     */
     @InterfaceAudience.Private
     public static boolean isValidDocumentId(String id) {
         // http://wiki.apache.org/couchdb/HTTP_Document_API#Documents
-        if (id == null || id.length() == 0) {
+        if (id == null || id.length() == 0)
             return false;
-        }
-        if (id.charAt(0) == '_') {
+        if (id.charAt(0) == '_')
             return (id.startsWith("_design/"));
-        }
         return true;
         // "_local/*" is not a valid document ID. Local docs have their own API and shouldn't get here.
     }

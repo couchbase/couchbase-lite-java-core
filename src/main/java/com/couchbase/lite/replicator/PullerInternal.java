@@ -777,16 +777,12 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      * deleted: (BOOL)deleted
      */
     protected void processChangeTrackerChange(final Map<String, Object> change) {
-        String lastSequence = change.get("seq").toString();
+        // Process each change from the feed:
         String docID = (String) change.get("id");
-        if (docID == null) {
+        if (docID == null || !Document.isValidDocumentId(docID))
             return;
-        }
 
-        if (!Document.isValidDocumentId(docID)) {
-            Log.w(TAG, "%s: Received invalid doc ID from _changes: %s", this, change);
-            return;
-        }
+        String lastSequence = change.get("seq").toString();
         boolean deleted = (change.containsKey("deleted") &&
                 change.get("deleted").equals(Boolean.TRUE));
         List<Map<String, Object>> changes = (List<Map<String, Object>>) change.get("changes");
