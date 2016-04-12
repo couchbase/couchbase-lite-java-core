@@ -1335,7 +1335,7 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public RevisionInternal getDocument(String docID, String revID, boolean withBody) {
-        return store.getDocument(docID, revID, withBody);
+        return store == null ? null : store.getDocument(docID, revID, withBody);
     }
 
     @InterfaceAudience.Private
