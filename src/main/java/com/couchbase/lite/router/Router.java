@@ -1612,9 +1612,34 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_GET_Document_changes(Database _db, String docID, String _attachmentName) {
-        // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
+        return doChanges(_db);
+    }
 
-        // Get options:
+    public Status do_POST_Document_changes(Database _db, String docID, String _attachmentName) {
+        // Merge the properties from the JSON request body into the URL queries.
+        // Note that values in _queries have to be NSStrings or the parsing code will break!
+        Map<String, Object> body;
+        try {
+            body = getBodyAsDictionary();
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
+        }
+        Iterator<String> keys = body.keySet().iterator();
+        while (keys.hasNext()) {
+            if (getQueries() == null)
+                this.queries = new HashMap<String, String>();
+            String key = keys.next();
+            Object value = body.get(key);
+            if (key != null && value != null)
+                getQueries().put(key, value.toString());
+        }
+
+        return doChanges(_db);
+    }
+
+    private Status doChanges(Database db){
+        // http://docs.couchdb.org/en/latest/api/database/changes.html
+        // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
         changesIncludesDocs = getBooleanQuery("include_docs");
         String style = getQuery("style");
         if (style != null && "all_docs".equals(style))
@@ -1678,7 +1703,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
 
             // Don't close connection; more data to come
-
             return new Status(0);
         } else {
             if (options.isIncludeConflicts()) {
