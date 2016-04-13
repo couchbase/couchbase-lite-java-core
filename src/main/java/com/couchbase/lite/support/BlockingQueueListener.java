@@ -6,7 +6,7 @@ import java.util.concurrent.BlockingQueue;
  * Created by hideki on 12/17/14.
  */
 public interface BlockingQueueListener<E> {
-    enum EventType {ADD, PUT, TAKE}
+    enum EventType {ADD, PUT, TAKE, POLL}
 
     void changed(EventType type, E e, BlockingQueue<E> queue);
 }
