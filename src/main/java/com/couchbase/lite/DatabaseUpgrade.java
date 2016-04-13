@@ -28,7 +28,7 @@ import java.util.Map;
  * Couchbase Lite library. If it's not present, Couchbase Lite will ignore old v1.0 databases
  * instead of importing them.
  */
-final public class DatabaseUpgrade {
+public final class DatabaseUpgrade {
     private static String TAG = Log.TAG_DATABASE;
 
     private Manager manager;

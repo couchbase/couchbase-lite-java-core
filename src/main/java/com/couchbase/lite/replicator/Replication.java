@@ -15,8 +15,6 @@ import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -24,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -77,7 +76,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected ScheduledExecutorService workExecutor;
     protected ReplicationInternal replicationInternal;
     protected Lifecycle lifecycle;
-    protected List<ChangeListener> changeListeners;
+    private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
     protected Throwable lastError;
     protected Direction direction;
 
@@ -160,7 +159,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         this.db = db;
         this.remote = remote;
         this.workExecutor = workExecutor;
-        this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
         this.lifecycle = Lifecycle.ONESHOT;
         this.direction = direction;
         this.properties = new EnumMap<ReplicationField, Object>(ReplicationField.class);
@@ -425,13 +423,11 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             });
         }
 
-        synchronized (changeListeners) {
-            for (ChangeListener changeListener : changeListeners) {
-                try {
-                    changeListener.changed(event);
-                } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
-                }
+        for (ChangeListener changeListener : changeListeners) {
+            try {
+                changeListener.changed(event);
+            } catch (Exception e) {
+                Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
             }
         }
     }
@@ -539,11 +535,11 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public static class ChangeEvent {
 
-        final private Replication source;
-        final private int changeCount;
-        final private int completedChangeCount;
-        final private ReplicationStateTransition transition;
-        final private Throwable error;
+        private final Replication source;
+        private final int changeCount;
+        private final int completedChangeCount;
+        private final ReplicationStateTransition transition;
+        private final Throwable error;
 
         protected ChangeEvent(ReplicationInternal replInternal) {
             this.source = replInternal.parentReplication;
