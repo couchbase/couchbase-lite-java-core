@@ -2,6 +2,7 @@ package com.couchbase.lite.support;
 
 import java.util.Collection;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by hideki on 12/17/14.
@@ -57,7 +58,24 @@ public class CustomLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
         if(listener != null) {
             listener.changed(BlockingQueueListener.EventType.TAKE, e, this);
         }
+        return e;
+    }
 
+    @Override
+    public E poll(long timeout, TimeUnit unit) throws InterruptedException {
+        E e = super.poll(timeout, unit);
+        if (listener != null) {
+            listener.changed(BlockingQueueListener.EventType.POLL, e, this);
+        }
+        return e;
+    }
+
+    @Override
+    public E poll() {
+        E e = super.poll();
+        if (listener != null) {
+            listener.changed(BlockingQueueListener.EventType.POLL, e, this);
+        }
         return e;
     }
 }
