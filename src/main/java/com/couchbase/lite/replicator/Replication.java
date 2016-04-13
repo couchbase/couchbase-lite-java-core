@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -77,7 +78,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected ScheduledExecutorService workExecutor;
     protected ReplicationInternal replicationInternal;
     protected Lifecycle lifecycle;
-    protected List<ChangeListener> changeListeners;
+    final private List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
     protected Throwable lastError;
     protected Direction direction;
 
@@ -160,7 +161,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         this.db = db;
         this.remote = remote;
         this.workExecutor = workExecutor;
-        this.changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
         this.lifecycle = Lifecycle.ONESHOT;
         this.direction = direction;
         this.properties = new EnumMap<ReplicationField, Object>(ReplicationField.class);
@@ -425,13 +425,11 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             });
         }
 
-        synchronized (changeListeners) {
-            for (ChangeListener changeListener : changeListeners) {
-                try {
-                    changeListener.changed(event);
-                } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
-                }
+        for (ChangeListener changeListener : changeListeners) {
+            try {
+                changeListener.changed(event);
+            } catch (Exception e) {
+                Log.e(Log.TAG_SYNC, "Exception calling changeListener.changed", e);
             }
         }
     }

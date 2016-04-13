@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -114,7 +115,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected ScheduledExecutorService workExecutor;
 
     protected StateMachine<ReplicationState, ReplicationTrigger> stateMachine;
-    protected List<ChangeListener> changeListeners;
+    final private List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
     protected Replication.Lifecycle lifecycle;
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
 
@@ -141,10 +142,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.clientFactory = clientFactory;
         this.workExecutor = workExecutor;
         this.lifecycle = lifecycle;
-
         this.requestHeaders = new HashMap<String, Object>();
-
-        changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
 
         // The reason that notifications are ASYNC is to make the public API call
         // Replication.getStatus() work as expected.  Because if this is set to SYNC,
@@ -1104,13 +1102,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     private void notifyChangeListeners(final Replication.ChangeEvent changeEvent) {
         if (changeListenerNotifyStyle == ChangeListenerNotifyStyle.SYNC) {
-            synchronized (changeListeners) {
-                for (ChangeListener changeListener : changeListeners) {
-                    try {
-                        changeListener.changed(changeEvent);
-                    } catch (Exception e) {
-                        Log.e(Log.TAG_SYNC, "Unknown Error in changeListener.changed(changeEvent)", e);
-                    }
+            for (ChangeListener changeListener : changeListeners) {
+                try {
+                    changeListener.changed(changeEvent);
+                } catch (Exception e) {
+                    Log.e(Log.TAG_SYNC, "Unknown Error in changeListener.changed(changeEvent)", e);
                 }
             }
         } else {
@@ -1121,11 +1117,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         @Override
                         public void run() {
                             try {
-                                synchronized (changeListeners) {
-                                    for (ChangeListener changeListener : changeListeners) {
-                                        changeListener.changed(changeEvent);
-                                    }
-                                }
+                                for (ChangeListener changeListener : changeListeners)
+                                    changeListener.changed(changeEvent);
                             } catch (Exception e) {
                                 Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e, this);
                                 throw new RuntimeException(e);
@@ -1140,8 +1133,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     /**
      * Adds a change delegate that will be called whenever the Replication changes.
      */
-    @InterfaceAudience.Public
-    public void addChangeListener(ChangeListener changeListener) {
+    /* package */ void addChangeListener(ChangeListener changeListener) {
         changeListeners.add(changeListener);
     }
 

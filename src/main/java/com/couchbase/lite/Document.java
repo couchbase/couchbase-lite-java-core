@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * A CouchbaseLite document.
@@ -33,7 +34,7 @@ public class Document {
     /**
      * Change Listeners
      */
-    private List<ChangeListener> changeListeners = Collections.synchronizedList(new ArrayList<ChangeListener>());
+    final private List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
     /**
      * Constructor
@@ -483,9 +484,8 @@ public class Document {
     @InterfaceAudience.Private
     protected void revisionAdded(DocumentChange change, boolean notify) {
         String revID = change.getWinningRevisionID();
-        if (revID == null) {
+        if (revID == null)
             return;  // current revision didn't change
-        }
 
         if (currentRevision != null && !revID.equals(currentRevision.getId())) {
             RevisionInternal rev = change.getWinningRevisionIfKnown();
@@ -498,11 +498,8 @@ public class Document {
         }
 
         if (notify) {
-            synchronized (changeListeners) {
-                for (ChangeListener listener : changeListeners) {
-                    listener.changed(new ChangeEvent(this, change));
-                }
-            }
+            for (ChangeListener listener : changeListeners)
+                listener.changed(new ChangeEvent(this, change));
         }
     }
 

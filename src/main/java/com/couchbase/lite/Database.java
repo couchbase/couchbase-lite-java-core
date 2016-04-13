@@ -58,6 +58,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -87,7 +88,7 @@ public class Database implements StoreDelegate {
     public static int DEFAULT_MAX_REVS = 20;
 
     private Store store = null;
-    private String path;
+    final private String path;
     private String name;
     final private AtomicBoolean open = new AtomicBoolean(false);
 
@@ -97,18 +98,18 @@ public class Database implements StoreDelegate {
     private Map<String, Validator> validations;
 
     private Map<String, Object> pendingAttachmentsByDigest;
-    private Set<Replication> activeReplicators;
-    private Set<Replication> allReplicators;
+    final private Set<Replication> activeReplicators;
+    final private Set<Replication> allReplicators;
 
     private BlobStore attachments;
-    private Manager manager;
+    final private Manager manager;
     final private Set<ChangeListener> changeListeners;
     final private Set<DatabaseListener> databaseListeners;
-    private Cache<String, Document> docCache;
+    final private Cache<String, Document> docCache;
     final private List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
     final private Object lockPostingChangeNotifications = new Object();
-    private long startTime;
+    final private long startTime;
 
     /**
      * Each database can have an associated PersistentCookieStore,
@@ -140,7 +141,7 @@ public class Database implements StoreDelegate {
         this.name = name != null ? name : FileDirUtils.getDatabaseNameFromPath(path);
         this.manager = manager;
         this.startTime = System.currentTimeMillis();
-        this.changeListeners = Collections.synchronizedSet(new HashSet<ChangeListener>());
+        this.changeListeners = new CopyOnWriteArraySet<ChangeListener>();
         this.databaseListeners = Collections.synchronizedSet(new HashSet<DatabaseListener>());
         this.docCache = new Cache<String, Document>();
         this.changesToNotify = Collections.synchronizedList(new ArrayList<DocumentChange>());
@@ -188,7 +189,9 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Public
     public List<Replication> getAllReplications() {
         List<Replication> allReplicatorsList = new ArrayList<Replication>();
-        allReplicatorsList.addAll(allReplicators);
+        synchronized (allReplicators) {
+            allReplicatorsList.addAll(allReplicators);
+        }
         return allReplicatorsList;
     }
 
@@ -2225,17 +2228,15 @@ public class Database implements StoreDelegate {
                 }
 
                 final ChangeEvent changeEvent = new ChangeEvent(this, isExternal, outgoingChanges);
-                synchronized (changeListeners) {
-                    for (ChangeListener changeListener : changeListeners) {
-                        if (changeListener != null) {
-                            try {
-                                changeListener.changed(changeEvent);
-                            } catch (Exception ex) {
-                                // Implementation of ChangeListener might throw RuntimeException,
-                                // ignore it.
-                                Log.e(TAG, "%s got exception posting change notification: %s",
-                                        ex, this, changeListener);
-                            }
+                for (ChangeListener changeListener : changeListeners) {
+                    if (changeListener != null) {
+                        try {
+                            changeListener.changed(changeEvent);
+                        } catch (Exception ex) {
+                            // Implementation of ChangeListener might throw RuntimeException,
+                            // ignore it.
+                            Log.e(TAG, "%s got exception posting change notification: %s",
+                                    ex, this, changeListener);
                         }
                     }
                 }
