@@ -15,8 +15,6 @@ import com.couchbase.lite.support.PersistentCookieStore;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -78,7 +76,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected ScheduledExecutorService workExecutor;
     protected ReplicationInternal replicationInternal;
     protected Lifecycle lifecycle;
-    final private List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+    private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
     protected Throwable lastError;
     protected Direction direction;
 
@@ -537,11 +535,11 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     @InterfaceAudience.Public
     public static class ChangeEvent {
 
-        final private Replication source;
-        final private int changeCount;
-        final private int completedChangeCount;
-        final private ReplicationStateTransition transition;
-        final private Throwable error;
+        private final Replication source;
+        private final int changeCount;
+        private final int completedChangeCount;
+        private final ReplicationStateTransition transition;
+        private final Throwable error;
 
         protected ChangeEvent(ReplicationInternal replInternal) {
             this.source = replInternal.parentReplication;

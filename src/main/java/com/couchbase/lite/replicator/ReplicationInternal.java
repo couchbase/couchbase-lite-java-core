@@ -115,7 +115,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected ScheduledExecutorService workExecutor;
 
     protected StateMachine<ReplicationState, ReplicationTrigger> stateMachine;
-    final private List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+    private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
     protected Replication.Lifecycle lifecycle;
     protected ChangeListenerNotifyStyle changeListenerNotifyStyle;
 
@@ -123,7 +123,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     // for waitingPendingFutures
     protected boolean waitingForPendingFutures = false;
-    final protected Object lockWaitForPendingFutures = new Object();
+    protected final Object lockWaitForPendingFutures = new Object();
 
     /**
      * Constructor

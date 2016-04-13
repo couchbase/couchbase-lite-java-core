@@ -133,7 +133,7 @@ public class Utils {
     /**
      * cribbed from http://stackoverflow.com/questions/9655181/convert-from-byte-array-to-hex-string-in-java
      */
-    final protected static char[] hexArray = "0123456789abcdef".toCharArray();
+    protected static final char[] hexArray = "0123456789abcdef".toCharArray();
 
     public static String bytesToHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];

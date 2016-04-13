@@ -34,7 +34,7 @@ public class Document {
     /**
      * Change Listeners
      */
-    final private List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
+    private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
     /**
      * Constructor

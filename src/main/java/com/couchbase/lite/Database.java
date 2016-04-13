@@ -88,9 +88,9 @@ public class Database implements StoreDelegate {
     public static int DEFAULT_MAX_REVS = 20;
 
     private Store store = null;
-    final private String path;
+    private final String path;
     private String name;
-    final private AtomicBoolean open = new AtomicBoolean(false);
+    private final AtomicBoolean open = new AtomicBoolean(false);
 
     private Map<String, View> views;
     private Map<String, String> viewDocTypes;
@@ -98,18 +98,18 @@ public class Database implements StoreDelegate {
     private Map<String, Validator> validations;
 
     private Map<String, Object> pendingAttachmentsByDigest;
-    final private Set<Replication> activeReplicators;
-    final private Set<Replication> allReplicators;
+    private final Set<Replication> activeReplicators;
+    private final Set<Replication> allReplicators;
 
     private BlobStore attachments;
-    final private Manager manager;
-    final private Set<ChangeListener> changeListeners;
-    final private Set<DatabaseListener> databaseListeners;
-    final private Cache<String, Document> docCache;
-    final private List<DocumentChange> changesToNotify;
+    private final Manager manager;
+    private final Set<ChangeListener> changeListeners;
+    private final Set<DatabaseListener> databaseListeners;
+    private final Cache<String, Document> docCache;
+    private final List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
-    final private Object lockPostingChangeNotifications = new Object();
-    final private long startTime;
+    private final Object lockPostingChangeNotifications = new Object();
+    private final long startTime;
 
     /**
      * Each database can have an associated PersistentCookieStore,
