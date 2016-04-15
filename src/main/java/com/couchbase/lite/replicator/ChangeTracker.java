@@ -1,6 +1,7 @@
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -119,20 +120,6 @@ public class ChangeTracker implements Runnable {
         this.client = client;
     }
 
-    public String getDatabaseName() {
-        String result = null;
-        if (databaseURL != null) {
-            result = databaseURL.getPath();
-            if (result != null) {
-                int pathLastSlashPos = result.lastIndexOf('/');
-                if (pathLastSlashPos > 0) {
-                    result = result.substring(pathLastSlashPos);
-                }
-            }
-        }
-        return result;
-    }
-
     public String getFeed() {
         switch (mode) {
             case OneShot:
@@ -153,7 +140,7 @@ public class ChangeTracker implements Runnable {
      * - (NSString*) changesFeedPath
      * in CBLChangeTracker.m
      */
-    public String getChangesFeedPath() {
+    /* package */ String getChangesFeedPath() {
         if (usePOST) {
             return "_changes";
         }
@@ -233,6 +220,38 @@ public class ChangeTracker implements Runnable {
             // stopped() method should be called at end of run() method.
             stopped();
         }
+    }
+
+    private static void consumeContent(HttpEntity entity) {
+        if (entity != null) {
+            try {
+                entity.consumeContent();
+            } catch (IOException e) {
+            }
+        }
+    }
+
+    private boolean isResponseFailed(HttpResponse response) {
+        StatusLine status = response.getStatusLine();
+        if (status.getStatusCode() >= 300 &&
+                ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
+                        mode != ChangeTrackerMode.LongPoll)) {
+            Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d",
+                    this, status.getStatusCode());
+            error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
+            consumeContent(response.getEntity());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean retryIfFailedPost(StatusLine status) {
+        if (!usePOST)
+            return false;
+        if (status.getStatusCode() != Status.METHOD_NOT_ALLOWED)
+            return false;
+        usePOST = false;
+        return true;
     }
 
     protected void runLoop() {
@@ -327,25 +346,16 @@ public class ChangeTracker implements Runnable {
 
                     Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                     HttpResponse response = httpClient.execute(request);
-                    StatusLine status = response.getStatusLine();
+
                     // In case response status is Error, ChangeTracker stops here
-                    // except mode is LongPoll and error is transient.
-                    if (status.getStatusCode() >= 300 &&
-                            ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
-                                    mode != ChangeTrackerMode.LongPoll)) {
-                        Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
-                        this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
-                        HttpEntity entity = response.getEntity();
-                        if (entity != null) {
-                            try {
-                                entity.consumeContent();
-                            } catch (IOException e) {
-                            }
-                        }
+                    if(isResponseFailed(response)) {
+                        if(retryIfFailedPost(response.getStatusLine()))
+                            continue;
                         break;
                     }
 
                     // Parse response body
+                    StatusLine status = response.getStatusLine();
                     HttpEntity entity = response.getEntity();
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
@@ -448,12 +458,7 @@ public class ChangeTracker implements Runnable {
                             }
                         }
                     } finally {
-                        if (entity != null) {
-                            try {
-                                entity.consumeContent();
-                            } catch (IOException e) {
-                            }
-                        }
+                        consumeContent(entity);
                     }
                 } catch (Exception e) {
                     if (!running && e instanceof IOException) {
@@ -604,11 +609,9 @@ public class ChangeTracker implements Runnable {
         }
     }
 
-    public boolean isUsePOST() {
-        return usePOST;
-    }
 
-    public void setUsePOST(boolean usePOST) {
+    // only for unit test
+    /* package */ void setUsePOST(boolean usePOST) {
         this.usePOST = usePOST;
     }
 
