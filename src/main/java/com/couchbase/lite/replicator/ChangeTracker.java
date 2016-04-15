@@ -660,7 +660,7 @@ public class ChangeTracker implements Runnable {
         post.put("feed", getFeed());
         post.put("heartbeat", getHeartbeatMilliseconds());
         post.put("style", includeConflicts ? "all_docs" : null);
-        post.put("active_only", activeOnly && !caughtUp ? "true" : null);
+        post.put("active_only", activeOnly && !caughtUp ? true : null);
         post.put("since", since);
         post.put("limit", limit > 0?limit:null);
         // TODO: {@"accept_encoding", @"gzip"}
