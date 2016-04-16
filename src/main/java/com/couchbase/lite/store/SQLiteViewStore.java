@@ -330,11 +330,11 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
                     int changes = 0;
                     if (last == 0) {
-                        changes = store.getStorageEngine().delete(queryString("maps_#"), null, null);
+                        changes = store.getStorageEngine().delete(view.queryString("maps_#"), null, null);
                     } else {
                         store.optimizeSQLIndexes();
                         String[] args = {Long.toString(last), Long.toString(last)};
-                        changes = store.getStorageEngine().delete(queryString("maps_#"),
+                        changes = store.getStorageEngine().delete(view.queryString("maps_#"),
                                         "sequence IN (SELECT parent FROM revs " +
                                         "WHERE sequence>? AND +parent>0 AND +parent<=?)", args);
                     }
