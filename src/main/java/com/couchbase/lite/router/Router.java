@@ -66,6 +66,8 @@ import java.util.concurrent.TimeoutException;
 
 public class Router implements Database.ChangeListener, Database.DatabaseListener {
 
+    public static final String TAG = Log.TAG_ROUTER;
+
     private final static long MIN_HEARTBEAT = 5000; // 5 second
 
     /**
@@ -363,7 +365,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         String method = connection.getRequestMethod();
         // We're going to map the request into a method call using reflection based on the method and path.
         // Accumulate the method name into the string 'message':
-         if ("HEAD".equals(method)) {
+        if ("HEAD".equals(method)) {
             method = "GET";
         }
         String message = String.format("do_%s", method);
@@ -375,7 +377,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             try {
                 connection.getResponseOutputStream().close();
             } catch (IOException e) {
-                Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                Log.e(TAG, "Error closing empty output stream");
             }
             sendResponse();
             return;
@@ -404,7 +406,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     try {
                         connection.getResponseOutputStream().close();
                     } catch (IOException e) {
-                        Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                        Log.e(TAG, "Error closing empty output stream");
                     }
                     sendResponse();
                     return;
@@ -416,7 +418,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         try {
                             connection.getResponseOutputStream().close();
                         } catch (IOException e) {
-                            Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                            Log.e(TAG, "Error closing empty output stream");
                         }
                         sendResponse();
                         return;
@@ -438,7 +440,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 try {
                     connection.getResponseOutputStream().close();
                 } catch (IOException e) {
-                    Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                    Log.e(TAG, "Error closing empty output stream");
                 }
                 sendResponse();
                 return;
@@ -451,7 +453,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     try {
                         connection.getResponseOutputStream().close();
                     } catch (IOException e) {
-                        Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                        Log.e(TAG, "Error closing empty output stream");
                     }
                     sendResponse();
                     return;
@@ -464,7 +466,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     try {
                         connection.getResponseOutputStream().close();
                     } catch (IOException e) {
-                        Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                        Log.e(TAG, "Error closing empty output stream");
                     }
                     sendResponse();
                     return;
@@ -525,8 +527,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
         }
 
-        //Log.d(TAG, "path: " + path + " message: " + message + " docID: " + docID + " attachmentName: " + attachmentName);
-
         // Send myself a message based on the components:
         Status status = null;
         try {
@@ -535,16 +535,32 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         } catch (NoSuchMethodException msme) {
             try {
                 String errorMessage = String.format("Router unable to route request to %s", message);
-                Log.e(Log.TAG_ROUTER, errorMessage);
-                Map<String, Object> result = new HashMap<String, Object>();
-                result.put("error", "not_found");
-                result.put("reason", errorMessage);
-                connection.setResponseBody(new Body(result));
-                Method m = Router.class.getMethod("do_UNKNOWN", Database.class, String.class, String.class);
+                Log.w(TAG, errorMessage);
+                // Check if there is an alternative method:
+                boolean hasAltMethod = false;
+                String curDoMethod = String.format("do_%s", method);
+                String[] methods = {"GET", "POST", "PUT", "DELETE"};
+                for (String aMethod : methods) {
+                    if (!aMethod.equals(method)) {
+                        String altDoMethod = String.format("do_%s", aMethod);
+                        String altMessage = message.replaceAll(curDoMethod, altDoMethod);
+                        try {
+                            Method altMethod = Router.class.getMethod(altMessage,
+                                    Database.class, String.class, String.class);
+                            hasAltMethod = true;
+                            break;
+                        } catch (Exception ex) {
+                            // go next
+                        }
+                    }
+                }
+                Method m = Router.class.getMethod(
+                        hasAltMethod ? "do_METHOD_NOT_ALLOWED" : "do_UNKNOWN",
+                        Database.class, String.class, String.class);
                 status = (Status) m.invoke(this, db, docID, attachmentName);
             } catch (Exception e) {
                 //default status is internal server error
-                Log.e(Log.TAG_ROUTER, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
+                Log.e(TAG, "Router attempted do_UNKNWON fallback, but that threw an exception", e);
                 status = new Status(Status.NOT_FOUND);
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("status", status.getHTTPCode());
@@ -554,7 +570,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
         } catch (Exception e) {
             String errorMessage = "Router unable to route request to " + message;
-            Log.e(Log.TAG_ROUTER, errorMessage, e);
+            Log.e(TAG, errorMessage, e);
             Map<String, Object> result = new HashMap<String, Object>();
             if (e.getCause() != null && e.getCause() instanceof CouchbaseLiteException) {
                 status = ((CouchbaseLiteException) e.getCause()).getCBLStatus();
@@ -579,11 +595,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             connection.setResponseCode(status.getCode());
 
-            if (status.isSuccessful() && connection.getResponseBody() == null && connection.getHeaderField("Content-Type") == null) {
+            if (status.isSuccessful() && connection.getResponseBody() == null &&
+                    connection.getHeaderField("Content-Type") == null) {
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 
-            if (status.getCode() != 0 && status.isSuccessful() == false && connection.getResponseBody() == null) {
+            if (status.getCode() != 0 && status.isSuccessful() == false &&
+                    connection.getResponseBody() == null) {
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("status", status.getCode());
                 result.put("error", status.getHTTPMessage());
@@ -598,7 +616,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         if (waiting && db != null) {
-            Log.v(Log.TAG_ROUTER, "waiting=true & db!=null: call Database.addDatabaseListener()");
+            Log.v(TAG, "waiting=true & db!=null: call Database.addDatabaseListener()");
             db.addDatabaseListener(this);
         }
     }
@@ -612,7 +630,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     private void dbClosing() {
-        Log.d(Log.TAG_ROUTER, "Database closing! Returning error 500");
+        Log.d(TAG, "Database closing! Returning error 500");
         Status status = new Status(Status.INTERNAL_SERVER_ERROR);
         status = sendResponseHeaders(status);
         connection.setResponseCode(status.getCode());
@@ -629,9 +647,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
-    @SuppressWarnings("MethodMayBeStatic")
     public Status do_UNKNOWN(Database db, String docID, String attachmentName) {
         return new Status(Status.NOT_FOUND);
+    }
+
+    public Status do_METHOD_NOT_ALLOWED(Database db, String docID, String attachmentName) {
+        return new Status(Status.METHOD_NOT_ALLOWED);
     }
 
     private void setResponse() {
@@ -642,7 +663,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             try {
                 connection.getResponseOutputStream().close();
             } catch (IOException e) {
-                Log.e(Log.TAG_ROUTER, "Error closing empty output stream");
+                Log.e(TAG, "Error closing empty output stream");
             }
         }
     }
@@ -662,7 +683,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (accept != null && !"*/*".equals(accept)) {
             String responseType = connection.getBaseContentType();
             if (responseType != null && responseType.indexOf(accept) < 0) {
-                Log.e(Log.TAG_ROUTER, "Error 406: Can't satisfy request Accept: %s", accept);
+                Log.e(TAG, "Error 406: Can't satisfy request Accept: %s", accept);
                 status = new Status(Status.NOT_ACCEPTABLE);
             }
         }
@@ -672,7 +693,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (resHeader != null) {
                 resHeader.add("Content-Type", "application/json");
             } else {
-                Log.w(Log.TAG_ROUTER, "Cannot add Content-Type header because getResHeader() returned null");
+                Log.w(TAG, "Cannot add Content-Type header because getResHeader() returned null");
             }
         }
 
@@ -763,7 +784,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 replicator.addChangeListener(new Replication.ChangeListener() {
                     @Override
                     public void changed(Replication.ChangeEvent event) {
-                        if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.RUNNING) {
+                        if (event.getTransition() != null &&
+                                event.getTransition().getDestination() == ReplicationState.RUNNING) {
                             replicationStarted.countDown();
                         }
                     }
@@ -773,7 +795,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     replicator.addChangeListener(new Replication.ChangeListener() {
                         @Override
                         public void changed(Replication.ChangeEvent event) {
-                            if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
+                            if (event.getTransition() != null &&
+                                    event.getTransition().getDestination() == ReplicationState.STOPPED) {
                                 Status status = new Status(Status.OK);
                                 status = sendResponseHeaders(status);
                                 connection.setResponseCode(status.getCode());
@@ -853,34 +876,34 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     activity.put("transition_source", event.getTransition().getSource());
                     activity.put("transition_destination", event.getTransition().getDestination());
                     activity.put("trigger", event.getTransition().getTrigger());
-                    Log.d(Log.TAG_ROUTER,
+                    Log.d(TAG,
                             "do_GET_active_tasks Transition [" + event.getTransition().getTrigger() +
                                     "] Source:" + event.getTransition().getSource() +
                                     ", Destination:" + event.getTransition().getDestination());
                 }
 
                 if (longpoll) {
-                    Log.w(Log.TAG_ROUTER, "Router: Sending longpoll replication response");
+                    Log.w(TAG, "Router: Sending longpoll replication response");
                     sendResponse();
                     if (callbackBlock != null) {
                         byte[] data = null;
                         try {
                             data = Manager.getObjectMapper().writeValueAsBytes(activity);
                         } catch (Exception e) {
-                            Log.w(Log.TAG_ROUTER, "Error serializing JSON", e);
+                            Log.w(TAG, "Error serializing JSON", e);
                         }
                         OutputStream os = connection.getResponseOutputStream();
                         try {
                             os.write(data);
                             os.close();
                         } catch (IOException e) {
-                            Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+                            Log.e(TAG, "IOException writing to internal streams", e);
                         }
                     }
                     //remove this change listener because a new one will be added when this responds
                     event.getSource().removeChangeListener(self);
                 } else {
-                    Log.w(Log.TAG_ROUTER, "Router: Sending continous replication change chunk");
+                    Log.w(TAG, "Router: Sending continous replication change chunk");
                     sendContinuousReplicationChanges(activity);
                 }
             }
@@ -978,7 +1001,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (replicator.getLastError() != null) {
             String msg = String.format("Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
                     replicator.getLastError(), replicator, source, target);
-            Log.e(Log.TAG_ROUTER, msg);
+            Log.e(TAG, msg);
             Throwable error = replicator.getLastError();
             int statusCode = 400;
             if (error instanceof HttpResponseException) {
@@ -1000,7 +1023,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * Used by the continuous mode of _changes and _active_tasks.
      * <p/>
      * TODO: CBL iOS supports EventSourceFeed in addition to longpoll and continuous.
-     * TODO: Need to catch up CBL iOS: - (void) sendContinuousLine: (NSDictionary*)changeDict in CBL_Router+Handlers.m
+     * TODO: Need to catch up CBL iOS:
+     *  - (void) sendContinuousLine: (NSDictionary*)changeDict in CBL_Router+Handlers.m
      */
     private void sendContinuousReplicationChanges(Map<String, Object> activity) {
         try {
@@ -1012,7 +1036,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     os.write(json);
                     os.flush();
                 } catch (Exception e) {
-                    Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+                    Log.e(TAG, "IOException writing to internal streams", e);
                 }
             }
         } catch (Exception e) {
@@ -1062,9 +1086,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.CREATED);
     }
 
-    public Status do_DELETE_Database(Database _db, String _docID, String _attachmentName) throws CouchbaseLiteException {
+    public Status do_DELETE_Database(Database _db, String _docID, String _attachmentName)
+            throws CouchbaseLiteException {
         if (getQuery("rev") != null) {
-            return new Status(Status.BAD_REQUEST);  // CouchDB checks for this; probably meant to be a document deletion
+            return new Status(Status.BAD_REQUEST);
+            // CouchDB checks for this; probably meant to be a document deletion
         }
         db.delete();
         return new Status(Status.OK);
@@ -1099,7 +1125,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return update(db, null, new Body(body), false);
     }
 
-    public Status do_GET_Document_all_docs(Database _db, String _docID, String _attachmentName) throws CouchbaseLiteException {
+    public Status do_GET_Document_all_docs(Database _db, String _docID, String _attachmentName)
+            throws CouchbaseLiteException {
         QueryOptions options = new QueryOptions();
         if (!getQueryOptions(options)) {
             return new Status(Status.BAD_REQUEST);
@@ -1113,7 +1140,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.OK);
     }
 
-    public Status do_POST_Document_all_docs(Database _db, String _docID, String _attachmentName) throws CouchbaseLiteException {
+    public Status do_POST_Document_all_docs(Database _db, String _docID, String _attachmentName)
+            throws CouchbaseLiteException {
         QueryOptions options = new QueryOptions();
         if (!getQueryOptions(options)) {
             return new Status(Status.BAD_REQUEST);
@@ -1247,7 +1275,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         Body docBody = new Body(doc);
                         if (noNewEdits) {
                             rev = new RevisionInternal(docBody);
-                            if (rev.getRevID() == null || rev.getDocID() == null || !rev.getDocID().equals(docID)) {
+                            if (rev.getRevID() == null || rev.getDocID() == null ||
+                                    !rev.getDocID().equals(docID)) {
                                 status.setCode(Status.BAD_REQUEST);
                             } else {
                                 List<String> history = Database.parseCouchDBRevisionHistory(doc);
@@ -1284,10 +1313,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                             results.add(result);
                         }
                     }
-                    Log.w(Log.TAG_ROUTER, "%s finished inserting %d revisions in bulk", this, docs.size());
+                    Log.w(TAG, "%s finished inserting %d revisions in bulk", this, docs.size());
                     ok = true;
                 } catch (Exception e) {
-                    Log.e(Log.TAG_ROUTER, "%s: Exception inserting revisions in bulk", e, this);
+                    Log.e(TAG, "%s: Exception inserting revisions in bulk", e, this);
                 } finally {
                     return ok;
                 }
@@ -1326,7 +1355,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             // query db only, not necessary to be syncrhonized
             db.findMissingRevisions(revs);
         } catch (SQLException e) {
-            Log.e(Log.TAG_ROUTER, "Exception", e);
+            Log.e(TAG, "Exception", e);
             return new Status(Status.DB_ERROR);
         }
 
@@ -1411,13 +1440,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             future.get(60, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            Log.e(Log.TAG_ROUTER, "Exception waiting for future", e);
+            Log.e(TAG, "Exception waiting for future", e);
             return new Status(Status.INTERNAL_SERVER_ERROR);
         } catch (ExecutionException e) {
-            Log.e(Log.TAG_ROUTER, "Exception waiting for future", e);
+            Log.e(TAG, "Exception waiting for future", e);
             return new Status(Status.INTERNAL_SERVER_ERROR);
         } catch (TimeoutException e) {
-            Log.e(Log.TAG_ROUTER, "Exception waiting for future", e);
+            Log.e(TAG, "Exception waiting for future", e);
             return new Status(Status.INTERNAL_SERVER_ERROR);
         }
 
@@ -1525,7 +1554,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     os.write(json);
                     os.flush();
                 } catch (Exception e) {
-                    Log.e(Log.TAG_ROUTER, "IOException writing to internal streams", e);
+                    Log.e(TAG, "IOException writing to internal streams", e);
                 }
             }
         } catch (Exception e) {
@@ -1563,7 +1592,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (longpoll) {
                 revs.add(rev);
             } else {
-                Log.i(Log.TAG_ROUTER, "Router: Sending continous change chunk");
+                Log.i(TAG, "Router: Sending continous change chunk");
                 sendContinuousChange(rev);
             }
         }
@@ -1572,7 +1601,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             // in case of /_changes with longpoll, the connection is critical section
             // when case multiple threads write a doc simultaneously.
             synchronized (databaseChangesLongpollLock) {
-                Log.i(Log.TAG_ROUTER, "Router: Sending longpoll response: START");
+                Log.i(TAG, "Router: Sending longpoll response: START");
                 sendResponse();
                 OutputStream os = connection.getResponseOutputStream();
                 try {
@@ -1582,7 +1611,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         try {
                             data = Manager.getObjectMapper().writeValueAsBytes(body);
                         } catch (Exception e) {
-                            Log.w(Log.TAG_ROUTER, "Error serializing JSON", e);
+                            Log.w(TAG, "Error serializing JSON", e);
                         }
                         os.write(data);
                         os.flush();
@@ -1596,17 +1625,17 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     // So print warning message, and exit from method.
                     // Stacktrace should not be printed, it confuses developer.
                     // https://github.com/couchbase/couchbase-lite-java-core/issues/1043
-                    Log.w(Log.TAG_ROUTER, "IOException writing to internal streams: " + e.getMessage());
+                    Log.w(TAG, "IOException writing to internal streams: " + e.getMessage());
                 } finally {
                     try {
                         if (os != null) {
                             os.close();
                         }
                     } catch (IOException e) {
-                        Log.w(Log.TAG_ROUTER, "Failed to close connection: " + e.getMessage());
+                        Log.w(TAG, "Failed to close connection: " + e.getMessage());
                     }
                 }
-                Log.i(Log.TAG_ROUTER, "Router: Sending longpoll response: END");
+                Log.i(TAG, "Router: Sending longpoll response: END");
             }
         }
     }
@@ -1637,7 +1666,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return doChanges(_db);
     }
 
-    private Status doChanges(Database db){
+    private Status doChanges(Database db) {
         // http://docs.couchdb.org/en/latest/api/database/changes.html
         // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
         changesIncludesDocs = getBooleanQuery("include_docs");
@@ -1661,7 +1690,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 return new Status(Status.NOT_FOUND);
             }
             changesFilterParams = new HashMap<String, Object>(queries);
-            Log.v(Log.TAG_ROUTER, "Filter params=" + changesFilterParams);
+            Log.v(TAG, "Filter params=" + changesFilterParams);
         }
 
         // changesSince() is query only. not required synchronized
@@ -1727,11 +1756,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     OutputStream os = connection.getResponseOutputStream();
                     if (os != null) {
                         try {
-                            Log.v(Log.TAG_ROUTER, "[%s] Sent heart beat!", this);
+                            Log.v(TAG, "[%s] Sent heart beat!", this);
                             os.write("\r\n".getBytes());
                             os.flush();
                         } catch (IOException e) {
-                            Log.w(Log.TAG_ROUTER, "IOException writing to internal streams: " + e.getMessage());
+                            Log.w(TAG, "IOException writing to internal streams: " + e.getMessage());
                         } finally {
                             // no close outputstream, OutputStream might be re-used
                         }
@@ -1982,7 +2011,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * createdRev: (CBL_Revision**)outRev
      * error: (NSError**)outError
      */
-    private RevisionInternal update(Database _db, String docID, Body body, boolean deleting, boolean allowConflict, Status outStatus) {
+    private RevisionInternal update(Database _db, String docID, Body body, boolean deleting,
+                                    boolean allowConflict, Status outStatus) {
 
         if (body != null && !body.isValidJSON()) {
             outStatus.setCode(Status.BAD_JSON);
@@ -2070,9 +2100,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         } catch (CouchbaseLiteException e) {
             if (e.getCBLStatus() != null && e.getCBLStatus().getCode() == Status.CONFLICT) {
                 // conflict is not critical error for replicators, not print stack trace
-                Log.w(Log.TAG_ROUTER, "Error updating doc: %s", docID);
+                Log.w(TAG, "Error updating doc: %s", docID);
             } else {
-                Log.e(Log.TAG_ROUTER, "Error updating doc: %s", e, docID);
+                Log.e(TAG, "Error updating doc: %s", e, docID);
             }
             outStatus.setCode(e.getCBLStatus().getCode());
         }
@@ -2096,9 +2126,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             String revParam = getQuery("rev");
             String ifMatch = getRequestHeaderValue("If-Match");
             if (ifMatch != null) {
-                if(revParam == null)
+                if (revParam == null)
                     revParam = ifMatch;
-                else if(!ifMatch.equals(revParam))
+                else if (!ifMatch.equals(revParam))
                     return new Status(Status.BAD_REQUEST);
             }
             if (revParam != null && body != null) {
@@ -2138,14 +2168,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return status;
     }
 
-    public Status do_PUT_Document(Database _db, String docID, String _attachmentName) throws CouchbaseLiteException {
+    public Status do_PUT_Document(Database _db, String docID, String _attachmentName)
+            throws CouchbaseLiteException {
         Status status = new Status(Status.CREATED);
         Map<String, Object> body = getBodyAsDictionary();
         if (body == null) {
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
         }
 
-        if (getQuery("new_edits") == null || (getQuery("new_edits") != null && (Boolean.valueOf(getQuery("new_edits"))))) {
+        if (getQuery("new_edits") == null ||
+                (getQuery("new_edits") != null && (Boolean.valueOf(getQuery("new_edits"))))) {
             // Regular PUT
             status = update(_db, docID, new Body(body), false);
         } else {
@@ -2232,7 +2264,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
         Mapper mapBlock = View.getCompiler().compileMap(mapSource, language);
         if (mapBlock == null) {
-            Log.w(Log.TAG_ROUTER, "View %s has unknown map function: %s", viewName, mapSource);
+            Log.w(TAG, "View %s has unknown map function: %s", viewName, mapSource);
             return null;
         }
         String reduceSource = (String) viewProps.get("reduce");
@@ -2240,7 +2272,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (reduceSource != null) {
             reduceBlock = View.getCompiler().compileReduce(reduceSource, language);
             if (reduceBlock == null) {
-                Log.w(Log.TAG_ROUTER, "View %s has unknown reduce function: %s", viewName, reduceBlock);
+                Log.w(TAG, "View %s has unknown reduce function: %s", viewName, reduceBlock);
                 return null;
             }
         }
@@ -2254,7 +2286,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return view;
     }
 
-    private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys) throws CouchbaseLiteException {
+    private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys)
+            throws CouchbaseLiteException {
         String tdViewName = String.format("%s/%s", designDoc, viewName);
         // getExistingView is not thread-safe, but not access to db. In the database, it should protect instance variable
         View view = db.getExistingView(tdViewName);
@@ -2322,11 +2355,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.OK);
     }
 
-    public Status do_GET_DesignDocument(Database _db, String designDocID, String viewName) throws CouchbaseLiteException {
+    public Status do_GET_DesignDocument(Database _db, String designDocID, String viewName)
+            throws CouchbaseLiteException {
         return queryDesignDoc(designDocID, viewName, null);
     }
 
-    public Status do_POST_DesignDocument(Database _db, String designDocID, String viewName) throws CouchbaseLiteException {
+    public Status do_POST_DesignDocument(Database _db, String designDocID, String viewName)
+            throws CouchbaseLiteException {
         Map<String, Object> body = getBodyAsDictionary();
         if (body == null) {
             return new Status(Status.BAD_REQUEST);
