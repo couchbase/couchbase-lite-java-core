@@ -1,6 +1,7 @@
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Manager;
+import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -10,6 +11,7 @@ import com.couchbase.lite.util.Utils;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonToken;
 
 import org.apache.http.HttpEntity;
@@ -61,6 +63,7 @@ public class ChangeTracker implements Runnable {
     protected Map<String, Object> requestHeaders;
     private Authenticator authenticator;
     private boolean usePOST;
+    private boolean activeOnly = false;
 
     private ChangeTrackerMode mode;
     private String filterName;
@@ -80,6 +83,7 @@ public class ChangeTracker implements Runnable {
     protected ChangeTrackerBackoff backoff;
     private long startTime = 0;
     private String str = null;
+    private boolean caughtUp = false;
 
     public enum ChangeTrackerMode {
         OneShot,
@@ -97,6 +101,7 @@ public class ChangeTracker implements Runnable {
         this.requestHeaders = new HashMap<String, Object>();
         this.heartBeatSeconds = Replication.DEFAULT_HEARTBEAT;
         this.limit = 50;
+        this.usePOST = true;
     }
 
     public boolean isContinuous() {
@@ -119,18 +124,12 @@ public class ChangeTracker implements Runnable {
         this.client = client;
     }
 
-    public String getDatabaseName() {
-        String result = null;
-        if (databaseURL != null) {
-            result = databaseURL.getPath();
-            if (result != null) {
-                int pathLastSlashPos = result.lastIndexOf('/');
-                if (pathLastSlashPos > 0) {
-                    result = result.substring(pathLastSlashPos);
-                }
-            }
-        }
-        return result;
+    public boolean isActiveOnly() {
+        return activeOnly;
+    }
+
+    public void setActiveOnly(boolean activeOnly) {
+        this.activeOnly = activeOnly;
     }
 
     public String getFeed() {
@@ -153,53 +152,64 @@ public class ChangeTracker implements Runnable {
      * - (NSString*) changesFeedPath
      * in CBLChangeTracker.m
      */
-    public String getChangesFeedPath() {
-        if (usePOST) {
-            return "_changes";
+    /* package */ String getChangesFeedPath() {
+        // We add the basic query params to the URL even if we'll send a POST request. Yes, this is
+        // redundant, since those params are in the JSON body too. This is for CouchDB compatibility:
+        // for some reason it still expects most of the params in the URL, even with a POST; only the
+        // filter-related params go in the body.
+        // (See https://github.com/couchbase/couchbase-lite-ios/issues/1139)
+        StringBuilder sb = new StringBuilder(String.format("_changes?feed=%s&heartbeat=%d", getFeed(), getHeartbeatMilliseconds()));
+        if (includeConflicts)
+            sb.append("&style=all_docs");
+        Object seq = lastSequenceID;
+        if (seq != null) {
+            if (seq instanceof List || seq instanceof Map) {
+                try {
+                    seq = Manager.getObjectMapper().writeValueAsString(seq);
+                } catch (JsonProcessingException e) {
+                }
+            }
+            sb.append("&since=");
+            sb.append(URLEncoder.encode(seq.toString()));
         }
-
-        String path = "_changes?feed=";
-        path += getFeed();
-        if (mode == ChangeTrackerMode.LongPoll) {
-            path += String.format("&limit=%s", limit);
-        }
-        path += String.format("&heartbeat=%s", getHeartbeatMilliseconds());
-
-        if (includeConflicts) {
-            path += "&style=all_docs";
-        }
-
-        if (lastSequenceID != null) {
-            path += "&since=" + URLEncoder.encode(lastSequenceID.toString());
-        } else {
+        if (activeOnly && !caughtUp)
             // On first replication we can skip getting deleted docs. (SG enhancement in ver. 1.2)
-            path += "&active_only=true";
+            sb.append("&active_only=true");
+        if (limit > 0) {
+            sb.append("&limit=");
+            sb.append(limit);
         }
 
-        // Add filter or doc_ids:
-        if (docIDs != null && docIDs.size() > 0) {
-            filterName = "_doc_ids";
-            filterParams = new HashMap<String, Object>();
-            filterParams.put("doc_ids", docIDs);
-        }
-        if (filterName != null) {
-            path += "&filter=" + URLEncoder.encode(filterName);
-            if (filterParams != null) {
-                for (String key : filterParams.keySet()) {
-                    Object value = filterParams.get(key);
-                    if (!(value instanceof String)) {
-                        try {
-                            value = Manager.getObjectMapper().writeValueAsString(value);
-                        } catch (IOException e) {
-                            throw new IllegalArgumentException(e);
+        if(!usePOST) {
+            // Add filter or doc_ids to URL. If sending a POST, these will go in the JSON body instead.
+            if (docIDs != null && docIDs.size() > 0) {
+                filterName = "_doc_ids";
+                filterParams = new HashMap<String, Object>();
+                filterParams.put("doc_ids", docIDs);
+            }
+            if (filterName != null) {
+                sb.append("&filter=");
+                sb.append(URLEncoder.encode(filterName));
+                if (filterParams != null) {
+                    for (String key : filterParams.keySet()) {
+                        Object value = filterParams.get(key);
+                        if (!(value instanceof String)) {
+                            try {
+                                value = Manager.getObjectMapper().writeValueAsString(value);
+                            } catch (JsonProcessingException e) {
+                                throw new IllegalArgumentException(e);
+                            }
                         }
+                        sb.append("&");
+                        sb.append(URLEncoder.encode(key));
+                        sb.append("=");
+                        sb.append(URLEncoder.encode(value.toString()));
                     }
-                    path += '&' + URLEncoder.encode(key) + '=' + URLEncoder.encode(value.toString());
                 }
             }
         }
 
-        return path;
+        return sb.toString();
     }
 
     public URL getChangesFeedURL() {
@@ -233,6 +243,38 @@ public class ChangeTracker implements Runnable {
             // stopped() method should be called at end of run() method.
             stopped();
         }
+    }
+
+    private static void consumeContent(HttpEntity entity) {
+        if (entity != null) {
+            try {
+                entity.consumeContent();
+            } catch (IOException e) {
+            }
+        }
+    }
+
+    private boolean isResponseFailed(HttpResponse response) {
+        StatusLine status = response.getStatusLine();
+        if (status.getStatusCode() >= 300 &&
+                ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
+                        mode != ChangeTrackerMode.LongPoll)) {
+            Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d",
+                    this, status.getStatusCode());
+            error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
+            consumeContent(response.getEntity());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean retryIfFailedPost(StatusLine status) {
+        if (!usePOST)
+            return false;
+        if (status.getStatusCode() != Status.METHOD_NOT_ALLOWED)
+            return false;
+        usePOST = false;
+        return true;
     }
 
     protected void runLoop() {
@@ -327,25 +369,16 @@ public class ChangeTracker implements Runnable {
 
                     Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
                     HttpResponse response = httpClient.execute(request);
-                    StatusLine status = response.getStatusLine();
+
                     // In case response status is Error, ChangeTracker stops here
-                    // except mode is LongPoll and error is transient.
-                    if (status.getStatusCode() >= 300 &&
-                            ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
-                                    mode != ChangeTrackerMode.LongPoll)) {
-                        Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, status.getStatusCode());
-                        this.error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
-                        HttpEntity entity = response.getEntity();
-                        if (entity != null) {
-                            try {
-                                entity.consumeContent();
-                            } catch (IOException e) {
-                            }
-                        }
+                    if(isResponseFailed(response)) {
+                        if(retryIfFailedPost(response.getStatusLine()))
+                            continue;
                         break;
                     }
 
                     // Parse response body
+                    StatusLine status = response.getStatusLine();
                     HttpEntity entity = response.getEntity();
                     try {
                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: got response. status: %s mode: %s", this, status, mode);
@@ -377,7 +410,10 @@ public class ChangeTracker implements Runnable {
                                     if (responseOK) {
                                         // TODO: this logic is questionable, there's lots
                                         // TODO: of differences in the iOS changetracker code,
-                                        client.changeTrackerCaughtUp();
+                                        if(!caughtUp) {
+                                            caughtUp = true;
+                                            client.changeTrackerCaughtUp();
+                                        }
                                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: Starting new longpoll", this);
                                         backoff.resetBackoff();
                                         continue;
@@ -448,12 +484,7 @@ public class ChangeTracker implements Runnable {
                             }
                         }
                     } finally {
-                        if (entity != null) {
-                            try {
-                                entity.consumeContent();
-                            } catch (IOException e) {
-                            }
-                        }
+                        consumeContent(entity);
                     }
                 } catch (Exception e) {
                     if (!running && e instanceof IOException) {
@@ -604,17 +635,19 @@ public class ChangeTracker implements Runnable {
         }
     }
 
-    public boolean isUsePOST() {
-        return usePOST;
-    }
 
-    public void setUsePOST(boolean usePOST) {
+    // only for unit test
+    /* package */ void setUsePOST(boolean usePOST) {
         this.usePOST = usePOST;
     }
 
     public Map<String, Object> changesFeedPOSTBodyMap() {
-        if (!usePOST) {
-            return null;
+        long since = 0;
+        if (lastSequenceID != null){
+            try {
+                since = Long.parseLong(lastSequenceID.toString());
+            } catch (NumberFormatException e) {
+            }
         }
 
         if (docIDs != null && docIDs.size() > 0) {
@@ -626,34 +659,15 @@ public class ChangeTracker implements Runnable {
         Map<String, Object> post = new HashMap<String, Object>();
         post.put("feed", getFeed());
         post.put("heartbeat", getHeartbeatMilliseconds());
-        if (includeConflicts) {
-            post.put("style", "all_docs");
-        } else {
-            post.put("style", null);
-        }
-
-        if (lastSequenceID != null) {
-            try {
-                post.put("since", Long.parseLong(lastSequenceID.toString()));
-            } catch (NumberFormatException e) {
-                post.put("since", lastSequenceID.toString());
-            }
-            post.put("active_only", null);
-        } else {
-            post.put("active_only", true);
-        }
-
-        if (mode == ChangeTrackerMode.LongPoll && limit > 0) {
-            post.put("limit", limit);
-        } else {
-            post.put("limit", null);
-        }
-
+        post.put("style", includeConflicts ? "all_docs" : null);
+        post.put("active_only", activeOnly && !caughtUp ? true : null);
+        post.put("since", since);
+        post.put("limit", limit > 0?limit:null);
+        // TODO: {@"accept_encoding", @"gzip"}
         if (filterName != null) {
             post.put("filter", filterName);
             post.putAll(filterParams);
         }
-
         return post;
     }
 
