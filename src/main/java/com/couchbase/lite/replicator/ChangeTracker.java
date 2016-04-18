@@ -642,11 +642,14 @@ public class ChangeTracker implements Runnable {
     }
 
     public Map<String, Object> changesFeedPOSTBodyMap() {
-        long since = 0;
-        if (lastSequenceID != null){
+        Object since = lastSequenceID;
+        if (lastSequenceID != null && lastSequenceID instanceof String){
             try {
-                since = Long.parseLong(lastSequenceID.toString());
+                Long value = Long.valueOf((String)lastSequenceID);
+                if(value.longValue() >= 0)
+                    since = value;
             } catch (NumberFormatException e) {
+                // ignore
             }
         }
 
