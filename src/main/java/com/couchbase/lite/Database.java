@@ -494,7 +494,7 @@ public class Database implements StoreDelegate {
         try {
             return registerView(new View(this, name, true));
         } catch (CouchbaseLiteException e) {
-            Log.e(TAG, "Error in registerView", e);
+            Log.e(TAG, "Error in registerView: error=" + e.getLocalizedMessage());
             return null;
         }
     }
