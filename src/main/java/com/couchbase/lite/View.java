@@ -403,4 +403,12 @@ public final class View implements ViewStoreDelegate {
     protected List<Map<String, Object>> dump() {
         return viewStore.dump();
     }
+
+    @Override
+    public String toString() {
+        return "View{" +
+                "name='" + name + '\'' +
+                ", version='" + version + '\'' +
+                '}';
+    }
 }

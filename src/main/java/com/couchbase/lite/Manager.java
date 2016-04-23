@@ -561,7 +561,7 @@ public final class Manager {
                 return null;
             db = new Database(path, name, this, options.isReadOnly());
             if (mustExist && !db.exists()) {
-                Log.w(Database.TAG, "mustExist is true and db (%s) does not exist", name);
+                Log.i(Database.TAG, "mustExist is true and db (%s) does not exist", name);
                 return null;
             }
             db.setName(name);
