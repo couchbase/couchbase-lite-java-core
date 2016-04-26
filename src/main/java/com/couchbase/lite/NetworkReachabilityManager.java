@@ -1,7 +1,7 @@
 package com.couchbase.lite;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * This uses system api (on Android, uses the Context) to listen for network reachability
@@ -11,52 +11,44 @@ import java.util.List;
  */
 public abstract class NetworkReachabilityManager {
 
-    protected List<NetworkReachabilityListener> networkReachabilityListeners;
+    protected List<NetworkReachabilityListener> listeners =
+            new CopyOnWriteArrayList<NetworkReachabilityListener>();
 
     /**
      * Add Network Reachability Listener
      */
-    public synchronized void addNetworkReachabilityListener(NetworkReachabilityListener listener) {
-        if (networkReachabilityListeners == null) {
-            networkReachabilityListeners = new ArrayList<NetworkReachabilityListener>();
-        }
-        int numListenersBeforeAdd = networkReachabilityListeners.size();
-        networkReachabilityListeners.add(listener);
-        if (numListenersBeforeAdd == 0) {
+    public synchronized void addNetworkReachabilityListener(
+            NetworkReachabilityListener listener) {
+        int numListenersBeforeAdd = listeners.size();
+        listeners.add(listener);
+        if (numListenersBeforeAdd == 0)
             startListening();
-        }
     }
 
     /**
      * Remove Network Reachability Listener
      */
-    public synchronized void removeNetworkReachabilityListener(NetworkReachabilityListener listener) {
-        if (networkReachabilityListeners == null) {
-            networkReachabilityListeners = new ArrayList<NetworkReachabilityListener>();
-        }
-        networkReachabilityListeners.remove(listener);
-        if (networkReachabilityListeners.size() == 0) {
+    public synchronized void removeNetworkReachabilityListener(
+            NetworkReachabilityListener listener) {
+        listeners.remove(listener);
+        if (listeners.size() == 0)
             stopListening();
-        }
     }
 
     /**
      * Notify listeners that the network is now reachable
      */
     public synchronized void notifyListenersNetworkReachable() {
-
-        for (NetworkReachabilityListener networkReachabilityListener : networkReachabilityListeners) {
-            networkReachabilityListener.networkReachable();
-        }
+        for (NetworkReachabilityListener listener : listeners)
+            listener.networkReachable();
     }
 
     /**
      * Notify listeners that the network is now unreachable
      */
     public synchronized void notifyListenersNetworkUneachable() {
-        for (NetworkReachabilityListener networkReachabilityListener : networkReachabilityListeners) {
-            networkReachabilityListener.networkUnreachable();
-        }
+        for (NetworkReachabilityListener listener : listeners)
+            listener.networkUnreachable();
     }
 
     /**
