@@ -324,11 +324,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     protected void startNetworkReachabilityManager() {
-        db.getManager().getContext().getNetworkReachabilityManager().addNetworkReachabilityListener(parentReplication);
+        db.getManager().getContext().getNetworkReachabilityManager()
+                .addNetworkReachabilityListener(parentReplication);
     }
 
     protected void stopNetworkReachabilityManager() {
-        db.getManager().getContext().getNetworkReachabilityManager().removeNetworkReachabilityListener(parentReplication);
+        db.getManager().getContext().getNetworkReachabilityManager()
+                .removeNetworkReachabilityListener(parentReplication);
     }
 
     protected boolean isNetworkReachable() {
