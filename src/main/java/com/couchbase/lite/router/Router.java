@@ -10,6 +10,7 @@ import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.Mapper;
 import com.couchbase.lite.Misc;
+import com.couchbase.lite.Query;
 import com.couchbase.lite.QueryOptions;
 import com.couchbase.lite.QueryRow;
 import com.couchbase.lite.Reducer;
@@ -244,20 +245,28 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         options.setGroupLevel(getIntQuery("group_level", options.getGroupLevel()));
         options.setDescending(getBooleanQuery("descending"));
         options.setIncludeDocs(getBooleanQuery("include_docs"));
+        if (getQuery("include_deleted") != null)
+            options.setAllDocsMode(Query.AllDocsMode.INCLUDE_DELETED);
+        else if (getQuery("include_conflicts") != null) // nonstandard
+            options.setAllDocsMode(Query.AllDocsMode.SHOW_CONFLICTS);
+        else if (getQuery("only_conflicts") != null) // nonstandard
+            options.setAllDocsMode(Query.AllDocsMode.ONLY_CONFLICTS);
         options.setUpdateSeq(getBooleanQuery("update_seq"));
-        if (getQuery("inclusive_end") != null) {
+        if (getQuery("inclusive_end") != null)
             options.setInclusiveEnd(getBooleanQuery("inclusive_end"));
-        }
+        if (getQuery("inclusive_start") != null) // nonstandard
+            options.setInclusiveEnd(getBooleanQuery("inclusive_start"));
+        options.setPrefixMatchLevel(getIntQuery("prefix_match_level", options.getPrefixMatchLevel()));
         if (getQuery("reduce") != null) {
             options.setReduceSpecified(true);
             options.setReduce(getBooleanQuery("reduce"));
         }
         options.setGroup(getBooleanQuery("group"));
-        //options.setContentOptions(getContentOptions());
 
+        // TODO: Stale options (ok or update_after):
 
+        // Handle 'keys' and 'key' options:
         List<Object> keys;
-
         Object keysParam = getJSONQuery("keys");
         if (keysParam != null && !(keysParam instanceof List)) {
             return false;
@@ -282,9 +291,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (getJSONQuery("endkey_docid") != null) {
                 options.setEndKeyDocId(getJSONQuery("endkey_docid").toString());
             }
-
         }
-
         return true;
     }
 
