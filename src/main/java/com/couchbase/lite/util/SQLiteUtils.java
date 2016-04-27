@@ -87,6 +87,25 @@ public class SQLiteUtils {
         return result;
     }
 
+    public static String stringForQuery(SQLiteStorageEngine storageEngine,
+                                        String query,
+                                        String[] args)
+            throws SQLException {
+        String result = null;
+        Cursor cursor = null;
+        try {
+            cursor = storageEngine.rawQuery(query, args);
+            if (cursor.moveToNext()) {
+                result = cursor.getString(0);
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return result;
+    }
+
     public static void executeUpdate(SQLiteStorageEngine storageEngine,
                                      String query,
                                      String[] args)
