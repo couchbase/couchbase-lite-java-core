@@ -61,7 +61,8 @@ public class Document {
         if (id.charAt(0) == '_')
             return (id.startsWith("_design/"));
         return true;
-        // "_local/*" is not a valid document ID. Local docs have their own API and shouldn't get here.
+        // "_local/*" is not a valid document ID.
+        // Local docs have their own API and shouldn't get here.
     }
 
     /**
@@ -99,11 +100,7 @@ public class Document {
      */
     @InterfaceAudience.Public
     public String getCurrentRevisionId() {
-        SavedRevision rev = getCurrentRevision();
-        if (rev == null) {
-            return null;
-        }
-        return rev.getId();
+        return getCurrentRevision() == null ? null : getCurrentRevision().getId();
     }
 
     /**
@@ -124,11 +121,7 @@ public class Document {
      */
     @InterfaceAudience.Public
     public List<SavedRevision> getRevisionHistory() throws CouchbaseLiteException {
-        if (getCurrentRevision() == null) {
-            Log.w(Database.TAG, "getRevisionHistory() called but no currentRevision");
-            return null;
-        }
-        return getCurrentRevision().getRevisionHistory();
+        return getCurrentRevision() == null ? null : getCurrentRevision().getRevisionHistory();
     }
 
     /**
@@ -158,15 +151,15 @@ public class Document {
     /**
      * The contents of the current revision of the document.
      * This is shorthand for self.currentRevision.properties.
-     * Any keys in the dictionary that begin with "_", such as "_id" and "_rev", contain CouchbaseLite metadata.
+     * Any keys in the dictionary that begin with "_",
+     * such as "_id" and "_rev", contain CouchbaseLite metadata.
      *
      * @return contents of the current revision of the document.
      * null if currentRevision is null
      */
     @InterfaceAudience.Public
     public Map<String, Object> getProperties() {
-        SavedRevision currentRevision = getCurrentRevision();
-        return currentRevision == null ? null : currentRevision.getProperties();
+        return getCurrentRevision() == null ? null : getCurrentRevision().getProperties();
     }
 
     /**
@@ -177,7 +170,7 @@ public class Document {
      */
     @InterfaceAudience.Public
     public Map<String, Object> getUserProperties() {
-        return getCurrentRevision().getUserProperties();
+        return getCurrentRevision() == null ? null : getCurrentRevision().getUserProperties();
     }
 
     /**
@@ -189,12 +182,12 @@ public class Document {
      */
     @InterfaceAudience.Public
     public boolean delete() throws CouchbaseLiteException {
-        return getCurrentRevision().deleteDocument() != null;
+        return getCurrentRevision() == null ? false : getCurrentRevision().deleteDocument() != null;
     }
 
-
     /**
-     * Purges this document from the database; this is more than deletion, it forgets entirely about it.
+     * Purges this document from the database;
+     * this is more than deletion, it forgets entirely about it.
      * The purge will NOT be replicated to other databases.
      *
      * @throws CouchbaseLiteException
@@ -257,7 +250,8 @@ public class Document {
      * @return a new SavedRevision
      */
     @InterfaceAudience.Public
-    public SavedRevision putProperties(Map<String, Object> properties) throws CouchbaseLiteException {
+    public SavedRevision putProperties(Map<String, Object> properties)
+            throws CouchbaseLiteException {
         String prevID = (String) properties.get("_rev");
         boolean allowConflict = false;
         return putProperties(properties, prevID, allowConflict);
@@ -266,8 +260,9 @@ public class Document {
     /**
      * Saves a new revision by letting the caller update the existing properties.
      * This method handles conflicts by retrying (calling the block again).
-     * The DocumentUpdater implementation should modify the properties of the new revision and return YES to save or
-     * NO to cancel. Be careful: the DocumentUpdater can be called multiple times if there is a conflict!
+     * The DocumentUpdater implementation should modify the properties of
+     * the new revision and return YES to save or NO to cancel.
+     * Be careful: the DocumentUpdater can be called multiple times if there is a conflict!
      *
      * @param updater the callback DocumentUpdater implementation.  Will be called on each
      *                attempt to save. Should update the given revision's properties and then
@@ -277,7 +272,6 @@ public class Document {
      */
     @InterfaceAudience.Public
     public SavedRevision update(DocumentUpdater updater) throws CouchbaseLiteException {
-
         int lastErrorCode = Status.UNKNOWN;
         do {
             // if there is a conflict error, get the latest revision from db instead of cache
@@ -301,7 +295,6 @@ public class Document {
         return null;
     }
 
-
     @InterfaceAudience.Public
     public void addChangeListener(ChangeListener changeListener) {
         changeListeners.add(changeListener);
@@ -312,21 +305,18 @@ public class Document {
         changeListeners.remove(changeListener);
     }
 
-
     /**
      * A delegate that can be used to update a Document.
      */
     @InterfaceAudience.Public
-    public static interface DocumentUpdater {
-
+    public interface DocumentUpdater {
         /**
          * Document update delegate
          *
          * @param newRevision the unsaved revision about to be saved
          * @return True if the UnsavedRevision should be saved, otherwise false.
          */
-        public boolean update(UnsavedRevision newRevision);
-
+        boolean update(UnsavedRevision newRevision);
     }
 
     /**
@@ -361,27 +351,11 @@ public class Document {
     }
 
     /**
-     * Get the document's abbreviated ID
-     *
      * @exclude
      */
     @InterfaceAudience.Private
-    public String getAbbreviatedId() {
-        String abbreviated = documentId;
-        if (documentId.length() > 10) {
-            String firstFourChars = documentId.substring(0, 4);
-            String lastFourChars = documentId.substring(abbreviated.length() - 4);
-            return String.format("%s..%s", firstFourChars, lastFourChars);
-        }
-        return documentId;
-    }
-
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    protected List<SavedRevision> getLeafRevisions(boolean includeDeleted) throws CouchbaseLiteException {
-
+    protected List<SavedRevision> getLeafRevisions(boolean includeDeleted)
+            throws CouchbaseLiteException {
         List<SavedRevision> result = new ArrayList<SavedRevision>();
         RevisionList revs = database.getStore().getAllRevisions(documentId, true);
         if (revs != null) {
@@ -401,39 +375,40 @@ public class Document {
      * @exclude
      */
     @InterfaceAudience.Private
-    protected SavedRevision putProperties(Map<String, Object> properties, String prevID, boolean allowConflict) throws CouchbaseLiteException {
+    protected SavedRevision putProperties(Map<String, Object> properties,
+                                          String prevID,
+                                          boolean allowConflict)
+            throws CouchbaseLiteException {
         String newId = null;
         if (properties != null && properties.containsKey("_id")) {
             newId = (String) properties.get("_id");
         }
 
-        if (newId != null && !newId.equalsIgnoreCase(getId())) {
-            Log.w(Database.TAG, "Trying to put wrong _id to this: %s properties: %s", this, properties);
-        }
+        if (newId != null && !newId.equalsIgnoreCase(getId()))
+            Log.w(Database.TAG, "Trying to put wrong _id to this: %s properties: %s",
+                    this, properties);
 
         // Process _attachments dict, converting CBLAttachments to dicts:
         Map<String, Object> attachments = null;
-        if (properties != null && properties.containsKey("_attachments")) {
+        if (properties != null && properties.containsKey("_attachments"))
             attachments = (Map<String, Object>) properties.get("_attachments");
-        }
         if (attachments != null && attachments.size() > 0) {
-            Map<String, Object> updatedAttachments = Attachment.installAttachmentBodies(attachments, database);
+            Map<String, Object> updatedAttachments =
+                    Attachment.installAttachmentBodies(attachments, database);
             properties.put("_attachments", updatedAttachments);
         }
 
         boolean hasTrueDeletedProperty = false;
-        if (properties != null) {
-            hasTrueDeletedProperty = properties.get("_deleted") != null && ((Boolean) properties.get("_deleted")).booleanValue();
-        }
+        if (properties != null)
+            hasTrueDeletedProperty = properties.get("_deleted") != null &&
+                    ((Boolean) properties.get("_deleted")).booleanValue();
         boolean deleted = (properties == null) || hasTrueDeletedProperty;
         RevisionInternal rev = new RevisionInternal(documentId, null, deleted);
-        if (properties != null) {
+        if (properties != null)
             rev.setProperties(properties);
-        }
         RevisionInternal newRev = database.putRevision(rev, prevID, allowConflict);
-        if (newRev == null) {
+        if (newRev == null)
             return null;
-        }
         return new SavedRevision(this, newRev);
     }
 
@@ -444,7 +419,8 @@ public class Document {
     protected SavedRevision getRevisionFromRev(RevisionInternal internalRevision) {
         if (internalRevision == null) {
             return null;
-        } else if (currentRevision != null && internalRevision.getRevID().equals(currentRevision.getId())) {
+        } else if (currentRevision != null &&
+                internalRevision.getRevID().equals(currentRevision.getId())) {
             return currentRevision;
         } else {
             return new SavedRevision(this, internalRevision);
