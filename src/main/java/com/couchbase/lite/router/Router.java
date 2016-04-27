@@ -2198,25 +2198,38 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return update(_db, docID, null, true);
     }
 
+    /**
+     * @param contentStream if null, delete attachment. if not null, update attachment
+     */
     private Status updateAttachment(String attachment,
                                     String docID,
                                     InputStream contentStream)
             throws CouchbaseLiteException {
         Status status = new Status(Status.OK);
         String revID = getQuery("rev");
-        if (revID == null) {
+        if (revID == null)
             revID = getRevIDFromIfMatchHeader();
-        }
 
-        BlobStoreWriter body = new BlobStoreWriter(db.getAttachmentStore());
-        ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
+        if (revID == null || revID.length() == 0)
+            throw new CouchbaseLiteException(Status.BAD_REQUEST);
 
-        try {
-            StreamUtils.copyStream(contentStream, dataStream);
-            body.appendData(dataStream.toByteArray());
-            body.finish();
-        } catch (Exception e) {
-            throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
+        BlobStoreWriter body = null;
+        if (contentStream != null) {
+            body = new BlobStoreWriter(db.getAttachmentStore());
+            ByteArrayOutputStream dataStream = new ByteArrayOutputStream();
+            try {
+                StreamUtils.copyStream(contentStream, dataStream);
+                body.appendData(dataStream.toByteArray());
+                body.finish();
+            } catch (Exception e) {
+                throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
+            } finally {
+                try {
+                    dataStream.close();
+                } catch (IOException e) {
+                    throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
+                }
+            }
         }
 
         // updateAttachment uses transaction internally, not necessary to be synchronized
