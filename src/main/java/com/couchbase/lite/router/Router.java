@@ -15,6 +15,7 @@ import com.couchbase.lite.QueryOptions;
 import com.couchbase.lite.QueryRow;
 import com.couchbase.lite.Reducer;
 import com.couchbase.lite.ReplicationFilter;
+import com.couchbase.lite.Revision;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
@@ -178,6 +179,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
+    private List parseJSONRevArrayQuery(String param) {
+        Object obj = getJSONQuery(param);
+        if (obj == null) return null;
+        if (obj instanceof List)
+            return (List) obj;
+        return null;
+    }
+
     private Object getJSONQuery(String param) {
         String value = getQuery(param);
         if (value == null) {
@@ -301,6 +310,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             return accept;
         }
         return null;
+    }
+
+    private boolean explicitlyAcceptsType(String mimeType) {
+        String accept = getRequestHeaderValue("Accept");
+        return accept != null && accept.indexOf(mimeType) >= 0;
     }
 
     private Status openDB() {
@@ -1808,16 +1822,20 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             boolean isLocalDoc = docID.startsWith("_local");
             EnumSet<TDContentOptions> options = getContentOptions();
             String openRevsParam = getQuery("open_revs");
+            boolean mustSendJSON = explicitlyAcceptsType("application/json");
             if (openRevsParam == null || isLocalDoc) {
                 // Regular GET:
                 String revID = getQuery("rev");  // often null
-                RevisionInternal rev = null;
+                RevisionInternal rev;
+                boolean includeAttachments = false;
+                boolean sendMultipart = false; // TODO: Router does not support multi-part now
                 if (isLocalDoc) {
                     // query only -> not required synchronized
                     rev = db.getLocalDocument(docID, revID);
                 } else {
-                    boolean includeAttachments = options.contains(TDContentOptions.TDIncludeAttachments);
+                    includeAttachments = options.contains(TDContentOptions.TDIncludeAttachments);
                     if (includeAttachments) {
+                        //sendMultipart = !mustSendJSON;
                         options.remove(TDContentOptions.TDIncludeAttachments);
                     }
                     // query only -> not required synchronized
@@ -1825,15 +1843,28 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     if (rev != null) {
                         rev = applyOptionsToRevision(options, rev);
                     }
-                    if (rev == null) {
-
-                    }
                 }
 
                 if (rev == null)
                     return new Status(Status.NOT_FOUND);
                 if (cacheWithEtag(rev.getRevID()))
                     return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
+
+                if(!isLocalDoc && includeAttachments){
+                    int minRevPos = 1;
+                    List<String> attsSince = parseJSONRevArrayQuery(getQuery("atts_since"));
+                    String ancestorID = db.getStore().findCommonAncestorOf(rev, attsSince);
+                    if(ancestorID!=null)
+                        minRevPos = Revision.generationFromRevID(ancestorID) + 1;
+                    RevisionInternal expandedRev = rev.copy();
+                    Status status = new Status(Status.OK);
+                    if (!db.expandAttachments(expandedRev, minRevPos, sendMultipart,
+                            !getBooleanQuery("att_encoding_info"), status))
+                        return status;
+                    rev = expandedRev;
+                }
+
+                // TODO: Needs to support multi-part
 
                 connection.setResponseBody(rev.getBody());
             } else {

@@ -971,6 +971,24 @@ public class SQLiteStore implements Store, EncryptableStore {
         return revIDs;
     }
 
+    /**
+     * Returns the most recent member of revIDs that appears in rev's ancestry.
+     */
+    @Override
+    public String findCommonAncestorOf(RevisionInternal rev, List<String> revIDs) {
+        if (revIDs == null || revIDs.size() == 0)
+            return null;
+        long docNumericID = getDocNumericID(rev.getDocID());
+        if (docNumericID <= 0)
+            return null;
+        String quotedRevIds = TextUtils.joinQuoted(revIDs);
+        String sql = String.format("SELECT revid FROM revs " +
+                "WHERE doc_id=? and revid in (%s) and revid <= ? " +
+                "ORDER BY revid DESC LIMIT 1", quotedRevIds);
+        String[] args = {Long.toString(docNumericID), rev.getRevID()};
+        return SQLiteUtils.stringForQuery(storageEngine, sql, args);
+    }
+
     @Override
     public int findMissingRevisions(RevisionList touchRevs) throws SQLException {
         int numRevisionsRemoved = 0;
