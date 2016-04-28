@@ -643,10 +643,10 @@ public class ChangeTracker implements Runnable {
 
     public Map<String, Object> changesFeedPOSTBodyMap() {
         Object since = lastSequenceID;
-        if (lastSequenceID != null && lastSequenceID instanceof String){
+        if (lastSequenceID != null && lastSequenceID instanceof String) {
             try {
-                Long value = Long.valueOf((String)lastSequenceID);
-                if(value.longValue() >= 0)
+                Long value = Long.valueOf((String) lastSequenceID);
+                if (value.longValue() >= 0)
                     since = value;
             } catch (NumberFormatException e) {
                 // ignore
@@ -665,12 +665,12 @@ public class ChangeTracker implements Runnable {
         post.put("style", includeConflicts ? "all_docs" : null);
         post.put("active_only", activeOnly && !caughtUp ? true : null);
         post.put("since", since);
-        post.put("limit", limit > 0?limit:null);
-        // TODO: {@"accept_encoding", @"gzip"}
-        if (filterName != null) {
+        if (filterName != null)
             post.put("filter", filterName);
+        post.put("limit", limit > 0 ? limit : null);
+        // TODO: {@"accept_encoding", @"gzip"}
+        if (filterName != null && filterParams != null)
             post.putAll(filterParams);
-        }
         return post;
     }
 
