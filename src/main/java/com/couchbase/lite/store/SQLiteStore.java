@@ -289,6 +289,9 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
 
             if (isNew)
+                setInfo("pruned", "true"); // See -compact: for explanation
+
+            if (isNew)
                 optimizeSQLIndexes(); // runs ANALYZE query
 
             // successfully updated storageEngine schema:
@@ -634,8 +637,14 @@ public class SQLiteStore implements Store, EncryptableStore {
             boolean shouldCommit = false;
             beginTransaction();
             try {
-                // Start off by pruning each revision tree's depth:
-                pruneRevsToMaxDepth(maxRevTreeDepth);
+                if (getInfo("pruned") == null) {
+                    // Bulk pruning is no longer needed, because revisions are pruned incrementally as new
+                    // ones are added. But databases from before this feature was added (1.3) may have documents
+                    // that need pruning. So we'll do a one-time bulk prune, then set a flag indicating that
+                    // it isn't needed anymore.
+                    pruneRevsToMaxDepth(maxRevTreeDepth);
+                    setInfo("pruned", "true");
+                }
 
                 // Remove the JSON of non-current revisions, which is most of the space.
                 try {
@@ -1534,6 +1543,14 @@ public class SQLiteStore implements Store, EncryptableStore {
                 return newRev;
             }
 
+            // Delete the deepest revs in the tree to enforce the maxRevTreeDepth:
+            int minGenToKeep = newRev.getGeneration() - maxRevTreeDepth + 1;
+            if (minGenToKeep > 1) {
+                int pruned = pruneDocument(docNumericID, minGenToKeep);
+                if (pruned > 0)
+                    Log.v(TAG, "Pruned %d old revisions of doc '%s'", pruned, docID);
+            }
+
             // Figure out what the new winning rev ID is:
             winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), newRev);
 
@@ -1690,6 +1707,27 @@ public class SQLiteStore implements Store, EncryptableStore {
                         inConflict.set(true);  // local parent wasn't a leaf, ergo we just created a branch
                 } catch (SQLException e) {
                     throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                }
+            }
+
+            // Delete the deepest revs in the tree to enforce the maxRevTreeDepth:
+            int gen = inRev.getGeneration();
+            if (gen > maxRevTreeDepth) {
+                int minGen = gen;
+                int maxGen = gen;
+                Iterator<String> itr = localRevs.keySet().iterator();
+                while (itr.hasNext()) {
+                    String key = itr.next();
+                    RevisionInternal r = localRevs.get(key);
+                    int generation = r.getGeneration();
+                    minGen = Math.min(minGen, generation);
+                    maxGen = Math.max(maxGen, generation);
+                    int minGenToKeep = maxGen - maxRevTreeDepth + 1;
+                    if (minGen < minGenToKeep) {
+                        int pruned = pruneDocument(docNumericID, minGenToKeep);
+                        if (pruned > 0)
+                            Log.v(TAG, "Pruned %d old revisions of doc '%s'", pruned, docID);
+                    }
                 }
             }
 
@@ -2265,13 +2303,8 @@ public class SQLiteStore implements Store, EncryptableStore {
         boolean shouldCommit = false;
         try {
             beginTransaction();
-            for (Long docNumericID : toPrune.keySet()) {
-                String minIDToKeep = String.format("%d-", toPrune.get(docNumericID).intValue() + 1);
-                String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
-                int rowsDeleted = storageEngine.delete(
-                        "revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
-                outPruned += rowsDeleted;
-            }
+            for (Long docNumericID : toPrune.keySet())
+                outPruned += pruneDocument(docNumericID, toPrune.get(docNumericID).intValue() + 1);
             shouldCommit = true;
         } catch (Throwable e) {
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
@@ -2279,6 +2312,13 @@ public class SQLiteStore implements Store, EncryptableStore {
             endTransaction(shouldCommit);
         }
         return outPruned;
+    }
+
+    // Returns the number of revisions pruned.
+    protected int pruneDocument(long docNumericID, int minGenToKeep) {
+        String minIDToKeep = String.format("%d-", minGenToKeep);
+        String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
+        return storageEngine.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
     }
 
     protected void runStatements(String statements) throws SQLException {
