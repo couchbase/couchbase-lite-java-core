@@ -66,9 +66,9 @@ public interface Store {
      * Whether the database storage should automatically (periodically) be compacted.
      * This will be set soon after the open() method call.
      */
-    //void setAutoCompact(boolean value);
+    void setAutoCompact(boolean value);
 
-    //boolean getAutoCompact();
+    boolean getAutoCompact();
 
     ///////////////////////////////////////////////////////////////////////////
     // DATABASE ATTRIBUTES & OPERATIONS:
