@@ -291,7 +291,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             if (isNew)
                 setInfo("pruned", "true"); // See -compact: for explanation
 
-            if (isNew)
+            if (!isNew)
                 optimizeSQLIndexes(); // runs ANALYZE query
 
             // successfully updated storageEngine schema:
