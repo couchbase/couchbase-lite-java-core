@@ -84,6 +84,8 @@ public class Database implements StoreDelegate {
     // Length that constitutes a 'big' attachment
     public static int kBigAttachmentLength = (2 * 1024);
 
+    private static boolean autoCompact = true;
+
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     public static int DEFAULT_MAX_REVS = 20;
 
@@ -1012,6 +1014,11 @@ public class Database implements StoreDelegate {
     ///////////////////////////////////////////////////////////////////////////
 
     @InterfaceAudience.Private
+    public static void setAutoCompact(boolean autoCompact) {
+        Database.autoCompact = autoCompact;
+    }
+
+    @InterfaceAudience.Private
     public interface DatabaseListener {
         void databaseClosing();
     }
@@ -1132,6 +1139,7 @@ public class Database implements StoreDelegate {
         }
 
         store = primaryStore;
+        store.setAutoCompact(autoCompact);
 
         // Set encryption key:
         SymmetricKey encryptionKey = null;

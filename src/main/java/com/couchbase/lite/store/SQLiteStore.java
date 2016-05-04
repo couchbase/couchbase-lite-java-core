@@ -132,6 +132,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     private TransactionLevel transactionLevel;
     private StoreDelegate delegate;
     private int maxRevTreeDepth;
+    private boolean autoCompact;
     private SymmetricKey encryptionKey;
     private final Object compactLock = new Object(); // lock for compact() method
 
@@ -350,6 +351,16 @@ public class SQLiteStore implements Store, EncryptableStore {
     @Override
     public int getMaxRevTreeDepth() {
         return maxRevTreeDepth;
+    }
+
+    @Override
+    public void setAutoCompact(boolean value) {
+        autoCompact = value;
+    }
+
+    @Override
+    public boolean getAutoCompact() {
+        return autoCompact;
     }
 
     ///////////////////////////////////////////////////////////////////////////
