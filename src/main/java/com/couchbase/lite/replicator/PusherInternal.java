@@ -383,6 +383,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                 continue;
                             }
 
+                            if (loadedRev.getPropertyForKey("_removed") != null &&
+                                    ((Boolean) loadedRev.getPropertyForKey("_removed")).booleanValue()) {
+                                // Filter out _removed revision:
+                                removePending(rev);
+                                continue;
+                            }
+
                             RevisionInternal populatedRev = transformRevision(loadedRev);
 
                             List<String> possibleAncestors = (List<String>) revResults.get("possible_ancestors");
