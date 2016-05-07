@@ -591,7 +591,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
         } catch (Exception e) {
             String errorMessage = "Router unable to route request to " + message;
-            Log.e(TAG, errorMessage, e);
+            Log.w(TAG, errorMessage, e);
             Map<String, Object> result = new HashMap<String, Object>();
             if (e.getCause() != null && e.getCause() instanceof CouchbaseLiteException) {
                 status = ((CouchbaseLiteException) e.getCause()).getCBLStatus();
@@ -704,7 +704,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (accept != null && !"*/*".equals(accept)) {
             String responseType = connection.getBaseContentType();
             if (responseType != null && responseType.indexOf(accept) < 0) {
-                Log.e(TAG, "Error 406: Can't satisfy request Accept: %s", accept);
+                Log.w(TAG, "Error 406: Can't satisfy request Accept: %s", accept);
                 status = new Status(Status.NOT_ACCEPTABLE);
             }
         }
@@ -1022,7 +1022,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (replicator.getLastError() != null) {
             String msg = String.format("Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
                     replicator.getLastError(), replicator, source, target);
-            Log.e(TAG, msg);
+            Log.w(TAG, msg);
             Throwable error = replicator.getLastError();
             int statusCode = 400;
             if (error instanceof HttpResponseException) {

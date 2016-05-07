@@ -2,15 +2,16 @@ package com.couchbase.lite.support;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.auth.Authenticator;
+import com.couchbase.lite.util.CancellableRunnable;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
 import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 
 import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpUriRequest;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
@@ -33,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  */
 public class RemoteRequestRetry<T> implements CustomFuture<T> {
-
     public static int MAX_RETRIES = 3;  // total number of attempts = 4 (1 initial + MAX_RETRIES)
     public static int RETRY_DELAY_MS = 4 * 1000; // 4 sec
 
@@ -50,21 +50,19 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
     private int retryCount;
     private Database db;
-    protected HttpUriRequest request;
 
     private AtomicBoolean completed = new AtomicBoolean(false);
     private HttpResponse requestHttpResponse;
     private Object requestResult;
     private Throwable requestThrowable;
     private BlockingQueue<Future> pendingRequests;
+    Map<Future, CancellableRunnable> runnables = new HashMap<Future, CancellableRunnable>();
+    private boolean cancelable = true;
 
     // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
     private boolean dontLog404;
-
     protected Map<String, Object> requestHeaders;
-
     private RemoteRequestType requestType;
-
 
     // for Retry task
     ScheduledFuture retryFuture = null;
@@ -75,7 +73,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
     public void setQueue(Queue queue) {
         this.queue = queue;
     }
-
 
     /**
      * The kind of RemoteRequest that will be created on each retry attempt
@@ -92,25 +89,24 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                               HttpClientFactory clientFactory,
                               String method,
                               URL url,
+                              boolean cancelable,
                               Object body,
                               Database db,
                               Map<String, Object> requestHeaders,
                               RemoteRequestCompletionBlock onCompletionCaller) {
-
         this.requestType = requestType;
         this.requestExecutor = requestExecutor;
         this.clientFactory = clientFactory;
         this.method = method;
         this.url = url;
+        this.cancelable = cancelable;
         this.body = body;
         this.onCompletionCaller = onCompletionCaller;
         this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
         this.db = db;
         this.pendingRequests = new LinkedBlockingQueue<Future>();
-
         validateParameters();
-
         Log.v(Log.TAG_SYNC, "%s: RemoteRequestRetry created, url: %s", this, url);
     }
 
@@ -123,25 +119,23 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
      */
     public CustomFuture submit(boolean gzip) {
         RemoteRequest request = generateRemoteRequest();
-        if (gzip) {
+        if (gzip)
             request.setCompressedRequest(true);
-        }
         synchronized (requestExecutor) {
             if (!requestExecutor.isShutdown()) {
                 Future future = requestExecutor.submit(request);
                 pendingRequests.add(future);
+                runnables.put(future, request);
             }
         }
         return this;
     }
 
     private RemoteRequest generateRemoteRequest() {
-
         requestHttpResponse = null;
         requestResult = null;
         requestThrowable = null;
         RemoteRequest request = null;
-
         switch (requestType) {
             case REMOTE_MULTIPART_REQUEST:
                 request = new RemoteMultipartRequest(
@@ -149,6 +143,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                         clientFactory,
                         method,
                         url,
+                        cancelable,
                         (MultipartEntity) body,
                         db,
                         requestHeaders,
@@ -160,6 +155,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                         clientFactory,
                         method,
                         url,
+                        cancelable,
                         body,
                         db,
                         requestHeaders,
@@ -171,6 +167,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                         clientFactory,
                         method,
                         url,
+                        cancelable,
                         body,
                         db,
                         requestHeaders,
@@ -178,15 +175,11 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                 );
                 break;
         }
-
         request.setDontLog404(dontLog404);
-
-        if (this.authenticator != null) {
+        if (this.authenticator != null)
             request.setAuthenticator(this.authenticator);
-        }
-        if (this.onPreCompletionCaller != null) {
+        if (this.onPreCompletionCaller != null)
             request.setOnPreCompletion(this.onPreCompletionCaller);
-        }
         return request;
     }
 
@@ -294,10 +287,21 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-        // If RemoteRequestRetry is canceled, make sure if retry future is also canceled.
-        if(retryFuture != null && !retryFuture.isCancelled()){
-            retryFuture.cancel(mayInterruptIfRunning);
+        if (cancelable) {
+            // cancel ongoing request
+            for (Future request : pendingRequests) {
+                if (!request.isCancelled())
+                    request.cancel(mayInterruptIfRunning);
+                CancellableRunnable runnable = runnables.get(request);
+                if (runnable != null)
+                    runnable.cancel();
+            }
         }
+
+        // If RemoteRequestRetry is canceled, make sure if retry future is also canceled.
+        if (retryFuture != null && !retryFuture.isCancelled())
+            retryFuture.cancel(mayInterruptIfRunning);
+
         return false;
     }
 

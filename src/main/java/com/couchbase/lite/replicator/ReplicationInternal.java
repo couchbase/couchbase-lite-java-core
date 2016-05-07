@@ -19,6 +19,7 @@ import com.couchbase.lite.support.CustomLinkedBlockingQueue;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.RemoteRequestRetry;
+import com.couchbase.lite.util.CancellableRunnable;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
@@ -72,13 +73,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
-
     public static final String CHANNELS_QUERY_PARAM = "channels";
-
     public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
 
     private static int lastSessionID = 0;
-
     public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
@@ -105,6 +103,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected CollectionUtils.Functor<RevisionInternal, RevisionInternal> revisionBodyTransformationBlock;
     protected String sessionID;
     protected BlockingQueue<Future> pendingFutures;
+    Map<Future, CancellableRunnable> runnables = new HashMap<Future, CancellableRunnable>();
     private boolean lastSequenceChanged = false;
     private boolean savingCheckpoint;
     private boolean overdueForCheckpointSave;
@@ -288,6 +287,14 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Close all resources associated with this replicator.
      */
     protected void close() {
+        // cancel pending futures
+        for (Future future : pendingFutures) {
+            future.cancel(false);
+            CancellableRunnable runnable = runnables.get(future);
+            if (runnable != null)
+                runnable.cancel();
+        }
+
         // shutdown ScheduledExecutorService. Without shutdown, cause thread leak
         if (remoteRequestExecutor != null && !remoteRequestExecutor.isShutdown()) {
             // Note: Time to wait is set 60 sec because RemoteRequest's socket timeout is set 60 seconds.
@@ -299,15 +306,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     protected void initAuthorizer() {
         // TODO: add this back in  .. See Replication constructor
-
     }
 
     protected void initBatcher() {
-
-        batcher = new Batcher<RevisionInternal>(workExecutor, INBOX_CAPACITY, PROCESSOR_DELAY, new BatchProcessor<RevisionInternal>() {
+        batcher = new Batcher<RevisionInternal>(workExecutor, INBOX_CAPACITY, PROCESSOR_DELAY,
+                new BatchProcessor<RevisionInternal>() {
             @Override
             public void process(List<RevisionInternal> inbox) {
-
                 try {
                     Log.v(Log.TAG_SYNC, "*** %s: BEGIN processInbox (%d sequences)", this, inbox.size());
                     processInbox(new RevisionList(inbox));
@@ -318,8 +323,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 }
             }
         });
-
-
     }
 
     protected void startNetworkReachabilityManager() {
@@ -345,25 +348,27 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
                     EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
             Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
-            remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize, new ThreadFactory() {
-                private int counter = 0;
+            remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize,
+                    new ThreadFactory() {
+                        private int counter = 0;
 
-                @Override
-                public Thread newThread(Runnable r) {
-                    String threadName = "CBLRequestWorker";
-                    try {
-                        String maskedRemote = remote.toExternalForm();
-                        maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
-                        String type = isPull() ? "pull" : "push";
-                        String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                        threadName = String.format("CBLRequestWorker-%s-%s-%s-%d",
-                                maskedRemote, type, replicationIdentifier, counter++);
-                    } catch (Exception e) {
-                        Log.e(Log.TAG_SYNC, "Error creating thread name", e);
-                    }
-                    return new Thread(r, threadName);
-                }
-            });
+                        @Override
+                        public Thread newThread(Runnable r) {
+                            String threadName = "CBLRequestWorker";
+                            try {
+                                String maskedRemote = remote.toExternalForm();
+                                maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                                String type = isPull() ? "pull" : "push";
+                                String replicationIdentifier =
+                                        Utils.shortenString(remoteCheckpointDocID(), 5);
+                                threadName = String.format("CBLRequestWorker-%s-%s-%s-%d",
+                                        maskedRemote, type, replicationIdentifier, counter++);
+                            } catch (Exception e) {
+                                Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                            }
+                            return new Thread(r, threadName);
+                        }
+                    });
         }
     }
 
@@ -379,12 +384,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void checkSessionAtPath(final String sessionPath) {
-
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable err) {
-
                 try {
                     if (err != null) {
                         // If not at /db/_session, try CouchDB location /_session
@@ -395,12 +398,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                             checkSessionAtPath("_session");
                             return;
                         }
-                        Log.e(Log.TAG_SYNC, this + ": Session check failed", err);
+                        Log.w(Log.TAG_SYNC, this + ": Session check failed", err);
                         setError(err);
-
                     } else {
                         Map<String, Object> response = (Map<String, Object>) result;
-                        Log.e(Log.TAG_SYNC, "%s checkSessionAtPath() response: %s", this, response);
+                        Log.w(Log.TAG_SYNC, "%s checkSessionAtPath() response: %s", this, response);
                         Map<String, Object> userCtx = (Map<String, Object>) response.get("userCtx");
                         String username = (String) userCtx.get("name");
                         if (username != null && username.length() > 0) {
@@ -411,11 +413,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                             login();
                         }
                     }
-
                 } catch (Exception e) {
                     Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", this, e);
                 }
-
             }
 
         });
@@ -468,7 +468,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         //    return;
 
         if (throwable != this.error) {
-            Log.e(Log.TAG_SYNC, "%s: Progress: set error = %s", this, throwable);
+            Log.w(Log.TAG_SYNC, "%s: Progress: set error = %s", this, throwable);
             parentReplication.setLastError(throwable);
             this.error = throwable;
 
@@ -523,21 +523,35 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public CustomFuture sendAsyncRequest(String method, String relativePath, Object body,
-                                   RemoteRequestCompletionBlock onCompletion) {
-        return sendAsyncRequest(method, relativePath, body, false, onCompletion);
+    public CustomFuture sendAsyncRequest(String method, String relativePath,
+                                         Object body,
+                                         RemoteRequestCompletionBlock onCompletion) {
+        return sendAsyncRequest(method, relativePath, true, body, false, onCompletion);
     }
 
+    @InterfaceAudience.Private
+    public CustomFuture sendAsyncRequest(String method, String relativePath,
+                                         boolean cancelable, Object body,
+                                         RemoteRequestCompletionBlock onCompletion) {
+        return sendAsyncRequest(method, relativePath, cancelable, body, false, onCompletion);
+    }
+
+    @InterfaceAudience.Private
+    public CustomFuture sendAsyncRequest(String method, String relativePath,
+                                         Object body, boolean dontLog404,
+                                         RemoteRequestCompletionBlock onCompletion) {
+        return sendAsyncRequest(method, relativePath, true, body, dontLog404, onCompletion);
+    }
     /**
      * @exclude
      */
     @InterfaceAudience.Private
-    public CustomFuture sendAsyncRequest(String method, String relativePath, Object body, boolean dontLog404,
-                                   RemoteRequestCompletionBlock onCompletion) {
+    public CustomFuture sendAsyncRequest(String method, String relativePath,
+                                         boolean cancelable, Object body, boolean dontLog404,
+                                         RemoteRequestCompletionBlock onCompletion) {
         try {
-            String urlStr = buildRelativeURLString(relativePath);
-            URL url = new URL(urlStr);
-            return sendAsyncRequest(method, url, body, dontLog404, onCompletion);
+            URL url = new URL(buildRelativeURLString(relativePath));
+            return sendAsyncRequest(method, url, cancelable, body, dontLog404, onCompletion);
         } catch (MalformedURLException e) {
             Log.e(Log.TAG_SYNC, "Malformed URL for async request", e);
         }
@@ -548,7 +562,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public CustomFuture sendAsyncRequest(String method, URL url, Object body, boolean dontLog404,
+    public CustomFuture sendAsyncRequest(String method,
+                                         URL url,
+                                         boolean cancelable,
+                                         Object body,
+                                         boolean dontLog404,
                                    final RemoteRequestCompletionBlock onCompletion) {
         Log.d(Log.TAG_SYNC, "[sendAsyncRequest()] " + method + " => " + url);
         RemoteRequestRetry request = new RemoteRequestRetry(
@@ -558,14 +576,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 clientFactory,
                 method,
                 url,
+                cancelable,
                 body,
                 getLocalDatabase(),
                 getHeaders(),
                 onCompletion
         );
-
         request.setDontLog404(dontLog404);
-
         request.setAuthenticator(getAuthenticator());
         request.setOnPreCompletionCaller(new RemoteRequestCompletionBlock() {
             @Override
@@ -580,8 +597,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 }
             }
         });
-
-
         return request.submit(canSendCompressedRequests());
     }
 
@@ -607,6 +622,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 clientFactory,
                 method,
                 url,
+                true,
                 multiPartEntity,
                 getLocalDatabase(),
                 getHeaders(),
@@ -637,6 +653,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     clientFactory,
                     method,
                     url,
+                    true,
                     body,
                     getLocalDatabase(),
                     getHeaders(),
@@ -723,7 +740,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         final String checkpointID = remoteCheckpointDocID;
         Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s",
                 this, checkpointID, body);
-        Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, body, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, false, body, new RemoteRequestCompletionBlock() {
 
             @Override
             public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
@@ -826,7 +843,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             }
         });
         pendingFutures.add(future);
-
     }
 
     @InterfaceAudience.Private
@@ -1094,6 +1110,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             Future future = pendingFutures.poll();
             if (future != null && !future.isCancelled() && !future.isDone()) {
                 future.cancel(true);
+                CancellableRunnable runnable = runnables.get(future);
+                if (runnable != null) {
+                    runnable.cancel();
+                    runnables.remove(future);
+                }
             }
         }
     }
@@ -1762,13 +1783,16 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         while ((batcher != null && !batcher.isEmpty()) ||
                 (pendingFutures != null && pendingFutures.size() > 0)) {
             // Wait for batcher (inbox) completed
-            waitBatcherCompleted(batcher);
+            waitBatcherCompleted();
 
             // wait for pending featurs completed
-            waitPendingFuturesCompleted(pendingFutures);
+            waitPendingFuturesCompleted();
         }
     }
 
+    protected void waitBatcherCompleted(){
+        waitBatcherCompleted(batcher);
+    }
     protected static void waitBatcherCompleted(Batcher<RevisionInternal> b) {
         // Wait for batcher completed
         if (b != null) {
@@ -1781,16 +1805,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
     }
 
-    protected static void waitPendingFuturesCompleted(BlockingQueue<Future> futures) {
+    protected void waitPendingFuturesCompleted() {
         try {
-            while (!futures.isEmpty()) {
-                Future future = futures.take();
+            while (!pendingFutures.isEmpty()) {
+                Future future = pendingFutures.take();
                 try {
                     future.get();
                 } catch (InterruptedException e) {
                     Log.e(Log.TAG_SYNC, "InterruptedException in Future.get()", e);
                 } catch (ExecutionException e) {
                     Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
+                } finally {
+                    runnables.remove(future);
                 }
             }
         } catch (Exception e) {
