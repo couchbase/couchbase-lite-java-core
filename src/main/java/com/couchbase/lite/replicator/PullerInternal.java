@@ -36,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -82,10 +81,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public PullerInternal(Database db,
                           URL remote,
                           HttpClientFactory clientFactory,
-                          ScheduledExecutorService workExecutor,
                           Replication.Lifecycle lifecycle,
                           Replication parentReplication) {
-        super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
+        super(db, remote, clientFactory, lifecycle, parentReplication);
     }
 
     /**
@@ -93,7 +91,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     protected void beginReplicating() {
         Log.v(TAG, "submit startReplicating()");
-        workExecutor.submit(new Runnable() {
+        executor.submit(new Runnable() {
             @Override
             public void run() {
                 if (isRunning()) {
@@ -110,7 +108,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     private void initDownloadsToInsert() {
         if (downloadsToInsert == null) {
             int capacity = 200;
-            downloadsToInsert = new Batcher<RevisionInternal>(workExecutor,
+            downloadsToInsert = new Batcher<RevisionInternal>(executor,
                     capacity, INSERTION_BATCHER_DELAY, new BatchProcessor<RevisionInternal>() {
                 @Override
                 public void process(List<RevisionInternal> inbox) {
@@ -309,8 +307,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         final BulkDownloader dl;
         try {
-
-            dl = new BulkDownloader(workExecutor,
+            dl = new BulkDownloader(
                     clientFactory,
                     remote,
                     bulkRevs,
@@ -379,7 +376,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void putLocalDocument(final String docId, final Map<String, Object> localDoc) {
-        workExecutor.submit(new Runnable() {
+        executor.submit(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -392,7 +389,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private void pruneFailedDownload(final String docId) {
-        workExecutor.submit(new Runnable() {
+        executor.submit(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -818,9 +815,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public void changeTrackerStopped(ChangeTracker tracker) {
         // this callback will be on the changetracker thread, but we need
         // to do the work on the replicator thread.
-        synchronized (workExecutor) {
-            if (!workExecutor.isShutdown()) {
-                workExecutor.submit(new Runnable() {
+        synchronized (executor) {
+            if (!executor.isShutdown()) {
+                executor.submit(new Runnable() {
                     @Override
                     public void run() {
                         try {
@@ -861,7 +858,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                     parentReplication.setLastError(new Exception(msg));
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
                     Log.d(TAG, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);
-                    workExecutor.schedule(new Runnable() {
+                    executor.schedule(new Runnable() {
                         @Override
                         public void run() {
                             // the replication may have been stopped by the time this scheduled fires

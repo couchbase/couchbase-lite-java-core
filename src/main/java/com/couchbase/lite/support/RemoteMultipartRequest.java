@@ -10,16 +10,19 @@ import org.apache.http.client.methods.HttpUriRequest;
 
 import java.net.URL;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
 
 public class RemoteMultipartRequest extends RemoteRequest {
 
     private MultipartEntity multiPart = null;
 
-    public RemoteMultipartRequest(ScheduledExecutorService workExecutor,
-                                  HttpClientFactory clientFactory, String method, URL url,
-                                  MultipartEntity multiPart, Database db, Map<String, Object> requestHeaders, RemoteRequestCompletionBlock onCompletion) {
-        super(workExecutor, clientFactory, method, url, null, db, requestHeaders, onCompletion);
+    public RemoteMultipartRequest(HttpClientFactory clientFactory,
+                                  String method,
+                                  URL url,
+                                  MultipartEntity multiPart,
+                                  Database db,
+                                  Map<String, Object> requestHeaders,
+                                  RemoteRequestCompletionBlock onCompletion) {
+        super(clientFactory, method, url, null, db, requestHeaders, onCompletion);
         this.multiPart = multiPart;
     }
 

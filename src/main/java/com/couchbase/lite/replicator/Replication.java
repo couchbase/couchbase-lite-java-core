@@ -24,15 +24,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
  * The external facade for the Replication API
  */
-public class Replication implements ReplicationInternal.ChangeListener, NetworkReachabilityListener {
+public class Replication
+        implements ReplicationInternal.ChangeListener, NetworkReachabilityListener {
     /**
      * Enum to specify which direction this replication is going (eg, push vs pull)
      *
@@ -51,9 +49,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * @exclude
      */
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
-
     public static long DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN = 60; // 60 sec
-
     public static int DEFAULT_HEARTBEAT = 300; // 5min (300 sec)
 
     /**
@@ -73,7 +69,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     protected Database db;
     protected URL remote;
     protected HttpClientFactory clientFactory;
-    protected ScheduledExecutorService workExecutor;
     protected ReplicationInternal replicationInternal;
     protected Lifecycle lifecycle;
     private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
@@ -125,7 +120,6 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             props.put("source", db.getName());
             props.put("target", remote);
         }
-
         return props;
     }
 
@@ -135,18 +129,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      */
     @InterfaceAudience.Private
     public Replication(Database db, URL remote, Direction direction) {
-        this(
-                db,
-                remote,
-                direction,
-                db.getManager().getDefaultHttpClientFactory(),
-                Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        return new Thread(r, "CBLReplicationWorker");
-                    }
-                })
-        );
+        this(db, remote, direction, db.getManager().getDefaultHttpClientFactory());
     }
 
     /**
@@ -154,48 +137,29 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * @exclude
      */
     @InterfaceAudience.Private
-    public Replication(Database db, URL remote, Direction direction, HttpClientFactory clientFactory, ScheduledExecutorService workExecutor) {
-
+    public Replication(Database db, URL remote, Direction direction, HttpClientFactory factory) {
         this.db = db;
         this.remote = remote;
-        this.workExecutor = workExecutor;
         this.lifecycle = Lifecycle.ONESHOT;
         this.direction = direction;
         this.properties = new EnumMap<ReplicationField, Object>(ReplicationField.class);
-
-        setClientFactory(clientFactory);
-
+        setClientFactory(factory);
         initReplicationInternal();
     }
 
     private void initReplicationInternal() {
         switch (direction) {
             case PULL:
-                replicationInternal = new PullerInternal(
-                        this.db,
-                        this.remote,
-                        this.clientFactory,
-                        this.workExecutor,
-                        this.lifecycle,
-                        this
-                );
+                replicationInternal = new PullerInternal(db, remote, clientFactory, lifecycle, this);
                 break;
             case PUSH:
-                replicationInternal = new PusherInternal(
-                        this.db,
-                        this.remote,
-                        this.clientFactory,
-                        this.workExecutor,
-                        this.lifecycle,
-                        this
-                );
+                replicationInternal = new PusherInternal(db, remote, clientFactory, lifecycle, this);
                 break;
             default:
                 throw new RuntimeException(String.format("Unknown direction: %s", direction));
         }
 
         addProperties(replicationInternal);
-
         replicationInternal.addChangeListener(this);
     }
 
@@ -214,8 +178,9 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 // start a fresh internal replication
                 initReplicationInternal();
             } else {
-                String mesg = String.format("replicationInternal in unexpected state: %s, ignoring start()", replicationInternal.stateMachine.getState());
-                Log.w(Log.TAG_SYNC, mesg);
+                Log.w(Log.TAG_SYNC,
+                        String.format("replicationInternal in unexpected state: %s, ignoring start()",
+                        replicationInternal.stateMachine.getState()));
             }
         }
 
@@ -248,7 +213,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
             ChangeListener listener = new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent event) {
-                    if (event.getTransition() != null && event.getTransition().getDestination() == ReplicationState.STOPPED) {
+                    if (event.getTransition() != null &&
+                            event.getTransition().getDestination() == ReplicationState.STOPPED) {
                         stopped.countDown();
                     }
                 }
@@ -477,7 +443,7 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
                 return pendingDocIDs;
 
             final CountDownLatch latch = new CountDownLatch(1);
-            this.workExecutor.submit(new Runnable() {
+            db.getManager().getWorkExecutor().submit(new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -630,10 +596,10 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
     /**
      * Set the HTTP client factory if one was passed in, or use the default
      * set in the manager if available.
-     * @param clientFactory
+     * @param factory
      */
     @InterfaceAudience.Private
-    protected void setClientFactory(HttpClientFactory clientFactory) {
+    protected void setClientFactory(HttpClientFactory factory) {
         Manager manager = null;
         if (this.db != null) {
             manager = this.db.getManager();
@@ -642,8 +608,8 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
         if (manager != null) {
             managerClientFactory = manager.getDefaultHttpClientFactory();
         }
-        if (clientFactory != null) {
-            this.clientFactory = clientFactory;
+        if (factory != null) {
+            this.clientFactory = factory;
         } else {
             if (managerClientFactory != null) {
                 this.clientFactory = managerClientFactory;
@@ -705,10 +671,12 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
      * @param maxAge The maxAge, in milliseconds, that this cookie should be valid for.
      * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
-     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP,
+     *                 or HTTPS, requests thus restricting access from other, non-HTTP APIs.
      */
     @InterfaceAudience.Public
-    public void setCookie(String name, String value, String path, long maxAge, boolean secure, boolean httpOnly) {
+    public void setCookie(String name, String value, String path,
+                          long maxAge, boolean secure, boolean httpOnly) {
         replicationInternal.setCookie(name, value, path, maxAge, secure, httpOnly);
     }
 
@@ -720,10 +688,12 @@ public class Replication implements ReplicationInternal.ChangeListener, NetworkR
      * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
      * @param expirationDate The expiration date of the cookie.
      * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
-     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP, or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP,
+     *                 or HTTPS, requests thus restricting access from other, non-HTTP APIs.
      */
     @InterfaceAudience.Public
-    public void setCookie(String name, String value, String path, Date expirationDate, boolean secure, boolean httpOnly) {
+    public void setCookie(String name, String value, String path,
+                          Date expirationDate, boolean secure, boolean httpOnly) {
         replicationInternal.setCookie(name, value, path, expirationDate, secure, httpOnly);
     }
 

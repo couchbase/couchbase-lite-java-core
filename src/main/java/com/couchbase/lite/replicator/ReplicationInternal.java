@@ -63,23 +63,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @InterfaceAudience.Private
 abstract class ReplicationInternal implements BlockingQueueListener {
-
     private static final String TAG = Log.TAG_SYNC;
+    public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
+    public static final String CHANNELS_QUERY_PARAM = "channels";
+    public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
+
+    private static int lastSessionID = 0;
+    public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle {
         SYNC, ASYNC
     }
-
-    public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
-
-    public static final String CHANNELS_QUERY_PARAM = "channels";
-
-    public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
-
-    private static int lastSessionID = 0;
-
-    public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
     protected Replication parentReplication;
     protected Database db;
@@ -110,8 +105,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private boolean overdueForCheckpointSave;
 
     // the code assumes this is a _single threaded_ work executor.
-    // if it's not, the behavior will be buggy.  I don't see a way to assert this in the code.
-    protected ScheduledExecutorService workExecutor;
+    protected ScheduledExecutorService executor;
 
     protected StateMachine<ReplicationState, ReplicationTrigger> stateMachine;
     private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
@@ -129,7 +123,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     ReplicationInternal(Database db, URL remote,
                         HttpClientFactory clientFactory,
-                        ScheduledExecutorService workExecutor,
                         Replication.Lifecycle lifecycle,
                         Replication parentReplication) {
 
@@ -139,7 +132,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.db = db;
         this.remote = remote;
         this.clientFactory = clientFactory;
-        this.workExecutor = workExecutor;
         this.lifecycle = lifecycle;
         this.requestHeaders = new HashMap<String, Object>();
 
@@ -159,7 +151,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
         pendingFutures = new CustomLinkedBlockingQueue<Future>(this);
 
+        initializeReplicationExecutor();
+
         initializeStateMachine();
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        if (executor != null && !executor.isShutdown()) {
+            Utils.shutdownAndAwaitTermination(executor);
+            executor = null;
+        }
+        super.finalize();
     }
 
     /**
@@ -196,9 +199,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected void fireTrigger(final ReplicationTrigger trigger) {
         Log.d(Log.TAG_SYNC, "%s [fireTrigger()] => " + trigger, this);
         // All state machine triggers need to happen on the replicator thread
-        synchronized (workExecutor) {
-            if (!workExecutor.isShutdown()) {
-                workExecutor.submit(new Runnable() {
+        synchronized (executor) {
+            if (!executor.isShutdown()) {
+                executor.submit(new Runnable() {
                     @Override
                     public void run() {
                         try {
@@ -303,8 +306,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     protected void initBatcher() {
-
-        batcher = new Batcher<RevisionInternal>(workExecutor, INBOX_CAPACITY, PROCESSOR_DELAY, new BatchProcessor<RevisionInternal>() {
+        batcher = new Batcher<RevisionInternal>(executor, INBOX_CAPACITY, PROCESSOR_DELAY, new BatchProcessor<RevisionInternal>() {
             @Override
             public void process(List<RevisionInternal> inbox) {
 
@@ -318,8 +320,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 }
             }
         });
-
-
     }
 
     protected void startNetworkReachabilityManager() {
@@ -339,6 +339,28 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     public abstract boolean shouldCreateTarget();
 
     public abstract void setCreateTarget(boolean createTarget);
+
+    protected void initializeReplicationExecutor() {
+        if (executor == null) {
+            executor = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    String threadName = "CBLReplicationExecutor";
+                    try {
+                        String maskedRemote = ReplicationInternal.this.remote.toExternalForm();
+                        maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                        String type = isPull() ? "pull" : "push";
+                        String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
+                        threadName = String.format("CBLReplicationExecutor-%s-%s-%s",
+                                maskedRemote, type, replicationIdentifier);
+                    } catch (Exception e) {
+                        Log.e(Log.TAG_SYNC, "Error creating thread name", e);
+                    }
+                    return new Thread(r, threadName);
+                }
+            });
+        }
+    }
 
     protected void initializeRequestWorkers() {
         if (remoteRequestExecutor == null) {
@@ -554,7 +576,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
                 remoteRequestExecutor,
-                workExecutor,
+                executor,
                 clientFactory,
                 method,
                 url,
@@ -603,7 +625,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_REQUEST,
                 remoteRequestExecutor,
-                workExecutor,
+                executor,
                 clientFactory,
                 method,
                 url,
@@ -633,7 +655,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             RemoteRequestRetry request = new RemoteRequestRetry(
                     RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_DOWNLOADER_REQUEST,
                     remoteRequestExecutor,
-                    workExecutor,
+                    executor,
                     clientFactory,
                     method,
                     url,
@@ -790,8 +812,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     protected void setLastSequenceFromWorkExecutor(final String lastSequence, final String checkpointId) {
-        // write access to database from workExecutor
-        workExecutor.submit(new Runnable() {
+        // write access to database from executor
+        executor.submit(new Runnable() {
             @Override
             public void run() {
                 if (db != null && db.isOpen())
@@ -1112,9 +1134,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             }
         } else {
             // ASYNC
-            synchronized (workExecutor) {
-                if (!workExecutor.isShutdown()) {
-                    workExecutor.submit(new Runnable() {
+            synchronized (executor) {
+                if (!executor.isShutdown()) {
+                    executor.submit(new Runnable() {
                         @Override
                         public void run() {
                             try {
@@ -1297,7 +1319,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
 
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
@@ -1324,7 +1348,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     private void logTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
-        Log.d(Log.TAG_SYNC, "State transition: %s -> %s (via %s).  this: %s", transition.getSource(), transition.getDestination(), transition.getTrigger(), this);
+        Log.d(Log.TAG_SYNC, "State transition: %s -> %s (via %s).  this: %s",
+                transition.getSource(), transition.getDestination(), transition.getTrigger(), this);
     }
 
     private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
@@ -1410,7 +1435,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     private void scheduleRetryFuture() {
         Log.v(Log.TAG_SYNC, "%s: Failed to xfer; will retry in %d sec", this, RETRY_DELAY_SECONDS);
-        this.retryFuture = workExecutor.schedule(new Runnable() {
+        this.retryFuture = executor.schedule(new Runnable() {
             public void run() {
                 retryIfReady();
             }
@@ -1489,7 +1514,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             lastSequence = lastSequenceIn;
             if (!lastSequenceChanged) {
                 lastSequenceChanged = true;
-                workExecutor.schedule(new Runnable() {
+                executor.schedule(new Runnable() {
                     public void run() {
                         saveLastSequence();
                     }
