@@ -139,7 +139,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
         switch (requestType) {
             case REMOTE_MULTIPART_REQUEST:
                 request = new RemoteMultipartRequest(
-                        workExecutor,
                         clientFactory,
                         method,
                         url,
@@ -151,7 +150,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                 break;
             case REMOTE_MULTIPART_DOWNLOADER_REQUEST:
                 request = new RemoteMultipartDownloaderRequest(
-                        workExecutor,
                         clientFactory,
                         method,
                         url,
@@ -163,7 +161,6 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                 break;
             default:
                 request = new RemoteRequest(
-                        workExecutor,
                         clientFactory,
                         method,
                         url,

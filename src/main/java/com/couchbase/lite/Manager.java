@@ -646,21 +646,25 @@ public final class Manager {
 
         // Can't specify both a filter and doc IDs
         if (properties.get("filter") != null && properties.get("doc_ids") != null)
-            throw new CouchbaseLiteException("Can't specify both a filter and doc IDs", new Status(Status.BAD_REQUEST));
+            throw new CouchbaseLiteException("Can't specify both a filter and doc IDs",
+                    new Status(Status.BAD_REQUEST));
 
         try {
             remote = new URL(remoteStr);
         } catch (MalformedURLException e) {
-            throw new CouchbaseLiteException("malformed remote url: " + remoteStr, new Status(Status.BAD_REQUEST));
+            throw new CouchbaseLiteException("malformed remote url: " + remoteStr,
+                    new Status(Status.BAD_REQUEST));
         }
         if (remote == null) {
-            throw new CouchbaseLiteException("remote URL is null: " + remoteStr, new Status(Status.BAD_REQUEST));
+            throw new CouchbaseLiteException("remote URL is null: " + remoteStr,
+                    new Status(Status.BAD_REQUEST));
         }
 
         if (!cancel) {
-            repl = db.getReplicator(remote, getDefaultHttpClientFactory(), push, continuous, getWorkExecutor());
+            repl = db.getReplicator(remote, getDefaultHttpClientFactory(), push, continuous);
             if (repl == null) {
-                throw new CouchbaseLiteException("unable to create replicator with remote: " + remote, new Status(Status.INTERNAL_SERVER_ERROR));
+                throw new CouchbaseLiteException("unable to create replicator with remote: " + remote,
+                        new Status(Status.INTERNAL_SERVER_ERROR));
             }
 
             if (authorizer != null) {
@@ -705,7 +709,8 @@ public final class Manager {
             // Cancel replication:
             repl = db.getActiveReplicator(remote, push);
             if (repl == null) {
-                throw new CouchbaseLiteException("unable to lookup replicator with remote: " + remote, new Status(Status.NOT_FOUND));
+                throw new CouchbaseLiteException("unable to lookup replicator with remote: " + remote,
+                        new Status(Status.NOT_FOUND));
             }
         }
 

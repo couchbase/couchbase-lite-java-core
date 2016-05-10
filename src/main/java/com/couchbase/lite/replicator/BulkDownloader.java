@@ -30,7 +30,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.GZIPInputStream;
 
@@ -41,7 +40,6 @@ import java.util.zip.GZIPInputStream;
  */
 @InterfaceAudience.Private
 public class BulkDownloader extends RemoteRequest implements MultipartReaderDelegate {
-
     public static final String TAG = Log.TAG_SYNC;
 
     private Database db;
@@ -49,8 +47,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
     private MultipartDocumentReader _docReader;
     private BulkDownloaderDocumentBlock _onDocument;
 
-    public BulkDownloader(ScheduledExecutorService workExecutor,
-                          HttpClientFactory clientFactory,
+    public BulkDownloader(HttpClientFactory clientFactory,
                           URL dbURL,
                           boolean cancelable,
                           List<RevisionInternal> revs,
@@ -58,8 +55,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                           Map<String, Object> requestHeaders,
                           BulkDownloaderDocumentBlock onDocument,
                           RemoteRequestCompletionBlock onCompletion) throws Exception {
-        super(workExecutor,
-                clientFactory,
+        super(clientFactory,
                 "POST",
                 new URL(buildRelativeURLString(dbURL, "/_bulk_get?revs=true&attachments=true")),
                 cancelable,

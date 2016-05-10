@@ -60,7 +60,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -316,8 +315,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPullReplication(URL remote) {
-        return new Replication(this, remote, Replication.Direction.PULL, null,
-                manager.getWorkExecutor());
+        return new Replication(this, remote, Replication.Direction.PULL, null);
 
     }
 
@@ -329,8 +327,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPushReplication(URL remote) {
-        return new Replication(this, remote, Replication.Direction.PUSH, null,
-                manager.getWorkExecutor());
+        return new Replication(this, remote, Replication.Direction.PUSH, null);
     }
 
     /**
@@ -2289,18 +2286,15 @@ public class Database implements StoreDelegate {
     protected Replication getReplicator(URL remote,
                                         HttpClientFactory httpClientFactory,
                                         boolean push,
-                                        boolean continuous,
-                                        ScheduledExecutorService workExecutor) {
+                                        boolean continuous) {
         Replication result = getActiveReplicator(remote, push);
         if (result != null) {
             return result;
         }
         if (push) {
-            result = new Replication(this, remote, Replication.Direction.PUSH,
-                    httpClientFactory, workExecutor);
+            result = new Replication(this, remote, Replication.Direction.PUSH, httpClientFactory);
         } else {
-            result = new Replication(this, remote, Replication.Direction.PULL,
-                    httpClientFactory, workExecutor);
+            result = new Replication(this, remote, Replication.Direction.PULL, httpClientFactory);
         }
         result.setContinuous(continuous);
         return result;

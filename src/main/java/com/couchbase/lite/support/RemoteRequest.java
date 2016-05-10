@@ -35,7 +35,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.zip.GZIPInputStream;
 
 
@@ -46,7 +45,6 @@ public class RemoteRequest implements CancellableRunnable {
     // Don't compress data shorter than this (not worth the CPU time, plus it might not shrink)
     public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
 
-    protected ScheduledExecutorService workExecutor;
     protected final HttpClientFactory clientFactory;
     protected String method;
     protected URL url;
@@ -64,12 +62,13 @@ public class RemoteRequest implements CancellableRunnable {
     private boolean compressedRequest = false;
     private String str = null;
 
-
-    public RemoteRequest(ScheduledExecutorService workExecutor,
-                         HttpClientFactory clientFactory,
-                         String method, URL url,
+    public RemoteRequest(HttpClientFactory clientFactory,
+                         String method,
+                         URL url,
                          boolean cancelable,
-                         Object body, Database db, Map<String, Object> requestHeaders,
+                         Object body,
+                         Database db,
+                         Map<String, Object> requestHeaders,
                          RemoteRequestCompletionBlock onCompletion) {
         this.clientFactory = clientFactory;
         this.method = method;
@@ -77,7 +76,6 @@ public class RemoteRequest implements CancellableRunnable {
         this.cancelable = cancelable;
         this.body = body;
         this.onCompletion = onCompletion;
-        this.workExecutor = workExecutor;
         this.requestHeaders = requestHeaders;
         this.request = createConcreteRequest();
         Log.v(Log.TAG_SYNC, "%s: RemoteRequest created, url: %s", this, url);
@@ -156,7 +154,7 @@ public class RemoteRequest implements CancellableRunnable {
     }
 
     /**
-     *  Set Authenticator for BASIC Authentication
+     * Set Authenticator for BASIC Authentication
      */
     public void setAuthenticator(Authenticator authenticator) {
         this.authenticator = authenticator;
@@ -184,7 +182,7 @@ public class RemoteRequest implements CancellableRunnable {
             // add in cookies to global store
             try {
                 if (httpClient instanceof DefaultHttpClient) {
-                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient)httpClient;
+                    DefaultHttpClient defaultHttpClient = (DefaultHttpClient) httpClient;
                     this.clientFactory.addCookies(defaultHttpClient.getCookieStore().getCookies());
                 }
             } catch (Exception e) {
@@ -244,8 +242,7 @@ public class RemoteRequest implements CancellableRunnable {
         } catch (Exception e) {
             Log.w(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
             error = e;
-        }
-        finally {
+        } finally {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);
         }
 
@@ -271,7 +268,7 @@ public class RemoteRequest implements CancellableRunnable {
                 String[] userInfoElements = userInfo.split(":");
                 String username = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[0]) : userInfoElements[0];
                 String password = "";
-                if(userInfoElements.length >= 2)
+                if (userInfoElements.length >= 2)
                     password = isUrlBasedUserInfo ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
                 final Credentials credentials = new UsernamePasswordCredentials(username, password);
                 if (httpClient instanceof DefaultHttpClient) {
@@ -334,30 +331,31 @@ public class RemoteRequest implements CancellableRunnable {
                 Log.e(Log.TAG_REMOTE_REQUEST, "Error serializing body of request", e);
             }
             ByteArrayEntity entity = null;
-            if(isCompressedRequest() && bodyBytes.length > MIN_JSON_LENGTH_TO_COMPRESS){
+            if (isCompressedRequest() && bodyBytes.length > MIN_JSON_LENGTH_TO_COMPRESS) {
                 entity = setCompressedBody(bodyBytes);
             }
-            if(entity == null){
+            if (entity == null) {
                 entity = setUncompressedBody(bodyBytes);
             }
             ((HttpEntityEnclosingRequestBase) request).setEntity(entity);
         }
     }
+
     /**
      * gzip
-     *
+     * <p/>
      * in CBLRemoteRequest.m
      * - (BOOL) compressBody
      */
-    protected static ByteArrayEntity setCompressedBody(byte[] bodyBytes){
-        if(bodyBytes.length < MIN_JSON_LENGTH_TO_COMPRESS){
+    protected static ByteArrayEntity setCompressedBody(byte[] bodyBytes) {
+        if (bodyBytes.length < MIN_JSON_LENGTH_TO_COMPRESS) {
             return null;
         }
 
         // Gzipping
         byte[] encodedBytes = Utils.compressByGzip(bodyBytes);
 
-        if(encodedBytes == null || encodedBytes.length >= bodyBytes.length) {
+        if (encodedBytes == null || encodedBytes.length >= bodyBytes.length) {
             return null;
         }
 
@@ -369,7 +367,7 @@ public class RemoteRequest implements CancellableRunnable {
         return entity;
     }
 
-    protected static ByteArrayEntity setUncompressedBody(byte[] bodyBytes){
+    protected static ByteArrayEntity setUncompressedBody(byte[] bodyBytes) {
         ByteArrayEntity entity = new ByteArrayEntity(bodyBytes);
         entity.setContentType("application/json");
         return entity;

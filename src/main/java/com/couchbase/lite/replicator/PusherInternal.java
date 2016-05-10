@@ -40,7 +40,6 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * @exclude
@@ -74,10 +73,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     public PusherInternal(Database db,
                           URL remote,
                           HttpClientFactory clientFactory,
-                          ScheduledExecutorService workExecutor,
                           Replication.Lifecycle lifecycle,
                           Replication parentReplication) {
-        super(db, remote, clientFactory, workExecutor, lifecycle, parentReplication);
+        super(db, remote, clientFactory, lifecycle, parentReplication);
     }
 
     @Override

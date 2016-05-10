@@ -18,21 +18,21 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.zip.GZIPInputStream;
 
 public class RemoteMultipartDownloaderRequest extends RemoteRequest {
 
     private Database db;
 
-    public RemoteMultipartDownloaderRequest(ScheduledExecutorService workExecutor,
-                                            HttpClientFactory clientFactory,
-                                            String method, URL url,
+    public RemoteMultipartDownloaderRequest(HttpClientFactory clientFactory,
+                                            String method,
+                                            URL url,
                                             boolean cancelable,
-                                            Object body, Database db,
+                                            Object body,
+                                            Database db,
                                             Map<String, Object> requestHeaders,
                                             RemoteRequestCompletionBlock onCompletion) {
-        super(workExecutor, clientFactory, method, url, cancelable, body, db, requestHeaders, onCompletion);
+        super(clientFactory, method, url, cancelable, body, db, requestHeaders, onCompletion);
         this.db = db;
     }
 
