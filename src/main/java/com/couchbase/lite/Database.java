@@ -493,7 +493,7 @@ public class Database implements StoreDelegate {
         try {
             return registerView(new View(this, name, true));
         } catch (CouchbaseLiteException e) {
-            Log.e(TAG, "Error in registerView: error=" + e.getLocalizedMessage());
+            Log.w(TAG, "Error in registerView: error=" + e.getLocalizedMessage(), e);
             return null;
         }
     }
@@ -1277,18 +1277,20 @@ public class Database implements StoreDelegate {
         views = null;
 
         // Make all replicators stop and wait:
+        boolean stopping = false;
         synchronized (activeReplicators) {
             for (Replication replicator : activeReplicators) {
                 if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
                     continue;
                 replicator.stop();
+                stopping = true;
             }
 
             // maximum wait time per replicator is 60 sec.
             // total maximum wait time for all replicators is between 60sec and 119 sec.
             long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
             long startTime = System.currentTimeMillis();
-            while (activeReplicators.size() > 0 &&
+            while (activeReplicators.size() > 0 && stopping &&
                     (System.currentTimeMillis() - startTime) < timeout) {
                 try {
                     activeReplicators.wait(timeout);

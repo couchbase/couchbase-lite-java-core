@@ -18,11 +18,12 @@ public class RemoteMultipartRequest extends RemoteRequest {
     public RemoteMultipartRequest(HttpClientFactory clientFactory,
                                   String method,
                                   URL url,
+                                  boolean cancelable,
                                   MultipartEntity multiPart,
                                   Database db,
                                   Map<String, Object> requestHeaders,
                                   RemoteRequestCompletionBlock onCompletion) {
-        super(clientFactory, method, url, null, db, requestHeaders, onCompletion);
+        super(clientFactory, method, url, cancelable, null, db, requestHeaders, onCompletion);
         this.multiPart = multiPart;
     }
 

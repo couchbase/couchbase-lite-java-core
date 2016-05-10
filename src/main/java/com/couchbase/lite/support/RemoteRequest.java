@@ -4,6 +4,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.AuthenticatorImpl;
+import com.couchbase.lite.util.CancellableRunnable;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
@@ -40,7 +41,7 @@ import java.util.zip.GZIPInputStream;
 /**
  * @exclude
  */
-public class RemoteRequest implements Runnable {
+public class RemoteRequest implements CancellableRunnable {
     // Don't compress data shorter than this (not worth the CPU time, plus it might not shrink)
     public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
 
@@ -53,20 +54,18 @@ public class RemoteRequest implements Runnable {
     protected RemoteRequestCompletionBlock onCompletion;
     protected RemoteRequestCompletionBlock onPostCompletion;
     protected HttpUriRequest request;
-
+    private boolean cancelable = true;
     protected Map<String, Object> requestHeaders;
-
     // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
     private boolean dontLog404;
-
     // if true, send compressed (gzip) request
     private boolean compressedRequest = false;
-
     private String str = null;
 
     public RemoteRequest(HttpClientFactory clientFactory,
                          String method,
                          URL url,
+                         boolean cancelable,
                          Object body,
                          Database db,
                          Map<String, Object> requestHeaders,
@@ -74,6 +73,7 @@ public class RemoteRequest implements Runnable {
         this.clientFactory = clientFactory;
         this.method = method;
         this.url = url;
+        this.cancelable = cancelable;
         this.body = body;
         this.onCompletion = onCompletion;
         this.requestHeaders = requestHeaders;
@@ -109,12 +109,15 @@ public class RemoteRequest implements Runnable {
         }
     }
 
-    public void abort() {
-        Log.w(Log.TAG_REMOTE_REQUEST, "%s: aborting request: %s", this, request);
-        if (request != null) {
+    public void setCancelable(boolean cancelable) {
+        this.cancelable = cancelable;
+    }
+
+    @Override
+    public void cancel() {
+        if (request != null && !request.isAborted() && cancelable) {
+            Log.w(Log.TAG_REMOTE_REQUEST, "%s: aborting request: %s", this, request);
             request.abort();
-        } else {
-            Log.w(Log.TAG_REMOTE_REQUEST, "%s: Unable to abort request since underlying request is null", this);
         }
     }
 
@@ -191,7 +194,7 @@ public class RemoteRequest implements Runnable {
             if (status.getStatusCode() >= 300) {
                 try {
                     if (!dontLog404) {
-                        Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
+                        Log.w(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), url, status.getReasonPhrase());
                     }
                     error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
                     respondWithResult(fullBody, error, response);
@@ -237,7 +240,7 @@ public class RemoteRequest implements Runnable {
                 }
             }
         } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+            Log.w(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
             error = e;
         } finally {
             Log.v(Log.TAG_SYNC, "%s: RemoteRequest finally block.  url: %s", this, url);

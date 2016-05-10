@@ -49,6 +49,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
 
     public BulkDownloader(HttpClientFactory clientFactory,
                           URL dbURL,
+                          boolean cancelable,
                           List<RevisionInternal> revs,
                           Database database,
                           Map<String, Object> requestHeaders,
@@ -57,6 +58,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         super(clientFactory,
                 "POST",
                 new URL(buildRelativeURLString(dbURL, "/_bulk_get?revs=true&attachments=true")),
+                cancelable,
                 helperMethod(revs, database),
                 database,
                 requestHeaders,
@@ -121,7 +123,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                         Log.w(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
                                 status.getStatusCode(), request, status.getReasonPhrase());
                     else
-                        Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
+                        Log.i(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s",
                                 status.getStatusCode(), request, status.getReasonPhrase());
                     error = new HttpResponseException(status.getStatusCode(),
                             status.getReasonPhrase());
@@ -190,7 +192,7 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
                 }
             }
         } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
+            Log.w(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             error = e;
         } finally {
             Log.v(TAG, "%s: BulkDownloader finally block.  url: %s", this, url);
@@ -254,14 +256,15 @@ public class BulkDownloader extends RemoteRequest implements MultipartReaderDele
         public void onDocument(Map<String, Object> props);
     }
 
-    private static Map<String, Object> helperMethod(List<RevisionInternal> revs, final Database database) {
-
+    private static Map<String, Object> helperMethod(List<RevisionInternal> revs,
+                                                    final Database database) {
         // Build up a JSON body describing what revisions we want:
         Collection<Map<String, Object>> keys = CollectionUtils.transform(revs, new CollectionUtils.Functor<RevisionInternal, Map<String, Object>>() {
 
             public Map<String, Object> invoke(RevisionInternal source) {
                 AtomicBoolean hasAttachment = new AtomicBoolean(false);
-                List<String> attsSince = database.getPossibleAncestorRevisionIDs(source, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
+                List<String> attsSince = database.getPossibleAncestorRevisionIDs(
+                        source, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
                 if (!hasAttachment.get() || attsSince.size() == 0) {
                     attsSince = null;
                 }
