@@ -291,8 +291,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         for (Future future : pendingFutures) {
             future.cancel(false);
             CancellableRunnable runnable = runnables.get(future);
-            if (runnable != null)
+            if (runnable != null) {
                 runnable.cancel();
+                runnables.remove(future);
+            }
         }
 
         // shutdown ScheduledExecutorService. Without shutdown, cause thread leak
@@ -1237,7 +1239,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.RUNNING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
                 start();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1246,13 +1250,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.RUNNING).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
             }
         });
+
         stateMachine.configure(ReplicationState.IDLE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
                 retryReplicationIfError();
                 if (transition.getSource() == transition.getDestination()) {
                     // ignore IDLE to IDLE
@@ -1270,10 +1279,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 }
             }
         });
+
         stateMachine.configure(ReplicationState.IDLE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
                 if (transition.getSource() == transition.getDestination()) {
                     // ignore IDLE to IDLE
                     return;
@@ -1281,27 +1293,35 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 notifyChangeListenersStateTransition(transition);
             }
         });
+
         stateMachine.configure(ReplicationState.OFFLINE).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
                 goOffline();
                 notifyChangeListenersStateTransition(transition);
             }
         });
+
         stateMachine.configure(ReplicationState.OFFLINE).onExit(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onExit()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
                 goOnline();
                 notifyChangeListenersStateTransition(transition);
             }
         });
+
         stateMachine.configure(ReplicationState.STOPPING).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
-
+                Log.v(Log.TAG_SYNC,
+                        "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.
                 //       We should revisit StateMachine configuration and also its Thread-safe-ability
@@ -1309,7 +1329,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     // ignore STOPPING to STOPPING
                     return;
                 }
-
                 stop();
                 notifyChangeListenersStateTransition(transition);
             }
@@ -1318,7 +1337,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         stateMachine.configure(ReplicationState.STOPPED).onEntry(new Action1<Transition<ReplicationState, ReplicationTrigger>>() {
             @Override
             public void doIt(Transition<ReplicationState, ReplicationTrigger> transition) {
-                Log.v(Log.TAG_SYNC, "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(), ReplicationInternal.this.toString());
+                Log.v(Log.TAG_SYNC,
+                        "%s [onEntry()] " + transition.getSource() + " => " + transition.getDestination(),
+                        ReplicationInternal.this.toString());
 
                 // NOTE: Based on StateMachine configuration, this should not happen.
                 //       However, from Unit Test result, this could be happen.

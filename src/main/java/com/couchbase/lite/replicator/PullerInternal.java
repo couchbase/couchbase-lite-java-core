@@ -178,7 +178,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected void processInbox(RevisionList inbox) {
         Log.d(TAG, "processInbox called");
 
-        if(db == null||!db.isOpen()) {
+        if (db == null || !db.isOpen()) {
             Log.w(Log.TAG_SYNC, "%s: Database is null or closed. Unable to continue. db name is %s.", this, db.getName());
             return;
         }
