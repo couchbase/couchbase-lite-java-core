@@ -259,7 +259,7 @@ public class ChangeTracker implements Runnable {
         if (status.getStatusCode() >= 300 &&
                 ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(status)) ||
                         mode != ChangeTrackerMode.LongPoll)) {
-            Log.e(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d",
+            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d",
                     this, status.getStatusCode());
             error = new HttpResponseException(status.getStatusCode(), status.getReasonPhrase());
             consumeContent(response.getEntity());

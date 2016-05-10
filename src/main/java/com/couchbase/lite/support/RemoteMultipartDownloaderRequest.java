@@ -26,9 +26,13 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
     private Database db;
 
     public RemoteMultipartDownloaderRequest(ScheduledExecutorService workExecutor,
-                                            HttpClientFactory clientFactory, String method, URL url,
-                                            Object body, Database db, Map<String, Object> requestHeaders, RemoteRequestCompletionBlock onCompletion) {
-        super(workExecutor, clientFactory, method, url, body, db, requestHeaders, onCompletion);
+                                            HttpClientFactory clientFactory,
+                                            String method, URL url,
+                                            boolean cancelable,
+                                            Object body, Database db,
+                                            Map<String, Object> requestHeaders,
+                                            RemoteRequestCompletionBlock onCompletion) {
+        super(workExecutor, clientFactory, method, url, cancelable, body, db, requestHeaders, onCompletion);
         this.db = db;
     }
 
@@ -77,7 +81,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
             StatusLine status = response.getStatusLine();
             if (status.getStatusCode() >= 300) {
                 try {
-                    Log.e(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
+                    Log.w(Log.TAG_REMOTE_REQUEST, "Got error status: %d for %s.  Reason: %s", status.getStatusCode(), request, status.getReasonPhrase());
                     error = new HttpResponseException(status.getStatusCode(),
                             status.getReasonPhrase());
                     respondWithResult(fullBody, error, response);
@@ -143,7 +147,7 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                 }
             }
         } catch (Exception e) {
-            Log.e(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
+            Log.w(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() Exception: ", e, this);
             respondWithResult(fullBody, e, response);
         } finally {
             Log.v(Log.TAG_REMOTE_REQUEST, "%s: executeRequest() finally", this);

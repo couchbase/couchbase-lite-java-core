@@ -178,6 +178,11 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     protected void processInbox(RevisionList inbox) {
         Log.d(TAG, "processInbox called");
 
+        if (db == null || !db.isOpen()) {
+            Log.w(Log.TAG_SYNC, "%s: Database is null or closed. Unable to continue. db name is %s.", this, db.getName());
+            return;
+        }
+
         if (canBulkGet == null) {
             canBulkGet = serverIsSyncGatewayVersion("0.81");
         }
@@ -309,10 +314,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         final BulkDownloader dl;
         try {
-
             dl = new BulkDownloader(workExecutor,
                     clientFactory,
                     remote,
+                    true,
                     bulkRevs,
                     db,
                     this.requestHeaders,
@@ -366,7 +371,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
 
         dl.setAuthenticator(getAuthenticator());
-
         // set compressed request - gzip
         dl.setCompressedRequest(canSendCompressedRequests());
 
@@ -374,6 +378,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             if (!remoteRequestExecutor.isShutdown()) {
                 Future future = remoteRequestExecutor.submit(dl);
                 pendingFutures.add(future);
+                runnables.put(future, dl);
             }
         }
     }
@@ -980,14 +985,18 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 (downloadsToInsert != null && !downloadsToInsert.isEmpty())) {
 
             // Wait for batcher (inbox) completed
-            waitBatcherCompleted(batcher);
+            waitBatcherCompleted();
 
             // wait for pending featurs completed
-            waitPendingFuturesCompleted(pendingFutures);
+            waitPendingFuturesCompleted();
 
             // wait for downloadToInsert batcher completed
-            waitBatcherCompleted(downloadsToInsert);
+            waitDownloadsToInsertBatcherCompleted();
         }
+    }
+
+    protected void waitDownloadsToInsertBatcherCompleted(){
+        waitBatcherCompleted(downloadsToInsert);
     }
 
     @Override
