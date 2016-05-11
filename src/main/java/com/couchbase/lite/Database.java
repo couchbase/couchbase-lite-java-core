@@ -1701,8 +1701,8 @@ public class Database implements StoreDelegate {
                 (properties.containsKey("_deleted") &&
                         ((Boolean) properties.get("_deleted")).booleanValue());
 
-        Log.v(TAG, "%s _id=%s, _rev=%s (allowConflict=%s)", (deleting ? "DELETE" : "PUT"),
-                docID, prevRevID, allowConflict?"true":"false");
+        Log.v(TAG, "%s _id=%s, _rev=%s (allowConflict=%b)", (deleting ? "DELETE" : "PUT"),
+                docID, prevRevID, allowConflict);
 
         // Attachments
         if (properties != null && properties.containsKey("_attachments")) {
