@@ -67,7 +67,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
 
-    private static final byte[] EMPTY_JSON_OBJECT_CHARS = new byte[] { (byte)0x007B, (byte)0x007D }; // Empty JSON string: "{}"
+    // Empty JSON string: "{}"
+    private static final byte[] EMPTY_JSON_OBJECT_CHARS = new byte[]{(byte) 0x007B, (byte) 0x007D};
 
     // First-time initialization:
     // (Note: Declaring revs.sequence as AUTOINCREMENT means the values will always be
@@ -141,7 +142,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     ///////////////////////////////////////////////////////////////////////////
 
     public SQLiteStore(String directory, Manager manager, StoreDelegate delegate)
-            throws CouchbaseLiteException{
+            throws CouchbaseLiteException {
         assert (new File(directory).isAbsolute()); // path must be absolute
         this.directory = directory;
         File dir = new File(directory);
@@ -399,7 +400,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         } catch (Exception e) {
             Log.w(TAG, "SQLiteStore: database is unreadable", e);
             if (e.getMessage() != null &&
-                e.getMessage().contains("file is encrypted or is not a database (code 26)")) {
+                    e.getMessage().contains("file is encrypted or is not a database (code 26)")) {
                 throw new CouchbaseLiteException("Cannot decrypt or access the database",
                         Status.UNAUTHORIZED);
             } else {
@@ -450,33 +451,33 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         // Create & attach the temporary database encrypted with the new key:
         action.add(
-            // Perform:
-            new ActionBlock() {
-                @Override
-                public void execute() throws ActionException {
-                    String keyStr = newKey != null ? newKey.getHexData() : "";
-                    String sql = "ATTACH DATABASE ? AS rekeyed_db KEY \"x'" + keyStr + "'\"";
-                    String[] args = {tempDbFile.getAbsolutePath()};
-                    try {
-                        storageEngine.execSQL(sql, args);
-                    } catch (Exception e) {
-                        throw new ActionException(e);
+                // Perform:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        String keyStr = newKey != null ? newKey.getHexData() : "";
+                        String sql = "ATTACH DATABASE ? AS rekeyed_db KEY \"x'" + keyStr + "'\"";
+                        String[] args = {tempDbFile.getAbsolutePath()};
+                        try {
+                            storageEngine.execSQL(sql, args);
+                        } catch (Exception e) {
+                            throw new ActionException(e);
+                        }
                     }
-                }
-            },
-            // Backout or cleanup:
-            new ActionBlock() {
-                @Override
-                public void execute() throws ActionException {
-                    if (dbWasClosed.get())
-                        return;
-                    try {
-                        storageEngine.execSQL("DETACH DATABASE rekeyed_db");
-                    } catch (Exception e) {
-                        throw new ActionException(e);
+                },
+                // Backout or cleanup:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        if (dbWasClosed.get())
+                            return;
+                        try {
+                            storageEngine.execSQL("DETACH DATABASE rekeyed_db");
+                        } catch (Exception e) {
+                            throw new ActionException(e);
+                        }
                     }
-                }
-            });
+                });
 
         // Export the current database's contents to the new one:
         action.add(new ActionBlock() {
@@ -494,37 +495,37 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         // Close the database (and re-open it on cleanup):
         action.add(
-            // Perform:
-            new ActionBlock() {
-                @Override
-                public void execute() throws ActionException {
-                    storageEngine.close();
-                    dbWasClosed.set(true);
-                }
-            },
-            // Backout:
-            new ActionBlock() {
-                @Override
-                public void execute() throws ActionException {
-                    try {
-                        open();
-                    } catch (CouchbaseLiteException e) {
-                        throw new ActionException("Cannot open the SQLiteStore", e);
+                // Perform:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        storageEngine.close();
+                        dbWasClosed.set(true);
+                    }
+                },
+                // Backout:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        try {
+                            open();
+                        } catch (CouchbaseLiteException e) {
+                            throw new ActionException("Cannot open the SQLiteStore", e);
+                        }
+                    }
+                },
+                // Cleanup:
+                new ActionBlock() {
+                    @Override
+                    public void execute() throws ActionException {
+                        setEncryptionKey(newKey);
+                        try {
+                            open();
+                        } catch (CouchbaseLiteException e) {
+                            throw new ActionException("Cannot open the SQLiteStore", e);
+                        }
                     }
                 }
-            },
-            // Cleanup:
-            new ActionBlock() {
-                @Override
-                public void execute() throws ActionException {
-                    setEncryptionKey(newKey);
-                    try {
-                        open();
-                    } catch (CouchbaseLiteException e) {
-                        throw new ActionException("Cannot open the SQLiteStore", e);
-                    }
-                }
-            }
         );
 
         // Overwrite the old db file with the new one:
@@ -562,7 +563,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         ContentValues args = new ContentValues();
         args.put("key", key);
         args.put("value", info);
-        if(storageEngine.insertWithOnConflict("info", null, args,
+        if (storageEngine.insertWithOnConflict("info", null, args,
                 SQLiteStorageEngine.CONFLICT_REPLACE) == -1)
             return Status.DB_ERROR;
         else
@@ -952,7 +953,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     @Override
-    public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev, int limit,
+    public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev,
+                                                       int limit,
                                                        AtomicBoolean onlyAttachments) {
         int generation = rev.getGeneration();
         if (generation <= 1)
@@ -965,20 +967,20 @@ public class SQLiteStore implements Store, EncryptableStore {
         List<String> revIDs = new ArrayList<String>();
 
         int sqlLimit = limit > 0 ? (int) limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
-        String sql = "SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?" +
-                " and deleted=0 and json not null" +
-                " ORDER BY sequence DESC LIMIT ?";
+        StringBuilder sql = new StringBuilder("SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?");
+        sql.append(" and deleted=0 and json not null");
+        sql.append(" and no_attachments=0");
+        sql.append(" ORDER BY sequence DESC LIMIT ?");
         String[] args = {Long.toString(docNumericID), generation + "-", Integer.toString(sqlLimit)};
 
         Cursor cursor = null;
         try {
-            cursor = storageEngine.rawQuery(sql, args);
+            cursor = storageEngine.rawQuery(sql.toString(), args);
             cursor.moveToNext();
             while (!cursor.isAfterLast()) {
-                if (onlyAttachments != null && revIDs.size() == 0) {
+                if (onlyAttachments != null && revIDs.size() == 0)
                     onlyAttachments.set(sequenceHasAttachments(cursor.getLong(1)));
-                }
-                revIDs.add(cursor.getString(0));
+                    revIDs.add(cursor.getString(0));
                 cursor.moveToNext();
             }
         } catch (SQLException e) {
@@ -1518,17 +1520,30 @@ public class SQLiteStore implements Store, EncryptableStore {
                         hasAttachments,
                         json,
                         docType);
-            }catch(SQLException ex){
+            } catch (SQLException ex) {
                 // The insert failed. If it was due to a constraint violation, that means a revision
                 // already exists with identical contents and the same parent rev. We can ignore this
                 // insert call, then.
-                if(ex.getCode() != SQLException.SQLITE_CONSTRAINT) {
+                if (ex.getCode() != SQLException.SQLITE_CONSTRAINT) {
                     Log.e(TAG, "Error inserting revision: ", ex);
                     throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
                 }
                 Log.w(TAG, "Duplicate rev insertion: " + docID + " / " + newRevId);
                 newRev.setBody(null);
-                // don't return yet; update the parent's current just to be sure (see #316 (iOS #509))
+
+                // The pre-existing revision may have a nulled-out parent link since its original
+                // parent may have been pruned earlier. Fix that link:
+                if (parentSequence != 0) {
+                    try {
+                        ContentValues args = new ContentValues();
+                        args.put("parent", parentSequence);
+                        storageEngine.update("revs", args, "doc_id=? and revid=?",
+                                new String[]{String.valueOf(docNumericID), newRevId});
+                    } catch (SQLException e) {
+                        throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
+                    }
+                }
+                // Keep going, to make the parent rev non-current, before returning...
             }
 
 
@@ -1557,7 +1572,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             // Delete the deepest revs in the tree to enforce the maxRevTreeDepth:
             int minGenToKeep = newRev.getGeneration() - maxRevTreeDepth + 1;
             if (minGenToKeep > 1) {
-                int pruned = pruneDocument(docNumericID, minGenToKeep);
+                int pruned = pruneDocument(docID, docNumericID, minGenToKeep);
                 if (pruned > 0)
                     Log.v(TAG, "Pruned %d old revisions of doc '%s'", pruned, docID);
             }
@@ -1735,7 +1750,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                     maxGen = Math.max(maxGen, generation);
                     int minGenToKeep = maxGen - maxRevTreeDepth + 1;
                     if (minGen < minGenToKeep) {
-                        int pruned = pruneDocument(docNumericID, minGenToKeep);
+                        int pruned = pruneDocument(docID, docNumericID, minGenToKeep);
                         if (pruned > 0)
                             Log.v(TAG, "Pruned %d old revisions of doc '%s'", pruned, docID);
                     }
@@ -1838,20 +1853,13 @@ public class SQLiteStore implements Store, EncryptableStore {
                             }
 
                             seqsToPurge.removeAll(seqsToKeep);
-                            Log.i(TAG, "Purging doc '%s' revs (%s); asked for (%s)", docID, revsToPurge, revIDs);
-                            if (seqsToPurge.size() > 0) {
-                                // Now delete the sequences to be purged.
-                                String seqsToPurgeList = TextUtils.join(",", seqsToPurge);
-                                String sql = String.format("DELETE FROM revs WHERE sequence in (%s)", seqsToPurgeList);
-                                try {
-                                    storageEngine.execSQL(sql);
-                                } catch (SQLException e) {
-                                    Log.e(TAG, "Error deleting revisions via: " + sql, e);
-                                    return false;
-                                }
-                            }
-                            revsPurged.addAll(revsToPurge);
 
+                            Log.i(TAG, "Purging doc '%s' revs (%s)", docID, revIDs);
+                            // Now delete the sequences to be purged.
+                            if (!purgeSequences(seqsToPurge))
+                                return false;
+
+                            revsPurged.addAll(revsToPurge);
                         } catch (SQLException e) {
                             Log.e(TAG, "Error getting revisions", e);
                             return false;
@@ -1868,6 +1876,22 @@ public class SQLiteStore implements Store, EncryptableStore {
         });
 
         return result;
+    }
+
+    private boolean purgeSequences(Set<Long> seqsToPurge) {
+        if (seqsToPurge.size() == 0)
+            return true;
+
+        String seqsString = TextUtils.join(",", seqsToPurge);
+        Log.v(TAG, "    purging %d sequences: %s", seqsToPurge.size(), seqsString);
+        String sql = String.format("DELETE FROM revs WHERE sequence in (%s)", seqsString);
+        try {
+            storageEngine.execSQL(sql);
+        } catch (SQLException e) {
+            Log.e(TAG, "Error deleting revisions via: " + sql, e);
+            return false;
+        }
+        return true;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -2315,7 +2339,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         try {
             beginTransaction();
             for (Long docNumericID : toPrune.keySet())
-                outPruned += pruneDocument(docNumericID, toPrune.get(docNumericID).intValue() + 1);
+                outPruned += pruneDocument("?", docNumericID, toPrune.get(docNumericID).intValue() + 1);
             shouldCommit = true;
         } catch (Throwable e) {
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
@@ -2326,10 +2350,74 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     // Returns the number of revisions pruned.
-    protected int pruneDocument(long docNumericID, int minGenToKeep) {
-        String minIDToKeep = String.format("%d-", minGenToKeep);
-        String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
-        return storageEngine.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
+    protected int pruneDocument(String docID, long docNumericID, int minGenToKeep) {
+        // First find the leaves:
+        Set<Long> leaves = new HashSet<Long>();
+        Cursor cursor = null;
+        try {
+            cursor = storageEngine.rawQuery(
+                    "SELECT sequence FROM revs WHERE doc_id=? AND current",
+                    new String[]{Long.toString(docNumericID)});
+            while (cursor.moveToNext())
+                leaves.add(cursor.getLong(0));
+        } catch (SQLException e) {
+            Log.e(TAG, "Error querying sequence from revs docNumericID=%d", e, docNumericID);
+            return -1;
+        } finally {
+            if (cursor != null)
+                cursor.close();
+        }
+
+        if (leaves.size() <= 1) {
+            // There are no branches, so just delete everything below minGenToKeep:
+            String minIDToKeep = String.format("%d-", minGenToKeep);
+            String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
+            int pruned = storageEngine.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
+            Log.v(TAG, "    pruned %d revs with gen<%d from %s", pruned, minGenToKeep, docID);
+            return pruned;
+        } else {
+            // Doc has branches. Keep the ancestors of all the leaves, down to _maxRevTreeDepth.
+            // First fetch the skeleton of the rev tree:
+            Map<Long, Long> revs = new HashMap<Long, Long>();
+            Cursor cursor2 = null;
+            try {
+                cursor2 = storageEngine.rawQuery(
+                        "SELECT sequence, parent FROM revs WHERE doc_id=?",
+                        new String[]{Long.toString(docNumericID)});
+                while (cursor2.moveToNext()) {
+                    long seq = cursor2.getLong(0);
+                    long parent = cursor2.getLong(1);
+                    revs.put(seq, parent);
+                }
+            } catch (SQLException e) {
+                Log.e(TAG, "Error querying sequence and parent from revs docNumericID=%d", e, docNumericID);
+                return -1;
+            } finally {
+                if (cursor2 != null)
+                    cursor2.close();
+            }
+
+            // Now remove each leaf and its ancestors from `revs`:
+            Log.v(TAG, "    pruning %s, scanning %d revs in tree...", docID, revs.size());
+            for (Long leaf : leaves) {
+                Long seq = leaf;
+                for (int i = 0; i < maxRevTreeDepth; i++) {
+                    Long parent = revs.get(seq);
+                    revs.remove(seq);
+                    if (parent == null || parent.longValue() == 0)
+                        break;
+                    seq = parent;
+                }
+            }
+
+            // The remaining keys in `revs` are sequences to purge:
+            if (!purgeSequences(revs.keySet())) {
+                Log.w(TAG, "SQLite error: pruning conflicted doc %d", docNumericID);
+                return -1;
+            }
+
+            return revs.size();
+        }
     }
 
     protected void runStatements(String statements) throws SQLException {
@@ -2423,23 +2511,19 @@ public class SQLiteStore implements Store, EncryptableStore {
                                 boolean hasAttachments,
                                 byte[] json,
                                 String docType)
-            throws SQLException
-    {
-        long rowId = 0;
+            throws SQLException {
         ContentValues args = new ContentValues();
         args.put("doc_id", docNumericID);
         args.put("revid", rev.getRevID());
-        if (parentSequence != 0) {
+        if (parentSequence != 0)
             args.put("parent", parentSequence);
-        }
         args.put("current", current);
         args.put("deleted", rev.isDeleted());
         args.put("no_attachments", !hasAttachments);
         args.put("json", json);
         args.put("doc_type", docType);
-        rowId = storageEngine.insertOrThrow("revs", null, args);
+        long rowId = storageEngine.insertOrThrow("revs", null, args);
         rev.setSequence(rowId);
-
         return rowId;
     }
 

@@ -704,7 +704,9 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public void databaseStorageChanged(DocumentChange change) {
-        Log.v(Log.TAG_DATABASE, "Added: " + change.getAddedRevision());
+        Log.v(Log.TAG, "---> Added: %s as seq %d",
+                change.getAddedRevision(), change.getAddedRevision().getSequence());
+
         changesToNotify.add(change);
         if (!postChangeNotifications()) {
             // The notification wasn't posted yet, probably because a transaction is open.
@@ -1696,6 +1698,9 @@ public class Database implements StoreDelegate {
                 (properties.containsKey("_deleted") &&
                         ((Boolean) properties.get("_deleted")).booleanValue());
 
+        Log.v(TAG, "%s _id=%s, _rev=%s (allowConflict=%b)", (deleting ? "DELETE" : "PUT"),
+                docID, prevRevID, allowConflict);
+
         // Attachments
         if (properties != null && properties.containsKey("_attachments")) {
             // Add any new attachment data to the blob-store, and turn all of them into stubs:
@@ -1728,7 +1733,7 @@ public class Database implements StoreDelegate {
             };
         }
 
-        RevisionInternal putRev = store.add(
+        return store.add(
                 docID,
                 prevRevID,
                 properties,
@@ -1736,11 +1741,6 @@ public class Database implements StoreDelegate {
                 allowConflict,
                 validationBlock,
                 outStatus);
-
-        if (putRev != null)
-            Log.v(TAG, "--> created %s", putRev);
-
-        return putRev;
     }
 
     /**
@@ -1758,7 +1758,7 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public void forceInsert(RevisionInternal inRev, List<String> history, URL source)
             throws CouchbaseLiteException {
-
+        Log.v(TAG, "INSERT %s, history[%d]", inRev, history == null ? 0 : history.size());
         String docID = inRev.getDocID();
         String revID = inRev.getRevID();
         if (!Document.isValidDocumentId(docID) || (revID == null))
@@ -2321,12 +2321,10 @@ public class Database implements StoreDelegate {
     }
 
     protected boolean replaceUUIDs() {
-        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1) {
+        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1)
             return false;
-        }
-        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1) {
+        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1)
             return false;
-        }
         return true;
     }
 
