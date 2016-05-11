@@ -2372,7 +2372,9 @@ public class SQLiteStore implements Store, EncryptableStore {
             // There are no branches, so just delete everything below minGenToKeep:
             String minIDToKeep = String.format("%d-", minGenToKeep);
             String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
-            return storageEngine.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
+            int pruned = storageEngine.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
+            Log.v(TAG, "    pruned %d revs with gen<%d from %s", pruned, minGenToKeep, docID);
+            return pruned;
         } else {
             // Doc has branches. Keep the ancestors of all the leaves, down to _maxRevTreeDepth.
             // First fetch the skeleton of the rev tree:
@@ -2396,6 +2398,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
 
             // Now remove each leaf and its ancestors from `revs`:
+            Log.v(TAG, "    pruning %s, scanning %d revs in tree...", docID, revs.size());
             for (Long leaf : leaves) {
                 Long seq = leaf;
                 for (int i = 0; i < maxRevTreeDepth; i++) {
