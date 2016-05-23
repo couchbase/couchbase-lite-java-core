@@ -1,3 +1,16 @@
+/**
+ * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.CouchbaseLiteException;
@@ -17,24 +30,15 @@ import com.couchbase.lite.support.BlockingQueueListener;
 import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.CustomLinkedBlockingQueue;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.RemoteRequestCompletionBlock;
-import com.couchbase.lite.support.RemoteRequestRetry;
 import com.couchbase.lite.util.CancellableRunnable;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
-import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action1;
 import com.github.oxo42.stateless4j.transitions.Transition;
-
-import org.apache.http.Header;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpResponseException;
-import org.apache.http.cookie.Cookie;
-import org.apache.http.impl.cookie.BasicClientCookie2;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -56,6 +60,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import okhttp3.Cookie;
+import okhttp3.Response;
 
 /**
  * Internal Replication object that does the heavy lifting
@@ -238,26 +245,19 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
                 return;
             }
-
             db.addReplication(parentReplication);
             db.addActiveReplication(parentReplication);
-
             initSessionId();
-
             // initialize batcher
             initBatcher();
-
             // initialize authorizer / authenticator
             initAuthorizer();
-
             // initialize request workers
             initializeRequestWorkers();
-
             // single-shot replication
-            if (!isContinuous()) {
+            if (!isContinuous())
                 goOnline();
-            }
-            // continuous mode
+                // continuous mode
             else {
                 if (isNetworkReachable())
                     goOnline();
@@ -413,15 +413,15 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void checkSessionAtPath(final String sessionPath) {
-        Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable err) {
+            public void onCompletion(Response _response, Object result, Throwable err) {
                 try {
                     if (err != null) {
                         // If not at /db/_session, try CouchDB location /_session
-                        if (err instanceof HttpResponseException &&
-                                ((HttpResponseException) err).getStatusCode() == 404 &&
+                        if (err instanceof RemoteRequestResponseException &&
+                                ((RemoteRequestResponseException) err).getCode() == 404 &&
                                 "/_session".equalsIgnoreCase(sessionPath)) {
 
                             checkSessionAtPath("_session");
@@ -453,7 +453,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void login() {
-        Map<String, String> loginParameters = ((AuthenticatorImpl) getAuthenticator()).loginParametersForSite(remote);
+        Map loginParameters = ((AuthenticatorImpl) getAuthenticator()).loginParametersForSite(remote);
         if (loginParameters == null) {
             Log.d(Log.TAG_SYNC, "%s: %s has no login parameters, so skipping login", this, getAuthenticator());
             fetchRemoteCheckpointDoc();
@@ -464,10 +464,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
         Log.d(Log.TAG_SYNC, "%s: Doing login with %s at %s", this, getAuthenticator().getClass(), loginPath);
 
-        Future future = sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+            public void onCompletion(Response httpResponse, Object result, Throwable e) {
                 if (e != null) {
                     Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
                     setError(e);
@@ -502,7 +502,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             this.error = throwable;
 
             // if permanent error, stop immediately
-            if(Utils.isPermanentError(this.error) || !isContinuous()) {
+            if (Utils.isPermanentError(this.error) || !isContinuous()) {
                 triggerStopGraceful();
             }
 
@@ -553,31 +553,33 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     @InterfaceAudience.Private
     public CustomFuture sendAsyncRequest(String method, String relativePath,
-                                         Object body,
-                                         RemoteRequestCompletionBlock onCompletion) {
+                                         Map<String, ?> body,
+                                         RemoteRequestCompletion onCompletion) {
         return sendAsyncRequest(method, relativePath, true, body, false, onCompletion);
     }
 
     @InterfaceAudience.Private
     public CustomFuture sendAsyncRequest(String method, String relativePath,
-                                         boolean cancelable, Object body,
-                                         RemoteRequestCompletionBlock onCompletion) {
+                                         boolean cancelable, Map<String, ?> body,
+                                         RemoteRequestCompletion onCompletion) {
         return sendAsyncRequest(method, relativePath, cancelable, body, false, onCompletion);
     }
 
     @InterfaceAudience.Private
     public CustomFuture sendAsyncRequest(String method, String relativePath,
-                                         Object body, boolean dontLog404,
-                                         RemoteRequestCompletionBlock onCompletion) {
+                                         Map<String, ?> body, boolean dontLog404,
+                                         RemoteRequestCompletion onCompletion) {
         return sendAsyncRequest(method, relativePath, true, body, dontLog404, onCompletion);
     }
+
     /**
      * @exclude
      */
     @InterfaceAudience.Private
     public CustomFuture sendAsyncRequest(String method, String relativePath,
-                                         boolean cancelable, Object body, boolean dontLog404,
-                                         RemoteRequestCompletionBlock onCompletion) {
+                                         boolean cancelable, Map<String, ?> body,
+                                         boolean dontLog404,
+                                         RemoteRequestCompletion onCompletion) {
         try {
             URL url = new URL(buildRelativeURLString(relativePath));
             return sendAsyncRequest(method, url, cancelable, body, dontLog404, onCompletion);
@@ -594,9 +596,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     public CustomFuture sendAsyncRequest(String method,
                                          URL url,
                                          boolean cancelable,
-                                         Object body,
+                                         Map<String, ?> body,
                                          boolean dontLog404,
-                                   final RemoteRequestCompletionBlock onCompletion) {
+                                         final RemoteRequestCompletion onCompletion) {
         Log.d(Log.TAG_SYNC, "[sendAsyncRequest()] " + method + " => " + url);
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
@@ -607,19 +609,19 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 url,
                 cancelable,
                 body,
+                null,
                 getLocalDatabase(),
                 getHeaders(),
                 onCompletion
         );
         request.setDontLog404(dontLog404);
         request.setAuthenticator(getAuthenticator());
-        request.setOnPreCompletionCaller(new RemoteRequestCompletionBlock() {
+        request.setOnPreCompletionCaller(new RemoteRequestCompletion() {
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
-                if (serverType == null && httpResponse != null) {
-                    Header serverHeader = httpResponse.getFirstHeader("Server");
-                    if (serverHeader != null) {
-                        String serverVersion = serverHeader.getValue();
+            public void onCompletion(Response response, Object result, Throwable e) {
+                if (serverType == null && response != null) {
+                    String serverVersion = response.header("Server");
+                    if (serverVersion != null) {
                         Log.v(Log.TAG_SYNC, "serverVersion: %s", serverVersion);
                         serverType = serverVersion;
                     }
@@ -633,17 +635,17 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public CustomFuture sendAsyncMultipartRequest(String method, String relativePath,
-                                            MultipartEntity multiPartEntity,
-                                            RemoteRequestCompletionBlock onCompletion) {
-        URL url = null;
+    public CustomFuture sendAsyncMultipartRequest(String method,
+                                                  String relativePath,
+                                                  Map<String, Object> body,
+                                                  Map<String, Object> attachments,
+                                                  RemoteRequestCompletion onCompletion) {
+        URL url;
         try {
-            String urlStr = buildRelativeURLString(relativePath);
-            url = new URL(urlStr);
+            url = new URL(buildRelativeURLString(relativePath));
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException(e);
         }
-
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_MULTIPART_REQUEST,
                 remoteRequestExecutor,
@@ -652,14 +654,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 method,
                 url,
                 true,
-                multiPartEntity,
+                body,
+                attachments,
                 getLocalDatabase(),
                 getHeaders(),
-                onCompletion
-        );
-
+                onCompletion);
         request.setAuthenticator(getAuthenticator());
-
         return request.submit();
     }
 
@@ -667,9 +667,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * @exclude
      */
     @InterfaceAudience.Private
-    public CustomFuture sendAsyncMultipartDownloaderRequest(String method, String relativePath,
-                                                            Object body, Database db,
-                                                            RemoteRequestCompletionBlock onCompletion) {
+    public CustomFuture
+    sendAsyncMultipartDownloaderRequest(
+            String method, String relativePath, Map<String, Object> body, Database db,
+            RemoteRequestCompletion onCompletion) {
         try {
 
             String urlStr = buildRelativeURLString(relativePath);
@@ -684,6 +685,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     url,
                     true,
                     body,
+                    null,
                     getLocalDatabase(),
                     getHeaders(),
                     onCompletion
@@ -704,10 +706,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     protected Database getLocalDatabase() {
         return db;
-    }
-
-    protected void setLocalDatabase(Database db) {
-        this.db = db;
     }
 
     /**
@@ -769,10 +767,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         final String checkpointID = remoteCheckpointDocID;
         Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s",
                 this, checkpointID, body);
-        Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, false, body, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, false, body, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+            public void onCompletion(Response httpResponse, Object result, Throwable e) {
 
                 Log.d(Log.TAG_SYNC,
                         "%s: put remote _local document request finished.  checkpointID: %s body: %s",
@@ -854,9 +852,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     @InterfaceAudience.Private
     private void refreshRemoteCheckpointDoc() {
         Log.i(Log.TAG_SYNC, "%s: Refreshing remote checkpoint to get its _rev...", this);
-        Future future = sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletion() {
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+            public void onCompletion(Response httpResponse, Object result, Throwable e) {
                 if (db == null) {
                     Log.w(Log.TAG_SYNC, "%s: db == null while refreshing remote checkpoint.  aborting", this);
                     return;
@@ -913,10 +911,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
         boolean dontLog404 = true;
-        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+            public void onCompletion(Response httpResponse, Object result, Throwable e) {
                 if (e != null && !Utils.is404(e)) {
                     Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
                     setError(e);
@@ -1010,6 +1008,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         remoteCheckpointDocID = Misc.HexSHA1Digest(inputBytes);
         return remoteCheckpointDocID;
     }
+
     /**
      * For javadocs, see Replication
      */
@@ -1028,7 +1027,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     /**
      * Get replicator filter. If the replicator is a pull replicator,
      * calling this method will return null.
-     *
+     * <p/>
      * This is equivalent to CBL_ReplicatorSettings's compilePushFilterForDatabase:status:.
      */
     public ReplicationFilter compilePushReplicationFilter() {
@@ -1423,7 +1422,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected boolean serverIsSyncGatewayVersion(String minVersion) {
         return serverIsSyncGatewayVersion(serverType, minVersion);
     }
-    
+
     @InterfaceAudience.Private
     protected static boolean serverIsSyncGatewayVersion(String serverName, String minVersion) {
         String prefix = "Couchbase Sync Gateway/";
@@ -1687,22 +1686,14 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * For java docs, see Replication.setCookie()
      */
     public void setCookie(String name, String value, String path, Date expirationDate, boolean secure, boolean httpOnly) {
-        if (remote == null) {
+        if (remote == null)
             throw new IllegalStateException("Cannot setCookie since remote == null");
-        }
-        BasicClientCookie2 cookie = new BasicClientCookie2(name, value);
-        cookie.setDomain(remote.getHost());
-        if (path != null && path.length() > 0) {
-            cookie.setPath(path);
-        } else {
-            cookie.setPath(remote.getPath());
-        }
-
-        cookie.setExpiryDate(expirationDate);
-        cookie.setSecure(secure);
-        List<Cookie> cookies = Collections.singletonList((Cookie) cookie);
+        if (path == null || path.length() == 0)
+            path = remote.getPath();
+        Cookie.Builder builder = new Cookie.Builder();
+        builder.name(name).value(value).domain(remote.getHost()).path(path).expiresAt(expirationDate.getTime());
+        List<Cookie> cookies = Collections.singletonList(builder.build());
         this.clientFactory.addCookies(cookies);
-
     }
 
     /**
@@ -1839,9 +1830,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
     }
 
-    protected void waitBatcherCompleted(){
+    protected void waitBatcherCompleted() {
         waitBatcherCompleted(batcher);
     }
+
     protected static void waitBatcherCompleted(Batcher<RevisionInternal> b) {
         // Wait for batcher completed
         if (b != null) {

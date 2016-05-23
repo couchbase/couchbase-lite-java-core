@@ -1,35 +1,35 @@
+/**
+ * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
 package com.couchbase.lite.replicator;
 
-import com.couchbase.lite.BlobKey;
-import com.couchbase.lite.BlobStore;
 import com.couchbase.lite.ChangesOptions;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.DocumentChange;
-import com.couchbase.lite.Manager;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.support.BlobContentBody;
 import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.RemoteRequest;
-import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
-import com.couchbase.org.apache.http.entity.mime.MultipartEntity;
-import com.couchbase.org.apache.http.entity.mime.content.StringBody;
 
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpResponseException;
-
-import java.io.IOException;
 import java.net.URL;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,6 +41,8 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.Future;
 
+import okhttp3.Response;
+
 /**
  * @exclude
  */
@@ -49,7 +51,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     private static final String TAG = Log.TAG_SYNC;
 
     // Max in-memory size of buffered bulk_docs dictionary
-    private static long kMaxBulkDocsObjectSize = 5*1000*1000;
+    private static long kMaxBulkDocsObjectSize = 5 * 1000 * 1000;
 
     private boolean createTarget;
     private boolean creatingTarget;
@@ -137,13 +139,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         creatingTarget = true;
         Log.v(Log.TAG_SYNC, "Remote db might not exist; creating it...");
 
-        Future future = sendAsyncRequest("PUT", "", null, new RemoteRequestCompletionBlock() {
+        Future future = sendAsyncRequest("PUT", "", null, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+            public void onCompletion(Response httpResponse, Object result, Throwable e) {
                 creatingTarget = false;
-                if (e != null && e instanceof HttpResponseException &&
-                        ((HttpResponseException) e).getStatusCode() != 412) {
+                if (e != null && e instanceof RemoteRequestResponseException &&
+                        ((RemoteRequestResponseException) e).getCode() != 412) {
                     Log.e(Log.TAG_SYNC, this + ": Failed to create remote db", e);
                     setError(e);
                     triggerStopGraceful();  // this is fatal: no db to push to!
@@ -337,10 +339,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // Call _revs_diff on the target db:
         Log.v(Log.TAG_SYNC, "%s: posting to /_revs_diff", this);
 
-        CustomFuture future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object response, Throwable e) {
+            public void onCompletion(Response httpResponse, Object response, Throwable e) {
 
                 Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response", this);
                 Map<String, Object> results = (Map<String, Object>) response;
@@ -450,7 +452,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     /**
      * Post the revisions to the destination. "new_edits":false means that the server should
      * use the given _rev IDs instead of making up new ones.
-     *
+     * <p/>
      * - (void) uploadBulkDocs: (NSArray*)docsToSend changes: (CBL_RevisionList*)changes
      * in CBLRestPusher.m
      */
@@ -469,10 +471,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         bulkDocsBody.put("docs", docsToSend);
         bulkDocsBody.put("new_edits", false);
 
-        CustomFuture future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+            public void onCompletion(Response httpResponse, Object result, Throwable e) {
                 if (e == null) {
                     Set<String> failedIDs = new HashSet<String>();
                     // _bulk_docs response is really an array, not a dictionary!
@@ -520,81 +522,28 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
      */
     @InterfaceAudience.Private
     private boolean uploadMultipartRevision(final RevisionInternal revision) {
-        MultipartEntity multiPart = null;
-        Map<String, Object> revProps = revision.getProperties();
-        Map<String, Object> attachments = (Map<String, Object>) revProps.get("_attachments");
+        Map<String, Object> body = revision.getProperties();
+        Map<String, Object> attachments = (Map<String, Object>) body.get("_attachments");
+
         for (String attachmentKey : attachments.keySet()) {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentKey);
-            if (attachment.containsKey("follows")) {
-                if (multiPart == null) {
-                    multiPart = new MultipartEntity();
-                    try {
-                        String json = Manager.getObjectMapper().writeValueAsString(revProps);
-                        Charset utf8charset = Charset.forName("UTF-8");
-                        byte[] uncompressed = json.getBytes(utf8charset);
-                        byte[] compressed = null;
-                        byte[] data = uncompressed;
-                        String contentEncoding = null;
-                        if (uncompressed.length > RemoteRequest.MIN_JSON_LENGTH_TO_COMPRESS &&
-                                canSendCompressedRequests()) {
-                            compressed = Utils.compressByGzip(uncompressed);
-                            if (compressed.length < uncompressed.length) {
-                                data = compressed;
-                                contentEncoding = "gzip";
-                            }
-                        }
-                        // NOTE: StringBody.contentEncoding default value is null.
-                        // Setting null value to contentEncoding does not cause any impact.
-                        multiPart.addPart("param1", new StringBody(data, "application/json",
-                                utf8charset, contentEncoding));
-                    } catch (IOException e) {
-                        throw new IllegalArgumentException(e);
-                    }
-                }
-
-                BlobStore blobStore = this.db.getAttachmentStore();
-                String base64Digest = (String) attachment.get("digest");
-                BlobKey blobKey = new BlobKey(base64Digest);
-
-                String contentType = null;
-                if (attachment.containsKey("content_type")) {
-                    contentType = (String) attachment.get("content_type");
-                } else if (attachment.containsKey("type")) {
-                    contentType = (String) attachment.get("type");
-                } else if (attachment.containsKey("content-type")) {
-                    Log.w(Log.TAG_SYNC, "Found attachment that uses content-type" +
-                            " field name instead of content_type (see couchbase-lite-android" +
-                            " issue #80): %s", attachment);
-                }
-                // contentType = null causes Exception from FileBody of apache.
-                if (contentType == null)
-                    contentType = "application/octet-stream"; // default
-
-                // CBL iOS: https://github.com/couchbase/couchbase-lite-ios/blob/feb7ff5eda1e80bd00e5eb19f1d46c793f7a1951/Source/CBL_Pusher.m#L449-L452
-                String contentEncoding = null;
-                if (attachment.containsKey("encoding"))
-                    contentEncoding = (String) attachment.get("encoding");
-
-                BlobContentBody contentBody = new BlobContentBody(blobStore, blobKey,
-                        contentType, attachmentKey, contentEncoding);
-                multiPart.addPart(attachmentKey, contentBody);
+            if (!attachment.containsKey("follows")) {
+                return false;
             }
         }
-        if (multiPart == null)
-            return false;
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
         addToChangesCount(1);
         final String path = String.format("/%s?new_edits=false", encodeDocumentId(revision.getDocID()));
-        CustomFuture future = sendAsyncMultipartRequest("PUT", path, multiPart,
-                new RemoteRequestCompletionBlock() {
+        CustomFuture future = sendAsyncMultipartRequest("PUT", path, body, attachments,
+                new RemoteRequestCompletion() {
                     @Override
-                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
                         try {
                             if (e != null) {
-                                if (e instanceof HttpResponseException) {
+                                if (e instanceof RemoteRequestResponseException) {
                                     // Server doesn't like multipart, eh? Fall back to JSON.
-                                    if (((HttpResponseException) e).getStatusCode() == 415) {
+                                    if (((RemoteRequestResponseException) e).getCode() == 415) {
                                         //status 415 = "bad_content_type"
                                         dontSendMultipart = true;
                                         uploadJsonRevision(revision);
@@ -633,8 +582,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         CustomFuture future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),
-                new RemoteRequestCompletionBlock() {
-                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                new RemoteRequestCompletion() {
+                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
                         if (e != null) {
                             setError(e);
                         } else {
@@ -650,7 +599,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     /**
      * Given a revision and an array of revIDs, finds the latest common ancestor revID
      * and returns its generation #. If there is none, returns 0.
-     *
+     * <p/>
      * int CBLFindCommonAncestor(CBL_Revision* rev, NSArray* possibleRevIDs) in CBLRestPusher.m
      */
     private static int findCommonAncestor(RevisionInternal rev, List<String> possibleRevIDs) {
@@ -677,19 +626,19 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     /**
      * Submit revisions into inbox for changes from changesSince()
      */
-    private void submitRevisions(final RevisionList changes){
+    private void submitRevisions(final RevisionList changes) {
         int remaining = changes.size();
         int size = batcher.getCapacity();
         int start = 0;
-        while(remaining > 0){
-            if(size > remaining)
+        while (remaining > 0) {
+            if (size > remaining)
                 size = remaining;
-            RevisionList subChanges = new RevisionList(changes.subList(start, start+size));
+            RevisionList subChanges = new RevisionList(changes.subList(start, start + size));
             batcher.queueObjects(subChanges);
             start += size;
             remaining -= size;
             // if not running state anymore, exit from loop.
-            if(!isRunning())
+            if (!isRunning())
                 break;
         }
     }

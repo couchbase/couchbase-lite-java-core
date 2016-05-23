@@ -1,3 +1,16 @@
+/**
+ * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+ * <p/>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
 package com.couchbase.lite.router;
 
 import com.couchbase.lite.AsyncTask;
@@ -32,14 +45,13 @@ import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.store.Store;
+import com.couchbase.lite.replicator.RemoteRequestResponseException;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
-
-import org.apache.http.client.HttpResponseException;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -1025,8 +1037,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             Log.w(TAG, msg);
             Throwable error = replicator.getLastError();
             int statusCode = 400;
-            if (error instanceof HttpResponseException) {
-                statusCode = ((HttpResponseException) error).getStatusCode();
+            if (error instanceof RemoteRequestResponseException) {
+                statusCode = ((RemoteRequestResponseException) error).getCode();
             }
             Object[] errorObjects = new Object[]{statusCode, replicator.getLastError().toString()};
             activity.put("error", errorObjects);
@@ -1045,7 +1057,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      * <p/>
      * TODO: CBL iOS supports EventSourceFeed in addition to longpoll and continuous.
      * TODO: Need to catch up CBL iOS:
-     *  - (void) sendContinuousLine: (NSDictionary*)changeDict in CBL_Router+Handlers.m
+     * - (void) sendContinuousLine: (NSDictionary*)changeDict in CBL_Router+Handlers.m
      */
     private void sendContinuousReplicationChanges(Map<String, Object> activity) {
         try {
@@ -1850,11 +1862,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 if (cacheWithEtag(rev.getRevID()))
                     return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
 
-                if(!isLocalDoc && includeAttachments){
+                if (!isLocalDoc && includeAttachments) {
                     int minRevPos = 1;
                     List<String> attsSince = parseJSONRevArrayQuery(getQuery("atts_since"));
                     String ancestorID = db.getStore().findCommonAncestorOf(rev, attsSince);
-                    if(ancestorID!=null)
+                    if (ancestorID != null)
                         minRevPos = Revision.generationFromRevID(ancestorID) + 1;
                     RevisionInternal expandedRev = rev.copy();
                     Status status = new Status(Status.OK);

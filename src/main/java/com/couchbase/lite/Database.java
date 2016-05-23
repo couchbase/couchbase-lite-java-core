@@ -32,7 +32,7 @@ import com.couchbase.lite.store.StoreDelegate;
 import com.couchbase.lite.support.Base64;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.PersistentCookieStore;
+import com.couchbase.lite.support.PersistentCookieJar;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.action.Action;
 import com.couchbase.lite.support.action.ActionBlock;
@@ -98,7 +98,14 @@ public class Database implements StoreDelegate {
     private Map<String, ReplicationFilter> filters;
     private Map<String, Validator> validations;
 
+    // Note: Why the pending attachment is not removed from the pendingAttachmentsByDigest
+    // After a document is saved the items for its attachments could be removed
+    // from _pendingAttachmentsByDigest … except in the case
+    // where two docs being added have the same attachment.
+    // The values in the dictionary are just 20 bytes long, so it’s not going to cause trouble
+    // unless there are enormously many of them.
     private Map<String, Object> pendingAttachmentsByDigest;
+
     private final Set<Replication> activeReplicators;
     private final Set<Replication> allReplicators;
 
@@ -130,7 +137,7 @@ public class Database implements StoreDelegate {
      * <p/>
      * REF: https://github.com/couchbase/couchbase-lite-android/issues/269
      */
-    private PersistentCookieStore persistentCookieStore;
+    private PersistentCookieJar persistentCookieStore;
 
     /**
      * Constructor
@@ -149,6 +156,7 @@ public class Database implements StoreDelegate {
         this.activeReplicators = Collections.synchronizedSet(new HashSet());
         this.allReplicators = Collections.synchronizedSet(new HashSet());
         this.postingChangeNotifications = false;
+        this.pendingAttachmentsByDigest = new HashMap<String, Object>();
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -255,9 +263,10 @@ public class Database implements StoreDelegate {
 
     /**
      * Changes the database's encryption key, or removes encryption if the new key is null.
-     *
+     * <p/>
      * To use this API, the database storage engine must support encryption, and the
      * ManagerOptions.EnableStorageEncryption property must be set to true.
+     *
      * @param newKeyOrPassword The encryption key in the form of an String (a password) or an
      *                         byte[] object exactly 32 bytes in length (a raw AES key.)
      *                         If a string is given, it will be internally converted to a raw key
@@ -602,7 +611,7 @@ public class Database implements StoreDelegate {
     public int getMaxRevTreeDepth() {
         return store.getMaxRevTreeDepth();
     }
-    
+
     ///////////////////////////////////////////////////////////////////////////
     // Events
     ///////////////////////////////////////////////////////////////////////////
@@ -1228,6 +1237,7 @@ public class Database implements StoreDelegate {
 
     /**
      * Create a SymmetricKey object from the key (byte[32]) or password string.
+     *
      * @param keyOrPassword
      * @return
      * @throws CouchbaseLiteException
@@ -1240,11 +1250,11 @@ public class Database implements StoreDelegate {
         byte[] rawKey = null;
         if (keyOrPassword instanceof String) {
             rawKey = ((EncryptableStore) store).derivePBKDF2SHA256Key(
-                    (String)keyOrPassword,
+                    (String) keyOrPassword,
                     DEFAULT_PBKDF2_KEY_SALT.getBytes(),
                     DEFAULT_PBKDF2_KEY_ROUNDS);
         } else if (keyOrPassword instanceof byte[]) {
-            rawKey = (byte[])keyOrPassword;
+            rawKey = (byte[]) keyOrPassword;
         } else {
             throw new CouchbaseLiteException("Key must be String or byte[" +
                     SymmetricKey.KEY_SIZE + ']', Status.BAD_REQUEST);
@@ -1400,7 +1410,7 @@ public class Database implements StoreDelegate {
                                                ReplicationFilter filter,
                                                Map<String, Object> filterParams) {
         long longSequence = 0;
-        if(sequence != null)
+        if (sequence != null)
             longSequence = Long.parseLong(sequence);
         ChangesOptions options = new ChangesOptions();
         options.setIncludeConflicts(true);
@@ -1502,7 +1512,7 @@ public class Database implements StoreDelegate {
         if (digest == null) {
             return null;
         }
-        String path = null;
+        String path;
         Object pending = pendingAttachmentsByDigest.get(digest);
         if (pending != null) {
             if (pending instanceof BlobStoreWriter) {
@@ -1637,12 +1647,12 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public void rememberAttachmentWritersForDigests(Map<String, BlobStoreWriter> blobsByDigest) {
-        getPendingAttachmentsByDigest().putAll(blobsByDigest);
+        pendingAttachmentsByDigest.putAll(blobsByDigest);
     }
 
     @InterfaceAudience.Private
     public void rememberPendingKey(BlobKey key, String digest) {
-        getPendingAttachmentsByDigest().put(digest, key.getBytes());
+        pendingAttachmentsByDigest.put(digest, key.getBytes());
     }
 
     /**
@@ -1888,9 +1898,9 @@ public class Database implements StoreDelegate {
      * Will lazily create one if none exists.
      */
     @InterfaceAudience.Private
-    public PersistentCookieStore getPersistentCookieStore() {
-        if (persistentCookieStore == null)
-            persistentCookieStore = new PersistentCookieStore(this);
+    public PersistentCookieJar getPersistentCookieStore() {
+        if(persistentCookieStore == null)
+            persistentCookieStore = new PersistentCookieJar(this);
         return persistentCookieStore;
     }
 
@@ -1999,7 +2009,8 @@ public class Database implements StoreDelegate {
 
     /**
      * Set the document type for the given view name.
-     * @param docType document type
+     *
+     * @param docType  document type
      * @param viewName view name
      */
     @InterfaceAudience.Private
@@ -2011,6 +2022,7 @@ public class Database implements StoreDelegate {
 
     /**
      * Get the document type for the given view name.
+     *
      * @param viewName view name
      * @return document type if available, otherwise returns null.
      */
@@ -2023,6 +2035,7 @@ public class Database implements StoreDelegate {
 
     /**
      * Remove document type for the given view name.
+     *
      * @param viewName view name
      */
     private void removeViewDocumentType(String viewName) {
@@ -2119,7 +2132,7 @@ public class Database implements StoreDelegate {
         List<View> views = new ArrayList<View>();
         for (String name : names) {
             View view = getExistingView(name);
-            if(view != null)
+            if (view != null)
                 views.add(view);
         }
         return views;
@@ -2193,14 +2206,8 @@ public class Database implements StoreDelegate {
         return getAttachment((Map<String, Object>) attachments.get(filename), filename);
     }
 
-    private Map<String, Object> getPendingAttachmentsByDigest() {
-        if (pendingAttachmentsByDigest == null)
-            pendingAttachmentsByDigest = new HashMap<String, Object>();
-        return pendingAttachmentsByDigest;
-    }
-
     protected void rememberAttachmentWriter(BlobStoreWriter writer) {
-        getPendingAttachmentsByDigest().put(writer.mD5DigestString(), writer);
+        pendingAttachmentsByDigest.put(writer.mD5DigestString(), writer);
     }
 
     // Database+Insertion
@@ -2342,7 +2349,7 @@ public class Database implements StoreDelegate {
     private boolean garbageCollectAttachments() throws CouchbaseLiteException {
         Log.v(TAG, "Scanning database revisions for attachments...");
         Set<BlobKey> keys = store.findAllAttachmentKeys();
-        if(keys == null)
+        if (keys == null)
             return false;
         Log.v(TAG, "    ...found %d attachments", keys.size());
         List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
@@ -2361,16 +2368,16 @@ public class Database implements StoreDelegate {
 
     /**
      * Save current local uuid into the local checkpoint document.
-     *
+     * <p/>
      * This method is called only
      * when importing or replacing the database. The old localUUID is used by replicators
      * to get the local checkpoint from the imported database in order to start replicating
      * from from the current local checkpoint of the imported database after importing.
-     *
+     * <p/>
      * in CBLDatabase+Replication.m
      * - (BOOL) saveLocalUUIDInLocalCheckpointDocument: (NSError**)outError;
      */
-    protected boolean saveLocalUUIDInLocalCheckpointDocument(){
+    protected boolean saveLocalUUIDInLocalCheckpointDocument() {
         return putLocalCheckpointDocumentWithKey(
                 kCBLDatabaseLocalCheckpoint_LocalUUID,
                 privateUUID());
@@ -2378,7 +2385,7 @@ public class Database implements StoreDelegate {
 
     /**
      * Put a property with a given key and value into the local checkpoint document.
-     *
+     * <p/>
      * in CBLDatabase+Replication.m
      * - (BOOL) putLocalCheckpointDocumentWithKey: (NSString*)key value:(id)value outError: (NSError**)outError
      */
@@ -2406,18 +2413,18 @@ public class Database implements StoreDelegate {
     /**
      * Returns a property value specifiec by the key from the local checkpoint document.
      */
-    protected Object getLocalCheckpointDocumentPropertyValueForKey(String key){
+    protected Object getLocalCheckpointDocumentPropertyValueForKey(String key) {
         return getLocalCheckpointDocument().get(key);
     }
 
     /**
      * Returns local checkpoint document if it exists. Otherwise returns nil.
      */
-    protected Map<String, Object> getLocalCheckpointDocument(){
+    protected Map<String, Object> getLocalCheckpointDocument() {
         return getExistingLocalDocument(kLocalCheckpointDocId);
     }
 
-    private static long keyToSequence(Object key, long dflt){
-        return key instanceof Number ? ((Number)key).longValue() : dflt;
+    private static long keyToSequence(Object key, long dflt) {
+        return key instanceof Number ? ((Number) key).longValue() : dflt;
     }
 }

@@ -1,13 +1,22 @@
+/**
+ * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
 package com.couchbase.lite.util;
 
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.internal.InterfaceAudience;
-
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.StatusLine;
-import org.apache.http.client.HttpResponseException;
+import com.couchbase.lite.replicator.RemoteRequestResponseException;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -18,6 +27,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+
+import okhttp3.Headers;
+import okhttp3.Response;
 
 public class Utils {
 
@@ -48,9 +60,9 @@ public class Utils {
         if (throwable instanceof CouchbaseLiteException) {
             CouchbaseLiteException e = (CouchbaseLiteException) throwable;
             return isPermanentError(e.getCBLStatus().getCode());
-        } else if (throwable instanceof HttpResponseException) {
-            HttpResponseException e = (HttpResponseException) throwable;
-            return isPermanentError(e.getStatusCode());
+        } else if (throwable instanceof RemoteRequestResponseException) {
+            RemoteRequestResponseException e = (RemoteRequestResponseException) throwable;
+            return isPermanentError(e.getCode());
         } else {
             return false;
         }
@@ -72,19 +84,15 @@ public class Utils {
         if (throwable instanceof CouchbaseLiteException) {
             CouchbaseLiteException e = (CouchbaseLiteException) throwable;
             return isTransientError(e.getCBLStatus().getCode());
-        } else if (throwable instanceof HttpResponseException) {
-            HttpResponseException e = (HttpResponseException) throwable;
-            return isTransientError(e.getStatusCode());
+        } else if (throwable instanceof RemoteRequestResponseException) {
+            RemoteRequestResponseException e = (RemoteRequestResponseException) throwable;
+            return isTransientError(e.getCode());
         } else if (throwable instanceof java.net.SocketTimeoutException)
             // connection and socket timeouts => transient error
-            return true;
-        else if (throwable instanceof org.apache.http.conn.ConnectTimeoutException)
             return true;
         else if (throwable instanceof java.net.ConnectException)
             return true;
         else if (throwable instanceof java.net.SocketException)
-            return true;
-        else if (throwable instanceof org.apache.http.conn.HttpHostConnectException)
             return true;
         else if (throwable instanceof IOException)
             // NOTE: Exception is thrown from HttpClient.execute() or InputStream.read()
@@ -95,14 +103,8 @@ public class Utils {
             return false;
     }
 
-    public static boolean isTransientError(StatusLine status) {
-        // TODO: in ios implementation, it considers others errors
-        //if ($equal(domain, NSURLErrorDomain)) {
-        //    return code == NSURLErrorTimedOut
-        //            || code == NSURLErrorCannotConnectToHost
-        //            || code == NSURLErrorNetworkConnectionLost;
-
-        return isTransientError(status.getStatusCode());
+    public static boolean isTransientError(Response response) {
+        return isTransientError(response.code());
     }
 
     public static boolean isTransientError(int statusCode) {
@@ -114,13 +116,12 @@ public class Utils {
     }
 
     public static boolean isDocumentError(Throwable throwable) {
-
         if (throwable instanceof CouchbaseLiteException) {
             CouchbaseLiteException e = (CouchbaseLiteException) throwable;
             return isDocumentError(e.getCBLStatus().getCode());
-        } else if (throwable instanceof HttpResponseException) {
-            HttpResponseException e = (HttpResponseException) throwable;
-            return isDocumentError(e.getStatusCode());
+        } else if (throwable instanceof RemoteRequestResponseException) {
+            RemoteRequestResponseException e = (RemoteRequestResponseException) throwable;
+            return isDocumentError(e.getCode());
         } else {
             return false;
         }
@@ -153,8 +154,8 @@ public class Utils {
 
     @InterfaceAudience.Private
     public static boolean is404(Throwable e) {
-        if (e instanceof HttpResponseException) {
-            return ((HttpResponseException) e).getStatusCode() == 404;
+        if (e instanceof RemoteRequestResponseException) {
+            return ((RemoteRequestResponseException) e).getCode() == 404;
         }
         return false;
     }
@@ -164,9 +165,9 @@ public class Utils {
         if (t instanceof CouchbaseLiteException) {
             CouchbaseLiteException couchbaseLiteException = (CouchbaseLiteException) t;
             return couchbaseLiteException.getCBLStatus().getCode();
-        } else if (t instanceof HttpResponseException) {
-            HttpResponseException responseException = (HttpResponseException) t;
-            return responseException.getStatusCode();
+        } else if (t instanceof RemoteRequestResponseException) {
+            RemoteRequestResponseException responseException = (RemoteRequestResponseException) t;
+            return responseException.getCode();
         }
         return Status.UNKNOWN;
     }
@@ -178,14 +179,8 @@ public class Utils {
         return orig.substring(0, maxLength);
     }
 
-    // check if contentEncoding is gzip
-    public static boolean isGzip(HttpEntity entity) {
-        return isGzip(entity.getContentEncoding());
-    }
-
-    // check if contentEncoding is gzip
-    public static boolean isGzip(Header contentEncoding) {
-        return contentEncoding != null && isGzip(contentEncoding.getValue());
+    public static boolean isGzip(Response response) {
+        return isGzip(response.header("Content-Encoding"));
     }
 
     // check if contentEncoding is gzip
@@ -265,10 +260,10 @@ public class Utils {
         }
     }
 
-    public static Map<String, String> headersToMap(Header[] headers) {
+    public static Map<String, String> headersToMap(Headers headers) {
         Map<String, String> map = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
-        for (int i = 0; i < headers.length; i++) {
-            map.put(headers[i].getName(), headers[i].getValue());
+        for (String name : headers.names()) {
+            map.put(name, headers.get(name));
         }
         return map;
     }
@@ -279,7 +274,7 @@ public class Utils {
      * if necessary, to cancel any lingering tasks:
      * http://docs.oracle.com/javase/6/docs/api/java/util/concurrent/ExecutorService.html
      *
-     * @param timeToWait4ShutDown - Seconds
+     * @param timeToWait4ShutDown    - Seconds
      * @param timeToWait4ShutDownNow - Seconds
      */
     public static void shutdownAndAwaitTermination(ExecutorService pool,
