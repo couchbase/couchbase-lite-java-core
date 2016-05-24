@@ -301,7 +301,7 @@ public class RemoteRequest implements CancellableRunnable {
         if (!response.headers("Set-Cookie").isEmpty()) {
             List<Cookie> cookies = new ArrayList<Cookie>();
             for (String setCookie : response.headers("Set-Cookie"))
-                cookies.add(Cookie.parse(null, setCookie));
+                cookies.add(Cookie.parse(response.request().url(), setCookie));
             factory.addCookies(cookies);
         }
     }
