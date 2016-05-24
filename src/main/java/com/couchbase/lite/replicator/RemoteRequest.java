@@ -1,11 +1,11 @@
 /**
  * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
+ * <p/>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
- *
+ * <p/>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p/>
  * Unless required by applicable law or agreed to in writing, software distributed under the
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions
@@ -35,7 +35,6 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.ResponseBody;
 
 /**
  * @exclude
@@ -244,24 +243,23 @@ public class RemoteRequest implements CancellableRunnable {
         Throwable error = null;
         Response response = null;
         try {
-            Log.v(TAG, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
-            call = httpClient.newCall(request);
-            response = call.execute();
-            Log.v(TAG, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
-            storeCookie(response);
-
-            // error
-            if (response.code() >= 300) {
-                if (!dontLog404)
-                    Log.w(TAG, "%s: Got error status: %d for %s. Reason: %s",
-                            this, response.code(), url, response.message());
-                error = new RemoteRequestResponseException(response.code(), response.message());
-            }
-            // success
-            else {
-                ResponseBody responseBody = response.body();
-                try {
-                    InputStream stream = responseBody.byteStream();
+            try {
+                Log.v(TAG, "%s: RemoteRequest calling httpClient.execute, url: %s", this, url);
+                call = httpClient.newCall(request);
+                response = call.execute();
+                Log.v(TAG, "%s: RemoteRequest called httpClient.execute, url: %s", this, url);
+                storeCookie(response);
+                // error
+                if (response.code() >= 300) {
+                    if (!dontLog404)
+                        Log.w(TAG, "%s: Got error status: %d for %s. Reason: %s",
+                                this, response.code(), url, response.message());
+                    error = new RemoteRequestResponseException(response.code(), response.message());
+                    RequestUtils.closeResponseBody(response);
+                }
+                // success
+                else {
+                    InputStream stream = response.body().byteStream();
                     try {
                         // decompress if contentEncoding is gzip
                         if (Utils.isGzip(response))
@@ -273,16 +271,16 @@ public class RemoteRequest implements CancellableRunnable {
                         } catch (IOException e) {
                         }
                     }
-                } finally {
-                    responseBody.close();
                 }
+            } catch (Exception e) {
+                // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
+                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+                error = e;
             }
-        } catch (Exception e) {
-            // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
-            Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
-            error = e;
+            respondWithResult(fullBody, error, response);
+        } finally {
+            RequestUtils.closeResponseBody(response);
         }
-        respondWithResult(fullBody, error, response);
     }
 
     protected void respondWithResult(final Object result,
@@ -299,18 +297,11 @@ public class RemoteRequest implements CancellableRunnable {
         }
     }
 
-    ////////////////////////////////////////////////////////////
-    // TODO
-    ////////////////////////////////////////////////////////////
-
-
     protected void storeCookie(Response response) {
         if (!response.headers("Set-Cookie").isEmpty()) {
             List<Cookie> cookies = new ArrayList<Cookie>();
-            for (String setCookie : response.headers("Set-Cookie")) {
-                // TODO - review
+            for (String setCookie : response.headers("Set-Cookie"))
                 cookies.add(Cookie.parse(null, setCookie));
-            }
             factory.addCookies(cookies);
         }
     }

@@ -22,6 +22,8 @@ import java.net.URL;
 
 import okhttp3.Credentials;
 import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * Created by hideki on 5/19/16.
@@ -66,5 +68,13 @@ public class RequestUtils {
             password = isUrlBased ? URIUtils.decode(userInfoElements[1]) : userInfoElements[1];
         String credential = Credentials.basic(username, password);
         return builder.addHeader("Authorization", credential);
+    }
+
+    static void closeResponseBody(Response response) {
+        if (response != null) {
+            ResponseBody body = response.body();
+            if (body != null)
+                body.close();
+        }
     }
 }

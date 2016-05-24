@@ -84,23 +84,22 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
         Throwable error = null;
         Response response = null;
         try {
-            Log.v(TAG, "%s: RemoteMultipartDownloaderRequest call execute(), url: %s", this, url);
-            call = httpClient.newCall(request);
-            response = call.execute();
-            Log.v(TAG, "%s: RemoteMultipartDownloaderRequest called execute(), url: %s", this, url);
-
-            storeCookie(response);
-
-            // error
-            if (response.code() >= 300) {
-                Log.w(TAG, "%s: Got error status: %d for %s. Reason: %s",
-                        this, response.code(), url, response.message());
-                error = new RemoteRequestResponseException(response.code(), response.message());
-            }
-            // success
-            else {
-                ResponseBody responseBody = response.body();
-                try {
+            try {
+                Log.v(TAG, "%s: RemoteMultipartDownloaderRequest call execute(), url: %s", this, url);
+                call = httpClient.newCall(request);
+                response = call.execute();
+                Log.v(TAG, "%s: RemoteMultipartDownloaderRequest called execute(), url: %s", this, url);
+                storeCookie(response);
+                // error
+                if (response.code() >= 300) {
+                    Log.w(TAG, "%s: Got error status: %d for %s. Reason: %s",
+                            this, response.code(), url, response.message());
+                    error = new RemoteRequestResponseException(response.code(), response.message());
+                    RequestUtils.closeResponseBody(response);
+                }
+                // success
+                else {
+                    ResponseBody responseBody = response.body();
                     InputStream stream = responseBody.byteStream();
                     try {
                         // decompress if contentEncoding is gzip
@@ -131,16 +130,15 @@ public class RemoteMultipartDownloaderRequest extends RemoteRequest {
                         } catch (IOException e) {
                         }
                     }
-                } finally {
-                    responseBody.close();
                 }
+            } catch (Exception e) {
+                // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
+                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+                error = e;
             }
-        } catch (Exception e) {
-            // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
-            Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
-            error = e;
+            respondWithResult(fullBody, error, response);
+        } finally {
+            RequestUtils.closeResponseBody(response);
         }
-
-        respondWithResult(fullBody, error, response);
     }
 }

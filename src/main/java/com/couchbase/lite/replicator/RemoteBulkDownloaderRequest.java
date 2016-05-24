@@ -113,29 +113,30 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
         Throwable error = null;
         Response response = null;
         try {
-            Log.v(TAG, "%s: BulkDownloader calling httpClient.execute, url: %s", this, url);
-            call = httpClient.newCall(request);
-            response = call.execute();
-            Log.v(TAG, "%s: BulkDownloader called httpClient.execute, url: %s", this, url);
+            try {
+                Log.v(TAG, "%s: BulkDownloader calling httpClient.execute, url: %s", this, url);
+                call = httpClient.newCall(request);
+                response = call.execute();
+                Log.v(TAG, "%s: BulkDownloader called httpClient.execute, url: %s", this, url);
 
-            storeCookie(response);
+                storeCookie(response);
 
-            // error
-            if (response.code() >= 300) {
-                // conflict could be happen. So ERROR prints make developer confused.
-                if (response.code() == 409)
-                    Log.w(TAG, "Got error status: %d for %s.  Reason: %s",
-                            response.code(), request, response.message());
-                else
-                    Log.i(TAG, "Got error status: %d for %s.  Reason: %s",
-                            response.code(), request, response.message());
-                error = new RemoteRequestResponseException(response.code(), response.message());
-            }
-            // success
-            else {
-                ResponseBody responseBody = response.body();
-                try {
-                    InputStream stream = responseBody.byteStream();
+                // error
+                if (response.code() >= 300) {
+                    // conflict could be happen. So ERROR prints make developer confused.
+                    if (response.code() == 409)
+                        Log.w(TAG, "Got error status: %d for %s.  Reason: %s",
+                                response.code(), request, response.message());
+                    else
+                        Log.i(TAG, "Got error status: %d for %s.  Reason: %s",
+                                response.code(), request, response.message());
+                    error = new RemoteRequestResponseException(response.code(), response.message());
+                    RequestUtils.closeResponseBody(response);
+                }
+                // success
+                else {
+                    ResponseBody responseBody = response.body();
+                    InputStream stream = response.body().byteStream();
                     try {
                         // decompress if contentEncoding is gzip
                         if (Utils.isGzip(response))
@@ -166,16 +167,16 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
                         } catch (IOException e) {
                         }
                     }
-                } finally {
-                    responseBody.close();
                 }
+            } catch (Exception e) {
+                // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
+                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+                error = e;
             }
-        } catch (Exception e) {
-            // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
-            Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
-            error = e;
+            respondWithResult(fullBody, error, response);
+        } finally {
+            RequestUtils.closeResponseBody(response);
         }
-        respondWithResult(fullBody, error, response);
     }
 
     ////////////////////////////////////////////////////////////
