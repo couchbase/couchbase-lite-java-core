@@ -1,3 +1,16 @@
+/**
+ * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.AsyncTask;
@@ -11,7 +24,7 @@ import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.PersistentCookieStore;
+import com.couchbase.lite.support.PersistentCookieJar;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
@@ -36,14 +49,18 @@ public class Replication
      *
      * @exclude
      */
-    public enum Direction { PULL, PUSH }
+    public enum Direction {
+        PULL, PUSH
+    }
 
     /**
      * Enum to specify whether this replication is oneshot or continuous.
      *
      * @exclude
      */
-    public enum Lifecycle { ONESHOT, CONTINUOUS }
+    public enum Lifecycle {
+        ONESHOT, CONTINUOUS
+    }
 
     /**
      * @exclude
@@ -56,13 +73,21 @@ public class Replication
      * Options for what metadata to include in document bodies
      */
     public enum ReplicationStatus {
-        /** The replication is finished or hit a fatal error. */
+        /**
+         * The replication is finished or hit a fatal error.
+         */
         REPLICATION_STOPPED,
-        /** The remote host is currently unreachable. */
+        /**
+         * The remote host is currently unreachable.
+         */
         REPLICATION_OFFLINE,
-        /** Continuous replication is caught up and waiting for more changes.*/
+        /**
+         * Continuous replication is caught up and waiting for more changes.
+         */
         REPLICATION_IDLE,
-        /** The replication is actively transferring data. */
+        /**
+         * The replication is actively transferring data.
+         */
         REPLICATION_ACTIVE
     }
 
@@ -112,11 +137,10 @@ public class Replication
         remote.put("url", remoteURL.toString());
         remote.put("headers", getHeaders());
         //remote.put("auth", authMap);
-        if(isPull()){
+        if (isPull()) {
             props.put("source", remote);
             props.put("target", db.getName());
-        }
-        else{
+        } else {
             props.put("source", db.getName());
             props.put("target", remote);
         }
@@ -125,6 +149,7 @@ public class Replication
 
     /**
      * Constructor
+     *
      * @exclude
      */
     @InterfaceAudience.Private
@@ -134,6 +159,7 @@ public class Replication
 
     /**
      * Constructor
+     *
      * @exclude
      */
     @InterfaceAudience.Private
@@ -180,7 +206,7 @@ public class Replication
             } else {
                 Log.w(Log.TAG_SYNC,
                         String.format("replicationInternal in unexpected state: %s, ignoring start()",
-                        replicationInternal.stateMachine.getState()));
+                                replicationInternal.stateMachine.getState()));
             }
         }
 
@@ -201,14 +227,14 @@ public class Replication
 
     /**
      * Restarts the replication.  This blocks until the replication successfully stops.
-     *
+     * <p/>
      * Alternatively, you can stop() the replication and create a brand new one and start() it.
      */
     @InterfaceAudience.Public
     public void restart() {
 
         // stop replicator if necessary
-        if(this.isRunning()) {
+        if (this.isRunning()) {
             final CountDownLatch stopped = new CountDownLatch(1);
             ChangeListener listener = new ChangeListener() {
                 @Override
@@ -227,13 +253,12 @@ public class Replication
             try {
                 // If need to wait more than 60 sec to stop, throws Exception
                 boolean ret = stopped.await(60, TimeUnit.SECONDS);
-                if(ret == false){
+                if (ret == false) {
                     throw new RuntimeException("Replicator is unable to stop.");
                 }
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
-            }
-            finally {
+            } finally {
                 removeChangeListener(listener);
             }
         }
@@ -334,7 +359,9 @@ public class Replication
     public void setCreateTarget(boolean createTarget) {
         properties.put(ReplicationField.CREATE_TARGET, createTarget);
         replicationInternal.setCreateTarget(createTarget);
-    };
+    }
+
+    ;
 
     /**
      * Adds a change delegate that will be called whenever the Replication changes.
@@ -476,12 +503,12 @@ public class Replication
         }
     }
 
-    public boolean isDocumentPending(Document doc){
-        if(doc == null) return false;
+    public boolean isDocumentPending(Document doc) {
+        if (doc == null) return false;
 
         // getPendingDocumentIDs() is not simple getter. so not cheap.
         Set<String> ids = getPendingDocumentIDs();
-        if(ids == null) return false;
+        if (ids == null) return false;
 
         return ids.contains(doc.getId());
     }
@@ -530,6 +557,7 @@ public class Replication
             this.transition = null;
             this.error = error;
         }
+
         /**
          * Get the owner Replication object that generated this ChangeEvent.
          */
@@ -540,7 +568,7 @@ public class Replication
         /**
          * Get the ReplicationStateTransition associated with this ChangeEvent, or nil
          * if it was not associated with a state transition.
-         *
+         * <p/>
          * This is not in our official public API, and is subject to change/removal.
          */
         public ReplicationStateTransition getTransition() {
@@ -549,7 +577,7 @@ public class Replication
 
         /**
          * The total number of changes to be processed, if the task is active, else 0.
-         *
+         * <p/>
          * This is not in our official public API, and is subject to change/removal.
          */
         public int getChangeCount() {
@@ -558,7 +586,7 @@ public class Replication
 
         /**
          * The number of completed changes processed, if the task is active, else 0.
-         *
+         * <p/>
          * This is not in our official public API, and is subject to change/removal.
          */
         public int getCompletedChangeCount() {
@@ -596,6 +624,7 @@ public class Replication
     /**
      * Set the HTTP client factory if one was passed in, or use the default
      * set in the manager if available.
+     *
      * @param factory
      */
     @InterfaceAudience.Private
@@ -614,7 +643,7 @@ public class Replication
             if (managerClientFactory != null) {
                 this.clientFactory = managerClientFactory;
             } else {
-                PersistentCookieStore cookieStore = db.getPersistentCookieStore();
+                PersistentCookieJar cookieStore = db.getPersistentCookieStore();
                 this.clientFactory = new CouchbaseLiteHttpClientFactory(cookieStore);
             }
         }
@@ -666,11 +695,11 @@ public class Replication
     /**
      * Sets an HTTP cookie for the Replication.
      *
-     * @param name The name of the cookie.
-     * @param value The value of the cookie.
-     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
-     * @param maxAge The maxAge, in milliseconds, that this cookie should be valid for.
-     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param name     The name of the cookie.
+     * @param value    The value of the cookie.
+     * @param path     The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param maxAge   The maxAge, in milliseconds, that this cookie should be valid for.
+     * @param secure   Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
      * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP,
      *                 or HTTPS, requests thus restricting access from other, non-HTTP APIs.
      */
@@ -683,13 +712,13 @@ public class Replication
     /**
      * Sets an HTTP cookie for the Replication.
      *
-     * @param name The name of the cookie.
-     * @param value The value of the cookie.
-     * @param path The path attribute of the cookie.  If null or empty, will use remote.getPath()
+     * @param name           The name of the cookie.
+     * @param value          The value of the cookie.
+     * @param path           The path attribute of the cookie.  If null or empty, will use remote.getPath()
      * @param expirationDate The expiration date of the cookie.
-     * @param secure Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
-     * @param httpOnly (ignored) Whether the cookie should only be used when transmitting HTTP,
-     *                 or HTTPS, requests thus restricting access from other, non-HTTP APIs.
+     * @param secure         Whether the cookie should only be sent using a secure protocol (e.g. HTTPS).
+     * @param httpOnly       (ignored) Whether the cookie should only be used when transmitting HTTP,
+     *                       or HTTPS, requests thus restricting access from other, non-HTTP APIs.
      */
     @InterfaceAudience.Public
     public void setCookie(String name, String value, String path,
@@ -717,7 +746,7 @@ public class Replication
 
     /**
      * Set the remote UUID representing the remote server.
-     *
+     * <p/>
      * In some cases, especially Peer-to-peer replication, the remote or target database
      * might not have a fixed URL - The hostname or IP address or port could change.
      * As a result, URL couldn't be used to represent the remote database when persistently
@@ -764,7 +793,7 @@ public class Replication
     /**
      * Name of an optional filter function to run on the source server. Only documents for
      * which the function returns true are replicated.
-     *
+     * <p/>
      * For a pull replication, the name looks like "designdocname/filtername".
      * For a push replication, use the name under which you registered the filter with the Database.
      */
@@ -855,25 +884,25 @@ public class Replication
             Object value = properties.get(key);
             switch (key) {
                 case FILTER_NAME:
-                    replicationInternal.setFilter((String)value);
+                    replicationInternal.setFilter((String) value);
                     break;
                 case FILTER_PARAMS:
-                    replicationInternal.setFilterParams((Map)value);
+                    replicationInternal.setFilterParams((Map) value);
                     break;
                 case DOC_IDS:
-                    replicationInternal.setDocIds((List)value);
+                    replicationInternal.setDocIds((List) value);
                     break;
                 case AUTHENTICATOR:
-                    replicationInternal.setAuthenticator((Authenticator)value);
+                    replicationInternal.setAuthenticator((Authenticator) value);
                     break;
                 case CREATE_TARGET:
-                    replicationInternal.setCreateTarget((Boolean)value);
+                    replicationInternal.setCreateTarget((Boolean) value);
                     break;
                 case REQUEST_HEADERS:
-                    replicationInternal.setHeaders((Map)value);
+                    replicationInternal.setHeaders((Map) value);
                     break;
                 case REMOTE_UUID:
-                    replicationInternal.setRemoteUUID((String)value);
+                    replicationInternal.setRemoteUUID((String) value);
             }
         }
     }

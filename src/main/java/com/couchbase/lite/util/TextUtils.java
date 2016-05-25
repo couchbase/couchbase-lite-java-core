@@ -18,9 +18,8 @@ package com.couchbase.lite.util;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 
-import org.apache.http.util.ByteArrayBuffer;
-
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -52,29 +51,30 @@ public class TextUtils {
     }
 
     public static byte[] read(InputStream is) throws IOException {
-        final int initialCapacity = 1024;
-        ByteArrayBuffer byteArrayBuffer = new ByteArrayBuffer(initialCapacity);
-        byte[] bytes = new byte[512];
-        int offset = 0;
-        int numRead = 0;
-
-        while ((numRead = is.read(bytes, offset, bytes.length - offset)) >= 0) {
-            byteArrayBuffer.append(bytes, 0, numRead);
-            offset += numRead;
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        try {
+            byte[] bytes = new byte[512];
+            int offset = 0;
+            int numRead;
+            while ((numRead = is.read(bytes, offset, bytes.length - offset)) >= 0) {
+                buffer.write(bytes, 0, numRead);
+                offset += numRead;
+            }
+            return buffer.toByteArray();
+        } finally {
+            buffer.close();
         }
-        return byteArrayBuffer.toByteArray();
     }
 
     public static String read(File file) throws IOException {
-        InputStream input = null;
+        byte[] content = null;
+        InputStream input = new FileInputStream(file);
         try {
-            input = new FileInputStream(file);
-            byte[] content = read(input);
-            return content != null ? new String(content) : null;
+            content = read(input);
         } finally {
-            if (input != null)
-                input.close();
+            input.close();
         }
+        return content != null ? new String(content) : null;
     }
 
     public static void write(String text, File file) throws IOException {
@@ -83,8 +83,8 @@ public class TextUtils {
             output = new BufferedOutputStream(new FileOutputStream(file));
             output.write(text.getBytes());
         } finally {
-             if (output != null)
-                 output.close();
+            if (output != null)
+                output.close();
         }
     }
 

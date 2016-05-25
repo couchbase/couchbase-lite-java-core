@@ -1,3 +1,16 @@
+/**
+ * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the
+ * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.CouchbaseLiteException;
@@ -15,16 +28,11 @@ import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.CustomFuture;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.RemoteRequestCompletionBlock;
 import com.couchbase.lite.support.SequenceMap;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
 import com.couchbase.lite.util.Utils;
-
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.HttpResponseException;
 
 import java.net.URL;
 import java.util.ArrayList;
@@ -38,6 +46,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Response;
 
 /**
  * Pull Replication
@@ -310,16 +321,16 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         ++httpConnectionCount;
 
-        final BulkDownloader dl;
+        final RemoteBulkDownloaderRequest dl;
         try {
-            dl = new BulkDownloader(
+            dl = new RemoteBulkDownloaderRequest(
                     clientFactory,
                     remote,
                     true,
                     bulkRevs,
                     db,
                     this.requestHeaders,
-                    new BulkDownloader.BulkDownloaderDocumentBlock() {
+                    new RemoteBulkDownloaderRequest.BulkDownloaderDocument() {
                         public void onDocument(Map<String, Object> props) {
                             // Got a revision!
                             // Find the matching revision in 'remainingRevs' and get its sequence:
@@ -349,9 +360,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             }
                         }
                     },
-                    new RemoteRequestCompletionBlock() {
+                    new RemoteRequestCompletion() {
 
-                        public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                        public void onCompletion(Response httpResponse, Object result, Throwable e) {
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
@@ -474,9 +485,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         Future future = sendAsyncRequest("POST",
                 "/_all_docs?include_docs=true",
                 body,
-                new RemoteRequestCompletionBlock() {
+                new RemoteRequestCompletion() {
 
-                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
 
                         Map<String, Object> res = (Map<String, Object>) result;
 
@@ -572,7 +583,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             } else {
                                 Log.w(TAG, "%s: failed to write %s: status=%s",
                                         this, rev, e.getCBLStatus().getCode());
-                                setError(new HttpResponseException(e.getCBLStatus().getCode(), null));
+                                setError(new RemoteRequestResponseException(e.getCBLStatus().getCode(), null));
                                 continue;
                             }
                         }
@@ -669,10 +680,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         //FIXME find a way to avoid this
         final String pathInside = path.toString();
         CustomFuture future = sendAsyncMultipartDownloaderRequest("GET", pathInside,
-                null, db, new RemoteRequestCompletionBlock() {
+                null, db, new RemoteRequestCompletion() {
 
                     @Override
-                    public void onCompletion(HttpResponse httpResponse, Object result, Throwable e) {
+                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
                         if (e != null) {
                             Log.w(TAG, "Error pulling remote revision: %s", e, this);
                             if (Utils.isDocumentError(e)) {
@@ -755,9 +766,13 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         return lastSequence;
     }
 
+    ////////////////////////////////////////////////////////////
+    // Implementations of CancellableRunnable
+    ////////////////////////////////////////////////////////////
+
     @Override
-    public HttpClient getHttpClient() {
-        return clientFactory.getHttpClient();
+    public OkHttpClient getOkHttpClient() {
+        return clientFactory.getOkHttpClient();
     }
 
     @Override
@@ -770,6 +785,46 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             throw new RuntimeException(e);
         }
     }
+
+    @Override
+    public void changeTrackerStopped(ChangeTracker tracker) {
+        // this callback will be on the changetracker thread, but we need
+        // to do the work on the replicator thread.
+        synchronized (executor) {
+            if (!executor.isShutdown()) {
+                executor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            processChangeTrackerStopped(changeTracker);
+                        } catch (RuntimeException e) {
+                            Log.e(Log.TAG_CHANGE_TRACKER, "Unknown Error in processChangeTrackerStopped()", e);
+                            throw e;
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    @Override
+    public void changeTrackerFinished(ChangeTracker tracker) {
+        Log.d(TAG, "changeTrackerFinished");
+    }
+
+    @Override
+    public void changeTrackerCaughtUp() {
+        Log.d(TAG, "changeTrackerCaughtUp");
+        // this has to be on a different thread than the replicator thread, or else it's a deadlock
+        // because it might be waiting for jobs that have been scheduled, and not
+        // yet executed (and which will never execute because this will block processing).
+        waitForPendingFuturesWithNewThread();
+    }
+
+    ////////////////////////////////////////////////////////////
+    // Protected or Private Methods
+    ////////////////////////////////////////////////////////////
+
 
     /**
      * in CBL_Puller.m
@@ -817,26 +872,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         pauseOrResume();
     }
 
-    @Override
-    public void changeTrackerStopped(ChangeTracker tracker) {
-        // this callback will be on the changetracker thread, but we need
-        // to do the work on the replicator thread.
-        synchronized (executor) {
-            if (!executor.isShutdown()) {
-                executor.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            processChangeTrackerStopped(changeTracker);
-                        } catch (RuntimeException e) {
-                            Log.e(Log.TAG_CHANGE_TRACKER, "Unknown Error in processChangeTrackerStopped()", e);
-                            throw e;
-                        }
-                    }
-                });
-            }
-        }
-    }
 
     private void processChangeTrackerStopped(ChangeTracker tracker) {
         Log.d(TAG, "changeTrackerStopped.  lifecycle: %s", lifecycle);
@@ -885,10 +920,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
     }
 
-    @Override
-    public void changeTrackerFinished(ChangeTracker tracker) {
-        Log.d(TAG, "changeTrackerFinished");
-    }
 
     private void waitForPendingFuturesWithNewThread() {
         String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
@@ -900,14 +931,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }, threadName).start();
     }
 
-    @Override
-    public void changeTrackerCaughtUp() {
-        Log.d(TAG, "changeTrackerCaughtUp");
-        // this has to be on a different thread than the replicator thread, or else it's a deadlock
-        // because it might be waiting for jobs that have been scheduled, and not
-        // yet executed (and which will never execute because this will block processing).
-        waitForPendingFuturesWithNewThread();
-    }
 
     /**
      * Implementation of BlockingQueueListener.changed(EventType, Object, BlockingQueue) for Pull Replication
@@ -993,7 +1016,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         }
     }
 
-    protected void waitDownloadsToInsertBatcherCompleted(){
+    protected void waitDownloadsToInsertBatcherCompleted() {
         waitBatcherCompleted(downloadsToInsert);
     }
 
