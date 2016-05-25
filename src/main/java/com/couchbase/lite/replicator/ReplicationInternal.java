@@ -1691,7 +1691,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         if (path == null || path.length() == 0)
             path = remote.getPath();
         Cookie.Builder builder = new Cookie.Builder();
-        builder.name(name).value(value).domain(remote.getHost()).path(path).expiresAt(expirationDate.getTime());
+        builder.name(name).value(value).domain(remote.getHost()).path(path);
+        if (expirationDate != null)
+            builder.expiresAt(expirationDate.getTime());
         List<Cookie> cookies = Collections.singletonList(builder.build());
         this.clientFactory.addCookies(cookies);
     }

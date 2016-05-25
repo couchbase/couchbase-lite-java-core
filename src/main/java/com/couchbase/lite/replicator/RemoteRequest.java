@@ -30,6 +30,7 @@ import java.util.zip.GZIPInputStream;
 
 import okhttp3.Call;
 import okhttp3.Cookie;
+import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -299,9 +300,15 @@ public class RemoteRequest implements CancellableRunnable {
 
     protected void storeCookie(Response response) {
         if (!response.headers("Set-Cookie").isEmpty()) {
+            HttpUrl rUrl = response.request().url();
+            HttpUrl url = new HttpUrl.Builder()
+                    .scheme(rUrl.scheme())
+                    .host(rUrl.host())
+                    .build();
             List<Cookie> cookies = new ArrayList<Cookie>();
-            for (String setCookie : response.headers("Set-Cookie"))
-                cookies.add(Cookie.parse(response.request().url(), setCookie));
+            for (String setCookie : response.headers("Set-Cookie")) {
+                cookies.add(Cookie.parse(url, setCookie));
+            }
             factory.addCookies(cookies);
         }
     }

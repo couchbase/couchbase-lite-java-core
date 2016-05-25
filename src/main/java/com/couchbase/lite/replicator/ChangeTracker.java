@@ -319,11 +319,9 @@ public class ChangeTracker implements Runnable {
                 try {
                     // In case response status is Error, ChangeTracker stops here
                     if (isResponseFailed(response)) {
-                        if (retryIfFailedPost(response)) {
-                            RequestUtils.closeResponseBody(response);
-                            continue;
-                        }
                         RequestUtils.closeResponseBody(response);
+                        if (retryIfFailedPost(response))
+                            continue;
                         break;
                     }
 

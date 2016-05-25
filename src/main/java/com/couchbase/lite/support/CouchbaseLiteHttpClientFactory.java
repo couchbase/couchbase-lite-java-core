@@ -86,8 +86,10 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     @InterfaceAudience.Private
     public void addCookies(List<Cookie> cookies) {
-        if (cookieJar != null)
+        if (cookieJar != null) {
+            // TODO: HttpUrl parameter should be revisited.
             cookieJar.saveFromResponse(null, cookies);
+        }
     }
 
     public void deleteCookie(String name) {
@@ -106,6 +108,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
                 retainedCookies.add(cookie);
         }
         cookieJar.clear();
+
+        // TODO: HttpUrl parameter should be revisited.
         cookieJar.saveFromResponse(null, retainedCookies);
     }
 

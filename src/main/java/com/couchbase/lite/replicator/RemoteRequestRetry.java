@@ -137,7 +137,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
      * @param gzip true - send gzipped request
      */
     public CustomFuture submit(boolean gzip) {
-        com.couchbase.lite.replicator.RemoteRequest request = generateRemoteRequest();
+        RemoteRequest request = generateRemoteRequest();
         if (gzip)
             request.setCompressedRequest(true);
         synchronized (requestExecutor) {
