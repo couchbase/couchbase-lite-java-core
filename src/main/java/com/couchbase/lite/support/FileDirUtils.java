@@ -34,23 +34,12 @@ public class FileDirUtils {
     }
 
     public static boolean deleteRecursive(File fileOrDirectory) {
-        if (fileOrDirectory.listFiles() != null) {
+        if (fileOrDirectory.isDirectory()) {
             for (File child : fileOrDirectory.listFiles()) {
-                if (!deleteRecursive(child))
-                    return false;
+                deleteRecursive(child);
             }
         }
-        if (fileOrDirectory.exists()) {
-            fileOrDirectory.setWritable(true);
-            if (fileOrDirectory.delete())
-                return true;
-            else {
-                Log.e(Log.TAG, "Unable to delete file or directly: fileOrDirectory=" + fileOrDirectory);
-                return false;
-            }
-        } else {
-            return true;
-        }
+        return fileOrDirectory.delete() || !fileOrDirectory.exists();
     }
 
     public static boolean cleanDirectory(File dir) {

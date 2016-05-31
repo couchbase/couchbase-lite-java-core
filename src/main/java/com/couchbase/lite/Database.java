@@ -356,18 +356,10 @@ public class Database implements StoreDelegate {
         }
 
         File dir = new File(path);
-        // NOTE: retry and sleep is only for Windows. Other platforms never fail.
-        int counter = 0;
-        while (!FileDirUtils.deleteRecursive(dir) && counter < 10) {
-            try {
-                Thread.sleep(1000);
-            } catch (Exception e) {
-            }
-            counter++;
-        }
-        if (counter >= 10)
+        if (!FileDirUtils.deleteRecursive(dir))
             throw new CouchbaseLiteException("Was not able to delete the database directory",
                     Status.INTERNAL_SERVER_ERROR);
+
     }
 
     /**
@@ -1114,15 +1106,7 @@ public class Database implements StoreDelegate {
         // Create the database directory:
         File dir = new File(path);
         if (!dir.exists()) {
-            // NOTE: retry and sleep is only for Windows
-            int counter = 0;
-            while (!dir.mkdirs() && counter < 10) {
-                try {
-                    Thread.sleep(1000);
-                } catch (Exception e) {
-                }
-            }
-            if (counter >= 10)
+            if (!dir.mkdirs())
                 throw new CouchbaseLiteException("Cannot create database directory",
                         Status.INTERNAL_SERVER_ERROR);
         } else if (!dir.isDirectory())
