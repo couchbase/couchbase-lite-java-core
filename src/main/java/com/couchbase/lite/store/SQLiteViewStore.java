@@ -656,7 +656,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 }
                 QueryRow row = new QueryRow(docID, sequence,
                         keyDoc.jsonObject(), valueDoc.jsonObject(),
-                        docRevision, SQLiteViewStore.this);
+                        docRevision);
                 if (postFilter != null) {
                     if (!postFilter.apply(row)) {
                         return new Status(Status.OK);
@@ -752,7 +752,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                         Object reduced = (reduce != null) ?
                                 reduce.reduce(keysToReduce, valuesToReduce, false) :
                                 null;
-                        QueryRow row = new QueryRow(null, 0, key, reduced, null, that);
+                        QueryRow row = new QueryRow(null, 0, key, reduced, null);
                         if (postFilter == null || postFilter.apply(row))
                             rows.add(row);
                         keysToReduce.clear();
@@ -789,7 +789,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     null;
             Log.v(TAG, String.format("Query %s: Reduced to key=%s, value=%s",
                     name, key, reduced));
-            QueryRow row = new QueryRow(null, 0, key, reduced, null, that);
+            QueryRow row = new QueryRow(null, 0, key, reduced, null);
             if (postFilter == null || postFilter.apply(row)) {
                 rows.add(row);
             }

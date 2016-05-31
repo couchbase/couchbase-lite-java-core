@@ -15,7 +15,6 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
-import com.couchbase.lite.store.QueryRowStore;
 import com.couchbase.lite.util.Utils;
 
 import java.util.ArrayList;
@@ -63,10 +62,7 @@ public class QueryRow {
      * takes a separate call to the database. So if you're doing it for every row, using
      * .prefetch and .documentProperties is faster.)
      */
-    //private Map<String, Object> documentProperties;
     RevisionInternal documentRevision;
-
-    private QueryRowStore queryRowStore;
 
     private Database database;
 
@@ -80,8 +76,7 @@ public class QueryRow {
                     long sequence,
                     Object key,
                     Object value,
-                    RevisionInternal docRevision,
-                    QueryRowStore queryRowStore) {
+                    RevisionInternal docRevision) {
         // Don't initialize _database yet. I might be instantiated on a background thread (if the
         // query is async) which has a different CBLDatabase instance than the original caller.
         // Instead, the database property will be filled in when I'm added to a CBLQueryEnumerator.
@@ -90,7 +85,6 @@ public class QueryRow {
         this.key = key;
         this.value = value;
         this.documentRevision = docRevision;
-        this.queryRowStore = queryRowStore;
     }
 
 

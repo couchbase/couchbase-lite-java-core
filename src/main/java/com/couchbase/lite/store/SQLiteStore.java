@@ -1219,8 +1219,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                         sequence,
                         docID,
                         value,
-                        docRevision,
-                        null);
+                        docRevision);
                 if (options.getKeys() != null)
                     docs.put(docID, change);
                     // TODO: In the future, we need to implement CBLRowPassesFilter() in CBLView+Querying.m
@@ -1246,7 +1245,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                                     value.put("deleted", true);
                                 }
                             }
-                            change = new QueryRow((value != null ? docID : null), 0, docID, value, null, null);
+                            change = new QueryRow((value != null ? docID : null), 0, docID, value, null);
                         }
                         // TODO add options.filter
                         rows.add(change);

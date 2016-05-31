@@ -1486,7 +1486,7 @@ public class Database implements StoreDelegate {
         value.put("rev", rev.getRevID());
         if (rev.isDeleted())
             value.put("deleted", (rev.isDeleted() ? true : null));
-        QueryRow row = new QueryRow(rev.getDocID(), seq, rev.getDocID(), value, rev, null);
+        QueryRow row = new QueryRow(rev.getDocID(), seq, rev.getDocID(), value, rev);
         if (filter == null) {
             return row;
         }
