@@ -23,11 +23,10 @@ public class SQLiteNativeLibrary {
     private static final String TAG = Log.TAG_DATABASE;
 
     // JNI Native libraries:
-    public static final String JNI_SQLITE_DEFAULT_LIBRARY = "cbljavasqlitedefault";
     public static final String JNI_SQLITE_CUSTOM_LIBRARY = "cbljavasqlitecustom";
     public static final String JNI_SQLCIPHER_LIBRARY = "cbljavasqlcipher";
     public static final String[] NATIVE_LIBRARY_OPTIONS =
-            {JNI_SQLCIPHER_LIBRARY, JNI_SQLITE_CUSTOM_LIBRARY, JNI_SQLITE_DEFAULT_LIBRARY};
+            {JNI_SQLCIPHER_LIBRARY, JNI_SQLITE_CUSTOM_LIBRARY};
 
     // Use this to override auto loading native libraries:
     public static String TEST_NATIVE_LIBRARY_NAME = null;
@@ -62,14 +61,6 @@ public class SQLiteNativeLibrary {
             } else if (JNI_SQLITE_CUSTOM_LIBRARY.equals(libName)) {
                 if (load(SHARED_SQLITE_LIBRARY))
                     success = load(libName);
-            } else if (JNI_SQLITE_DEFAULT_LIBRARY.equals(libName)) {
-                if (isAndriod()) {
-                    if (load(SHARED_ANDROID_SQLITE_LIBRARY))
-                        success = load(libName);
-                } else {
-                    if (loadSystemLibrary(SHARED_SQLITE_LIBRARY))
-                        success = load(libName);
-                }
             } else
                 Log.e(TAG, "Unknown native library name : " + libName);
 
