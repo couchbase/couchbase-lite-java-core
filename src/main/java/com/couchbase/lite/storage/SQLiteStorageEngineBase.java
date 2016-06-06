@@ -60,7 +60,8 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
 
             SQLiteDatabase.setDatabasePlatformSupport(getDatabasePlatformSupport());
             database = SQLiteDatabase.openDatabase(path, null,
-                    SQLiteDatabase.CREATE_IF_NECESSARY, null, new ConnectionListener());
+                    SQLiteDatabase.CREATE_IF_NECESSARY | SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING,
+                    null, new ConnectionListener());
             Log.v(Log.TAG_DATABASE, "%s: Opened Android sqlite db", this);
         } catch(SQLiteDatabaseCorruptException e) {
             hasError = true;
