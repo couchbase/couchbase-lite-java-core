@@ -200,11 +200,16 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
 
         // As we are making this portable, we will not set any configuration here:
         // Still leaving the methods in this class for future references.
-        //setPageSize();
-        //setForeignKeyModeFromConfiguration();
-        //setWalModeFromConfiguration();
-        //setJournalSizeLimit();
-        //setAutoCheckpointInterval();
+
+        // Use the default page size from the sqlite instead
+        // setPageSize();
+
+        setForeignKeyModeFromConfiguration();
+
+        // For WAL Mode:
+        setWalModeFromConfiguration();
+        setJournalSizeLimit();
+        setAutoCheckpointInterval();
     }
 
     private void dispose(boolean finalized) {

@@ -76,6 +76,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
             if (hasError && database != null)
                 database.close();
         }
+
         return database.isOpen();
     }
 
