@@ -1,11 +1,11 @@
 /**
  * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
+ * <p/>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
- *
+ * <p/>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p/>
  * Unless required by applicable law or agreed to in writing, software distributed under the
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions
@@ -17,6 +17,7 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.util.Log;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -28,6 +29,64 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * A CouchbaseLite document.
  */
 public class Document {
+
+    ////////////////////////////////////////////////////////////
+    // Constants
+    ////////////////////////////////////////////////////////////
+    public static final String TAG = Log.TAG_DATABASE;
+
+    ////////////////////////////////////////////////////////////
+    // Inner interfaces & classes
+    ////////////////////////////////////////////////////////////
+
+    /**
+     * A delegate that can be used to update a Document.
+     */
+    @InterfaceAudience.Public
+    public interface DocumentUpdater {
+        /**
+         * Document update delegate
+         *
+         * @param newRevision the unsaved revision about to be saved
+         * @return True if the UnsavedRevision should be saved, otherwise false.
+         */
+        boolean update(UnsavedRevision newRevision);
+    }
+
+    /**
+     * The type of event raised when a Document changes. This event is not raised in response
+     * to local Document changes.
+     */
+    @InterfaceAudience.Public
+    public static class ChangeEvent {
+        private Document source;
+        private DocumentChange change;
+
+        public ChangeEvent(Document source, DocumentChange documentChange) {
+            this.source = source;
+            this.change = documentChange;
+        }
+
+        public Document getSource() {
+            return source;
+        }
+
+        public DocumentChange getChange() {
+            return change;
+        }
+    }
+
+    /**
+     * A delegate that can be used to listen for Document changes.
+     */
+    @InterfaceAudience.Public
+    public interface ChangeListener {
+        void changed(ChangeEvent event);
+    }
+
+    ////////////////////////////////////////////////////////////
+    // Member variables
+    ////////////////////////////////////////////////////////////
 
     /**
      * The document's owning database.
@@ -49,6 +108,10 @@ public class Document {
      */
     private final List<ChangeListener> changeListeners = new CopyOnWriteArrayList<ChangeListener>();
 
+    ////////////////////////////////////////////////////////////
+    // Constructors
+    ////////////////////////////////////////////////////////////
+
     /**
      * Constructor
      *
@@ -62,21 +125,9 @@ public class Document {
         this.documentId = documentId;
     }
 
-    /**
-     * in CBLDatabase+Insertion.m
-     * + (BOOL) isValidDocumentID: (NSString*)str
-     */
-    @InterfaceAudience.Private
-    public static boolean isValidDocumentId(String id) {
-        // http://wiki.apache.org/couchdb/HTTP_Document_API#Documents
-        if (id == null || id.length() == 0)
-            return false;
-        if (id.charAt(0) == '_')
-            return (id.startsWith("_design/"));
-        return true;
-        // "_local/*" is not a valid document ID.
-        // Local docs have their own API and shouldn't get here.
-    }
+    ////////////////////////////////////////////////////////////
+    // Setter / Getter methods
+    ////////////////////////////////////////////////////////////
 
     /**
      * Get the document's owning database.
@@ -92,6 +143,20 @@ public class Document {
     @InterfaceAudience.Public
     public String getId() {
         return documentId;
+    }
+
+    ////////////////////////////////////////////////////////////
+    // Public Methods
+    ////////////////////////////////////////////////////////////
+
+    @InterfaceAudience.Public
+    public void addChangeListener(ChangeListener changeListener) {
+        changeListeners.add(changeListener);
+    }
+
+    @InterfaceAudience.Public
+    public void removeChangeListener(ChangeListener changeListener) {
+        changeListeners.remove(changeListener);
     }
 
     /**
@@ -308,60 +373,75 @@ public class Document {
         return null;
     }
 
-    @InterfaceAudience.Public
-    public void addChangeListener(ChangeListener changeListener) {
-        changeListeners.add(changeListener);
-    }
-
-    @InterfaceAudience.Public
-    public void removeChangeListener(ChangeListener changeListener) {
-        changeListeners.remove(changeListener);
-    }
-
     /**
-     * A delegate that can be used to update a Document.
+     * Adds an existing revision copied from another database. Unlike a normal insertion, this does
+     * not assign a new revision ID; instead the revision's ID must be given. The revision's history
+     * (ancestry) must be given, which can put it anywhere in the revision tree. It's not an error if
+     * the revision already exists locally; it will just be ignored.
+     *
+     * This is not an operation that clients normally perform; it's used by the replicator.
+     * You might want to use it if you're pre-loading a database with canned content, or if you're
+     * implementing some new kind of replicator that transfers revisions from another database.
+     *
+     * @param properties  The properties of the revision (_id and _rev will be ignored, but _deleted
+     *                    and _attachments are recognized.)
+     * @param attachments  A dictionary providing attachment bodies. The keys are the attachment
+     *                     names (matching the keys in the properties' `_attachments` dictionary) and
+     *                     the values are the attachment bodies as NSData or NSURL.
+     * @param revIDs  The revision history in the form of an array of revision-ID strings, in
+     *                reverse chronological order. The first item must be the new revision's ID.
+     *                Following items are its parent's ID, etc.
+     * @param sourceURL  The URL of the database this revision came from, if any. (This value shows
+     *                   up in the CBLDatabaseChange triggered by this insertion, and can help clients
+     *                   decide whether the change is local or not.)
+     * @return true on success, false on failure.
+     * @throws CouchbaseLiteException Error information will be thrown if the insertion fails.
      */
     @InterfaceAudience.Public
-    public interface DocumentUpdater {
-        /**
-         * Document update delegate
-         *
-         * @param newRevision the unsaved revision about to be saved
-         * @return True if the UnsavedRevision should be saved, otherwise false.
-         */
-        boolean update(UnsavedRevision newRevision);
+    public boolean putExistingRevision(Map<String, Object> properties,
+                                       Map<String, Object> attachments,
+                                       List<String> revIDs,
+                                       URL sourceURL)
+            throws CouchbaseLiteException {
+        assert (revIDs != null && revIDs.size() > 0);
+
+        boolean deleted = false;
+        if (properties != null)
+            deleted = properties.get("_deleted") != null &&
+                    ((Boolean) properties.get("_deleted")).booleanValue();
+
+        RevisionInternal rev = new RevisionInternal(documentId, revIDs.get(0), deleted);
+        rev.setProperties(propertiesToInsert(properties));
+        Status status = new Status();
+        if (!database.registerAttachmentBodies(attachments, rev, status))
+            return false;
+        database.forceInsert(rev, revIDs, sourceURL);
+        return true;
     }
+
+    ////////////////////////////////////////////////////////////
+    // Public Static Methods
+    ////////////////////////////////////////////////////////////
 
     /**
-     * The type of event raised when a Document changes. This event is not raised in response
-     * to local Document changes.
+     * in CBLDatabase+Insertion.m
+     * + (BOOL) isValidDocumentID: (NSString*)str
      */
-    @InterfaceAudience.Public
-    public static class ChangeEvent {
-        private Document source;
-        private DocumentChange change;
-
-        public ChangeEvent(Document source, DocumentChange documentChange) {
-            this.source = source;
-            this.change = documentChange;
-        }
-
-        public Document getSource() {
-            return source;
-        }
-
-        public DocumentChange getChange() {
-            return change;
-        }
+    @InterfaceAudience.Private
+    public static boolean isValidDocumentId(String id) {
+        // http://wiki.apache.org/couchdb/HTTP_Document_API#Documents
+        if (id == null || id.length() == 0)
+            return false;
+        if (id.charAt(0) == '_')
+            return (id.startsWith("_design/"));
+        return true;
+        // "_local/*" is not a valid document ID.
+        // Local docs have their own API and shouldn't get here.
     }
 
-    /**
-     * A delegate that can be used to listen for Document changes.
-     */
-    @InterfaceAudience.Public
-    public interface ChangeListener {
-        void changed(ChangeEvent event);
-    }
+    ////////////////////////////////////////////////////////////
+    // Protected or Private Methods
+    ////////////////////////////////////////////////////////////
 
     /**
      * @exclude
@@ -384,22 +464,16 @@ public class Document {
         return Collections.unmodifiableList(result);
     }
 
-    /**
-     * @exclude
-     */
-    @InterfaceAudience.Private
-    protected SavedRevision putProperties(Map<String, Object> properties,
-                                          String prevID,
-                                          boolean allowConflict)
+    protected Map<String, Object> propertiesToInsert(Map<String, Object> properties)
             throws CouchbaseLiteException {
-        String newId = null;
-        if (properties != null && properties.containsKey("_id")) {
-            newId = (String) properties.get("_id");
-        }
+        String idProp = null;
+        if (properties != null && properties.containsKey("_id"))
+            idProp = (String) properties.get("_id");
 
-        if (newId != null && !newId.equalsIgnoreCase(getId()))
-            Log.w(Database.TAG, "Trying to put wrong _id to this: %s properties: %s",
-                    this, properties);
+        if (idProp != null && !idProp.equalsIgnoreCase(getId()))
+            Log.w(TAG, "Trying to put wrong _id to this: %s properties: %s", this, properties);
+
+        Map<String, Object> nuProperties = new HashMap<String, Object>(properties);
 
         // Process _attachments dict, converting CBLAttachments to dicts:
         Map<String, Object> attachments = null;
@@ -408,8 +482,20 @@ public class Document {
         if (attachments != null && attachments.size() > 0) {
             Map<String, Object> updatedAttachments =
                     Attachment.installAttachmentBodies(attachments, database);
-            properties.put("_attachments", updatedAttachments);
+            nuProperties.put("_attachments", updatedAttachments);
         }
+
+        return nuProperties;
+    }
+
+    /**
+     * @exclude
+     */
+    @InterfaceAudience.Private
+    protected SavedRevision putProperties(Map<String, Object> properties,
+                                          String prevID,
+                                          boolean allowConflict)
+            throws CouchbaseLiteException {
 
         boolean hasTrueDeletedProperty = false;
         if (properties != null)
@@ -418,7 +504,7 @@ public class Document {
         boolean deleted = (properties == null) || hasTrueDeletedProperty;
         RevisionInternal rev = new RevisionInternal(documentId, null, deleted);
         if (properties != null)
-            rev.setProperties(properties);
+            rev.setProperties(propertiesToInsert(properties));
         RevisionInternal newRev = database.putRevision(rev, prevID, allowConflict);
         if (newRev == null)
             return null;

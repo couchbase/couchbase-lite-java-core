@@ -30,12 +30,20 @@ import java.util.StringTokenizer;
  */
 public class RevisionInternal {
 
+    ////////////////////////////////////////////////////////////
+    // Member variables
+    ////////////////////////////////////////////////////////////
+
     private String docID;
     private String revID;
     private boolean deleted;
     private boolean missing;
     private Body body;
     private long sequence;
+
+    ////////////////////////////////////////////////////////////
+    // Constructors
+    ////////////////////////////////////////////////////////////
 
     public RevisionInternal(String docID, String revID, boolean deleted) {
         this.docID = docID;
@@ -55,65 +63,9 @@ public class RevisionInternal {
         this(new Body(properties));
     }
 
-    public Map<String, Object> getProperties() {
-        //return body == null ? null : body.getProperties();
-        Map<String, Object> result = null;
-        if (body != null) {
-            Map<String, Object> prop;
-            try {
-                prop = body.getProperties();
-            } catch (IllegalStateException e) {
-                // handle when both object and json are null for this body
-                return null;
-            }
-            if (result == null) {
-                result = new HashMap<String, Object>();
-            }
-            result.putAll(prop);
-        }
-        return result;
-    }
-
-    public Object getPropertyForKey(String key) {
-        Map<String, Object> prop = getProperties();
-        if (prop == null) {
-            return null;
-        }
-        return prop.get(key);
-    }
-
-    public void setProperties(Map<String, Object> properties) {
-        this.body = new Body(properties);
-    }
-
-    public byte[] getJson() {
-        byte[] result = null;
-        if (body != null) {
-            result = body.getJson();
-        }
-        return result;
-    }
-
-    public void setJSON(byte[] json) {
-        this.body = new Body(json, docID, revID, deleted);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        boolean result = false;
-        if (o instanceof RevisionInternal) {
-            RevisionInternal other = (RevisionInternal) o;
-            if (docID.equals(other.docID) && revID.equals(other.revID)) {
-                result = true;
-            }
-        }
-        return result;
-    }
-
-    @Override
-    public int hashCode() {
-        return docID.hashCode() ^ revID.hashCode();
-    }
+    ////////////////////////////////////////////////////////////
+    // Setter / Getter methods
+    ////////////////////////////////////////////////////////////
 
     public String getDocID() {
         return docID;
@@ -155,6 +107,86 @@ public class RevisionInternal {
         this.missing = missing;
     }
 
+    public void setSequence(long sequence) {
+        this.sequence = sequence;
+    }
+
+    public long getSequence() {
+        return sequence;
+    }
+
+    ////////////////////////////////////////////////////////////
+    // Overwride methods
+    ////////////////////////////////////////////////////////////
+
+    @Override
+    public boolean equals(Object o) {
+        boolean result = false;
+        if (o instanceof RevisionInternal) {
+            RevisionInternal other = (RevisionInternal) o;
+            if (docID.equals(other.docID) && revID.equals(other.revID)) {
+                result = true;
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public int hashCode() {
+        return docID.hashCode() ^ revID.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return '{' + this.docID + " #" + this.revID + " @" + sequence + (deleted ? " DEL" : "") + '}';
+    }
+
+    ////////////////////////////////////////////////////////////
+    // Public Methods
+    ////////////////////////////////////////////////////////////
+
+    public Map<String, Object> getProperties() {
+        Map<String, Object> result = null;
+        if (body != null) {
+            Map<String, Object> prop;
+            try {
+                prop = body.getProperties();
+            } catch (IllegalStateException e) {
+                // handle when both object and json are null for this body
+                return null;
+            }
+            if (result == null) {
+                result = new HashMap<String, Object>();
+            }
+            result.putAll(prop);
+        }
+        return result;
+    }
+
+    public Object getPropertyForKey(String key) {
+        Map<String, Object> prop = getProperties();
+        if (prop == null) {
+            return null;
+        }
+        return prop.get(key);
+    }
+
+    public void setProperties(Map<String, Object> properties) {
+        this.body = new Body(properties);
+    }
+
+    public byte[] getJson() {
+        byte[] result = null;
+        if (body != null) {
+            result = body.getJson();
+        }
+        return result;
+    }
+
+    public void setJSON(byte[] json) {
+        this.body = new Body(json, docID, revID, deleted);
+    }
+
     public RevisionInternal copy() {
         return copyWithDocID(docID, revID);
     }
@@ -184,19 +216,6 @@ public class RevisionInternal {
         return rev;
     }
 
-    public void setSequence(long sequence) {
-        this.sequence = sequence;
-    }
-
-    public long getSequence() {
-        return sequence;
-    }
-
-    @Override
-    public String toString() {
-        return '{' + this.docID + " #" + this.revID + " @" + sequence + (deleted ? " DEL" : "") + '}';
-    }
-
     /**
      * Generation number: 1 for a new document, 2 for the 2nd revision, ...
      * Extracted from the numeric prefix of the revID.
@@ -205,8 +224,68 @@ public class RevisionInternal {
         return generationFromRevID(revID);
     }
 
+    // Calls the block on every attachment dictionary. The block can return a different dictionary,
+    // which will be replaced in the rev's properties. If it returns nil, the operation aborts.
+    // Returns YES if any changes were made.
+    public boolean mutateAttachments(CollectionUtils.Functor<Map<String, Object>,
+            Map<String, Object>> functor) {
+        {
+            Map<String, Object> properties = getProperties();
+            Map<String, Object> editedProperties = null;
+            Map<String, Object> attachments = (Map<String, Object>) properties.get("_attachments");
+            Map<String, Object> editedAttachments = null;
+            if (attachments != null) {
+                for (String name : attachments.keySet()) {
+
+                    Map<String, Object> attachment = new HashMap<String, Object>(
+                            (Map<String, Object>) attachments.get(name));
+                    attachment.put("name", name);
+                    Map<String, Object> editedAttachment = functor.invoke(attachment);
+                    if (editedAttachment == null) {
+                        return false;  // block canceled
+                    }
+                    if (editedAttachment != attachment) {
+                        if (editedProperties == null) {
+                            // Make the document properties and _attachments dictionary mutable:
+                            editedProperties = new HashMap<String, Object>(properties);
+                            editedAttachments = new HashMap<String, Object>(attachments);
+                            editedProperties.put("_attachments", editedAttachments);
+                        }
+                        editedAttachment.remove("name");
+                        editedAttachments.put(name, editedAttachment);
+                    }
+                }
+            }
+            if (editedProperties != null) {
+                setProperties(editedProperties);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    public Map<String, Object> getAttachments() {
+        Map<String, Object> props = getProperties();
+        if (props != null && props.containsKey("_attachments")) {
+            return (Map<String, Object>) props.get("_attachments");
+        }
+        return null;
+    }
+
+    /**
+     * in CBL_Revision.m
+     * - (id)objectForKeyedSubscript:(id)key
+     */
+    public Object getObject(String key) {
+        return body != null ? body.getObject(key) : null;
+    }
+
+    ////////////////////////////////////////////////////////////
+    // Public Static Methods
+    ////////////////////////////////////////////////////////////
+
     public static int generationFromRevID(String revID) {
-        if(revID == null) return 0;
+        if (revID == null) return 0;
         int generation = 0;
         int dashPos = revID.indexOf('-');
         if (dashPos > 0) {
@@ -272,68 +351,11 @@ public class RevisionInternal {
             // just compare as plain text:
             return revId1.compareToIgnoreCase(revId2);
         }
-
     }
 
     public static int CBLCompareRevIDs(String revId1, String revId2) {
         assert (revId1 != null);
         assert (revId2 != null);
         return CBLCollateRevIDs(revId1, revId2);
-    }
-
-    // Calls the block on every attachment dictionary. The block can return a different dictionary,
-    // which will be replaced in the rev's properties. If it returns nil, the operation aborts.
-    // Returns YES if any changes were made.
-    public boolean mutateAttachments(CollectionUtils.Functor<Map<String, Object>,
-            Map<String, Object>> functor) {
-        {
-            Map<String, Object> properties = getProperties();
-            Map<String, Object> editedProperties = null;
-            Map<String, Object> attachments = (Map<String, Object>) properties.get("_attachments");
-            Map<String, Object> editedAttachments = null;
-            if (attachments != null) {
-                for (String name : attachments.keySet()) {
-
-                    Map<String, Object> attachment = new HashMap<String, Object>(
-                            (Map<String, Object>) attachments.get(name));
-                    attachment.put("name", name);
-                    Map<String, Object> editedAttachment = functor.invoke(attachment);
-                    if (editedAttachment == null) {
-                        return false;  // block canceled
-                    }
-                    if (editedAttachment != attachment) {
-                        if (editedProperties == null) {
-                            // Make the document properties and _attachments dictionary mutable:
-                            editedProperties = new HashMap<String, Object>(properties);
-                            editedAttachments = new HashMap<String, Object>(attachments);
-                            editedProperties.put("_attachments", editedAttachments);
-                        }
-                        editedAttachment.remove("name");
-                        editedAttachments.put(name, editedAttachment);
-                    }
-                }
-            }
-            if (editedProperties != null) {
-                setProperties(editedProperties);
-                return true;
-            }
-            return false;
-        }
-    }
-
-    public Map<String, Object> getAttachments() {
-        Map<String, Object> props = getProperties();
-        if (props != null && props.containsKey("_attachments")) {
-            return (Map<String, Object>) props.get("_attachments");
-        }
-        return null;
-    }
-
-    /**
-     * in CBL_Revision.m
-     * - (id)objectForKeyedSubscript:(id)key
-     */
-    public Object getObject(String key) {
-        return body != null ? body.getObject(key) : null;
     }
 }

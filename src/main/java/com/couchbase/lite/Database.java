@@ -41,6 +41,7 @@ import com.couchbase.lite.support.security.SymmetricKey;
 import com.couchbase.lite.support.security.SymmetricKeyException;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.CollectionUtils.Functor;
+import com.couchbase.lite.util.IOUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 
@@ -781,6 +782,79 @@ public class Database implements StoreDelegate {
     }
 
     // #pragma mark - UPDATING _attachments DICTS:
+
+    /* package */ boolean registerAttachmentBodies(final Map<String, Object> attachments,
+                                                   RevisionInternal rev,
+                                                   final Status outStatus)
+            throws CouchbaseLiteException {
+        outStatus.setCode(Status.OK);
+        rev.mutateAttachments(new Functor<Map<String, Object>, Map<String, Object>>() {
+            public Map<String, Object> invoke(Map<String, Object> meta) {
+                String name = (String) meta.get("name");
+                Object value = attachments.get(name);
+                if (value != null) {
+                    byte[] data = null;
+                    if ((value instanceof byte[])) {
+                        data = (byte[]) value;
+                    } else {
+                        if (value instanceof URL) {
+                            URL url = (URL) value;
+                            if ("file".equalsIgnoreCase(url.getProtocol())) {
+                                try {
+                                    data = IOUtils.toByteArray(url);
+                                } catch (IOException e) {
+                                    Log.w(TAG, "attachments[\"%s\"] is unable to load", e, name);
+                                }
+                            } else {
+                                Log.w(TAG, "attachments[\"%s\"] is neither byte[] nor file URL", name);
+                            }
+                        }
+                        if (data == null) {
+                            outStatus.setCode(Status.BAD_ATTACHMENT);
+                            return null;
+                        }
+                    }
+
+                    // Register attachment body with database:
+                    BlobStoreWriter writer = getAttachmentWriter();
+                    try {
+                        writer.appendData(data);
+                        writer.finish();
+                    } catch (Exception e) {
+                        Log.w(TAG, "failed to write attachment data name: %s", e, name);
+                        outStatus.setCode(Status.BAD_ATTACHMENT);
+                        return null;
+                    }
+
+                    // Make attachment mode "follows", indicating the data is registered:
+                    Map<String, Object> nuMeta = new HashMap<String, Object>(meta);
+                    nuMeta.remove("data");
+                    nuMeta.remove("stub");
+                    nuMeta.put("follows", true);
+
+                    // Add or verify metadata "digest" property:
+                    String digest = (String) meta.get("digest");
+                    String sha1Digest = writer.sHA1DigestString();
+                    if (digest != null) {
+                        if (!digest.equals(sha1Digest) && !digest.equals(writer.mD5DigestString())) {
+                            Log.w(TAG,
+                                    "Attachment '%s' body digest (%s) doesn't match 'digest' property %s",
+                                    name, sha1Digest, digest);
+                            outStatus.setCode(Status.BAD_ATTACHMENT);
+                            return null;
+                        }
+                    } else {
+                        digest = sha1Digest;
+                        nuMeta.put("digest", sha1Digest);
+                    }
+                    rememberAttachmentWriter(writer, digest);
+                    return nuMeta;
+                }
+                return meta;
+            }
+        });
+        return outStatus.getCode() == Status.OK;
+    }
 
     private static long smallestLength(Map<String, Object> attachment) {
         long length = 0;
@@ -2208,6 +2282,10 @@ public class Database implements StoreDelegate {
 
     protected void rememberAttachmentWriter(BlobStoreWriter writer) {
         pendingAttachmentsByDigest.put(writer.mD5DigestString(), writer);
+    }
+
+    protected void rememberAttachmentWriter(BlobStoreWriter writer, String digest) {
+        pendingAttachmentsByDigest.put(digest, writer);
     }
 
     // Database+Insertion
