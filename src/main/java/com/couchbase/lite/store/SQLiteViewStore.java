@@ -1053,7 +1053,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
     private String mapTableName() {
         if (_mapTableName == null) {
-            _mapTableName = String.format("%d", getViewID());
+            _mapTableName = String.valueOf(getViewID());
         }
         return _mapTableName;
     }
