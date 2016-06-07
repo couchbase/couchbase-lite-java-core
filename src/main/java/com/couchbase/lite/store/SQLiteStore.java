@@ -221,13 +221,8 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
 
         // Enable Write-Ahead Log (WAL)
-        try {
-            initialize("PRAGMA journal_mode=WAL;");
-        } catch (SQLException e) {
-            String message = "Cannot set journal_mode=WAL";
-            Log.e(TAG, message, e);
-            throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
-        }
+        // write-ahead log is enabled through SQLiteDatabase API
+        // https://developer.android.com/reference/android/database/sqlite/SQLiteDatabase.html#enableWriteAheadLogging()
 
         // BEGIN TRANSACTION
         boolean isSuccessful = false;
@@ -673,6 +668,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 endTransaction(shouldCommit);
             }
 
+            // https://www.sqlite.org/pragma.html#pragma_wal_checkpoint
             Log.v(TAG, "Flushing SQLite WAL...");
             try {
                 storageEngine.execSQL("PRAGMA wal_checkpoint(RESTART)");
