@@ -13,6 +13,8 @@
  */
 package com.couchbase.lite.util;
 
+import java.util.Locale;
+
 /**
  * Created by hideki on 9/14/15.
  */
@@ -33,7 +35,6 @@ public class CountDown {
 
     @Override
     public String toString() {
-        return String.format("CountDown{count=%d}", count);
-
+        return String.format(Locale.ENGLISH, "CountDown{count=%d}", count);
     }
 }

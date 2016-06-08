@@ -33,6 +33,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
@@ -161,7 +162,7 @@ public class ChangeTracker implements Runnable {
         // for some reason it still expects most of the params in the URL, even with a POST; only the
         // filter-related params go in the body.
         // (See https://github.com/couchbase/couchbase-lite-ios/issues/1139)
-        StringBuilder sb = new StringBuilder(String.format("_changes?feed=%s&heartbeat=%d", getFeed(), getHeartbeatMilliseconds()));
+        StringBuilder sb = new StringBuilder(String.format(Locale.ENGLISH, "_changes?feed=%s&heartbeat=%d", getFeed(), getHeartbeatMilliseconds()));
         if (includeConflicts)
             sb.append("&style=all_docs");
         Object seq = lastSequenceID;
@@ -640,7 +641,7 @@ public class ChangeTracker implements Runnable {
     public String toString() {
         if (str == null) {
             String remoteURL = databaseURL.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
-            str = String.format("ChangeTracker{%s, %s, @%s}", remoteURL, mode, Integer.toHexString(hashCode()));
+            str = String.format(Locale.ENGLISH, "ChangeTracker{%s, %s, @%s}", remoteURL, mode, Integer.toHexString(hashCode()));
         }
         return str;
     }

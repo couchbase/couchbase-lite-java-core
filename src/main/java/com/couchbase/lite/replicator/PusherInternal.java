@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -110,7 +111,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
-        String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
+        String threadName = String.format(Locale.ENGLISH, "Thread-waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -534,7 +535,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
         addToChangesCount(1);
-        final String path = String.format("/%s?new_edits=false", encodeDocumentId(revision.getDocID()));
+        final String path = String.format(Locale.ENGLISH, "/%s?new_edits=false", encodeDocumentId(revision.getDocID()));
         CustomFuture future = sendAsyncMultipartRequest("PUT", path, body, attachments,
                 new RemoteRequestCompletion() {
                     @Override
@@ -578,7 +579,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return;
         }
 
-        final String path = String.format("/%s?new_edits=false", encodeDocumentId(rev.getDocID()));
+        final String path = String.format(Locale.ENGLISH, "/%s?new_edits=false", encodeDocumentId(rev.getDocID()));
         CustomFuture future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),
@@ -694,7 +695,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
             if (replicationIdentifier == null)
                 replicationIdentifier = "unknown";
-            str = String.format("PusherInternal{%s, %s, %s}",
+            str = String.format(Locale.ENGLISH, "PusherInternal{%s, %s, %s}",
                     maskedRemote, type, replicationIdentifier);
         }
         return str;

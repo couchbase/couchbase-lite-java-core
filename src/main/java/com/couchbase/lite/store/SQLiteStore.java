@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -997,7 +998,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         if (docNumericID <= 0)
             return null;
         String quotedRevIds = TextUtils.joinQuoted(revIDs);
-        String sql = String.format("SELECT revid FROM revs " +
+        String sql = String.format(Locale.ENGLISH, "SELECT revid FROM revs " +
                 "WHERE doc_id=? and revid in (%s) and revid <= ? " +
                 "ORDER BY revid DESC LIMIT 1", quotedRevIds);
         String[] args = {Long.toString(docNumericID), rev.getRevID()};
@@ -1118,7 +1119,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 return result;
             }
             String commaSeperatedIds = TextUtils.joinQuotedObjects(options.getKeys());
-            sql.append(String.format(" revs.doc_id IN (SELECT doc_id FROM docs WHERE docid IN (%s)) AND",
+            sql.append(String.format(Locale.ENGLISH, " revs.doc_id IN (SELECT doc_id FROM docs WHERE docid IN (%s)) AND",
                     commaSeperatedIds));
         }
         sql.append(" docs.doc_id = revs.doc_id AND current=1");
@@ -1150,7 +1151,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
 
         sql.append(
-                String.format(
+                String.format(Locale.ENGLISH,
                         " ORDER BY docid %s, %s revid DESC LIMIT ? OFFSET ?",
                         (options.isDescending() ? "DESC" : "ASC"),
                         (includeDeletedDocs ? "deleted ASC," : "")
@@ -1876,7 +1877,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         String seqsString = TextUtils.join(",", seqsToPurge);
         Log.v(TAG, "    purging %d sequences: %s", seqsToPurge.size(), seqsString);
-        String sql = String.format("DELETE FROM revs WHERE sequence in (%s)", seqsString);
+        String sql = String.format(Locale.ENGLISH, "DELETE FROM revs WHERE sequence in (%s)", seqsString);
         try {
             storageEngine.execSQL(sql);
         } catch (SQLException e) {
@@ -2270,7 +2271,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             try {
                 docProperties = Manager.getObjectMapper().readValue(json, Map.class);
             } catch (IOException e) {
-                Log.e(TAG, String.format("Unparseable JSON for doc=%s, rev=%s: %s", docID, revID, new String(json)), e);
+                Log.e(TAG, String.format(Locale.ENGLISH, "Unparseable JSON for doc=%s, rev=%s: %s", docID, revID, new String(json)), e);
                 docProperties = new HashMap<String, Object>();
             }
         }
@@ -2362,7 +2363,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         if (leaves.size() <= 1) {
             // There are no branches, so just delete everything below minGenToKeep:
-            String minIDToKeep = String.format("%d-", minGenToKeep);
+            String minIDToKeep = String.format(Locale.ENGLISH, "%d-", minGenToKeep);
             String[] deleteArgs = {Long.toString(docNumericID), minIDToKeep};
             int pruned = storageEngine.delete("revs", "doc_id=? AND revid < ? AND current=0", deleteArgs);
             Log.v(TAG, "    pruned %d revs with gen<%d from %s", pruned, minGenToKeep, docID);
@@ -2520,7 +2521,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     private long getSequenceOfDocument(long docNumericID, String revID, boolean onlyCurrent) {
-        String sql = String.format(
+        String sql = String.format(Locale.ENGLISH,
                 "SELECT sequence FROM revs WHERE doc_id=? AND revid=? %s LIMIT 1",
                 (onlyCurrent ? "AND current=1" : ""));
         String[] args = {Long.toString(docNumericID), revID};

@@ -69,6 +69,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -214,7 +215,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     private boolean cacheWithEtag(String etag) {
-        String eTag = String.format("\"%s\"", etag);
+        String eTag = String.format(Locale.ENGLISH, "\"%s\"", etag);
         connection.getResHeader().add("Etag", eTag);
         String requestIfNoneMatch = connection.getRequestProperty("If-None-Match");
         return eTag.equals(requestIfNoneMatch);
@@ -401,7 +402,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if ("HEAD".equals(method)) {
             method = "GET";
         }
-        String message = String.format("do_%s", method);
+        String message = String.format(Locale.ENGLISH, "do_%s", method);
 
         // First interpret the components of the request:
         List<String> path = splitPath(connection.getURL());
@@ -567,15 +568,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             status = (Status) m.invoke(this, db, docID, attachmentName);
         } catch (NoSuchMethodException msme) {
             try {
-                String errorMessage = String.format("Router unable to route request to %s", message);
+                String errorMessage = String.format(Locale.ENGLISH, "Router unable to route request to %s", message);
                 Log.w(TAG, errorMessage);
                 // Check if there is an alternative method:
                 boolean hasAltMethod = false;
-                String curDoMethod = String.format("do_%s", method);
+                String curDoMethod = String.format(Locale.ENGLISH, "do_%s", method);
                 String[] methods = {"GET", "POST", "PUT", "DELETE"};
                 for (String aMethod : methods) {
                     if (!aMethod.equals(method)) {
-                        String altDoMethod = String.format("do_%s", aMethod);
+                        String altDoMethod = String.format(Locale.ENGLISH, "do_%s", aMethod);
                         String altMessage = message.replaceAll(curDoMethod, altDoMethod);
                         try {
                             Method altMethod = Router.class.getMethod(altMessage,
@@ -709,7 +710,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // NOTE: Line 572-574 of CBL_Router.m is not in CBL Java Core
         //       This check is in sendResponse();
 
-        connection.getResHeader().add("Server", String.format("Couchbase Lite %s", getVersionString()));
+        connection.getResHeader().add("Server", String.format(Locale.ENGLISH, "Couchbase Lite %s", getVersionString()));
 
         // Check for a mismatch between the Accept request header and the response type:
         String accept = getRequestHeaderValue("Accept");
@@ -1008,7 +1009,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
         int processed = replicator.getCompletedChangesCount();
         int total = replicator.getChangesCount();
-        String status = String.format("Processed %d / %d changes", processed, total);
+        String status = String.format(Locale.ENGLISH, "Processed %d / %d changes", processed, total);
         if (!replicator.getStatus().equals(ReplicationStatus.REPLICATION_ACTIVE)) {
             //These values match the values for IOS.
             if (replicator.getStatus().equals(ReplicationStatus.REPLICATION_IDLE)) {
@@ -1032,7 +1033,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         //NOTE: Need to support "x_active_requests"
 
         if (replicator.getLastError() != null) {
-            String msg = String.format("Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
+            String msg = String.format(Locale.ENGLISH, "Replicator error: %s.  Repl: %s.  Source: %s, Target: %s",
                     replicator.getLastError(), replicator, source, target);
             Log.w(TAG, msg);
             Throwable error = replicator.getLastError();
@@ -2351,13 +2352,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys)
             throws CouchbaseLiteException {
-        String tdViewName = String.format("%s/%s", designDoc, viewName);
+        String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
         // getExistingView is not thread-safe, but not access to db. In the database, it should protect instance variable
         View view = db.getExistingView(tdViewName);
         if (view == null || view.getMap() == null) {
             // No TouchDB view is defined, or it hasn't had a map block assigned;
             // see if there's a CouchDB view definition we can compile:
-            RevisionInternal rev = db.getDocument(String.format("_design/%s", designDoc), null, true);
+            RevisionInternal rev = db.getDocument(String.format(Locale.ENGLISH, "_design/%s", designDoc), null, true);
             if (rev == null) {
                 return new Status(Status.NOT_FOUND);
             }
@@ -2395,7 +2396,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Check for conditional GET and set response Etag header:
         if (keys == null) {
             long eTag = options.isIncludeDocs() ? db.getLastSequenceNumber() : lastSequenceIndexed;
-            if (cacheWithEtag(String.format("%d", eTag))) {
+            if (cacheWithEtag(String.format(Locale.ENGLISH, "%d", eTag))) {
                 return new Status(Status.NOT_MODIFIED);
             }
         }
@@ -2443,6 +2444,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if (connection != null && connection.getURL() != null) {
             url = connection.getURL().toExternalForm();
         }
-        return String.format("Router [%s]", url);
+        return String.format(Locale.ENGLISH, "Router [%s]", url);
     }
 }

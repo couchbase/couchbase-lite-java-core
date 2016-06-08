@@ -23,6 +23,7 @@ import com.couchbase.lite.util.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
@@ -148,7 +149,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                     if (digest != null &&
                             !digest.equals(actualDigest) &&
                             !digest.equals(writer.sHA1DigestString())) {
-                        String errMsg = String.format(
+                        String errMsg = String.format(Locale.ENGLISH,
                                 "Attachment '%s' has incorrect MD5 getDigest (%s; should be either %s or %s)",
                                 attachmentName, digest, actualDigest, writer.sHA1DigestString());
                         throw new IllegalStateException(errMsg);
@@ -158,7 +159,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                 } else if (digest != null) {
                     writer = attachmentsByMd5Digest.get(digest);
                     if (writer == null) {
-                        String errMsg = String.format(
+                        String errMsg = String.format(Locale.ENGLISH,
                                 "Attachment '%s' does not appear in MIME body",
                                 attachmentName);
                         throw new IllegalStateException(errMsg);
@@ -169,14 +170,14 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
                     attachment.put("digest", writer.mD5DigestString());
                 } else {
                     // No getDigest metatata, no filename in MIME body; give up:
-                    String errMsg = String.format(
+                    String errMsg = String.format(Locale.ENGLISH,
                             "Attachment '%s' has no getDigest metadata; cannot identify MIME body",
                             attachmentName);
                     throw new IllegalStateException(errMsg);
                 }
                 // Check that the length matches:
                 if (writer.getLength() != length) {
-                    String errMsg = String.format(
+                    String errMsg = String.format(Locale.ENGLISH,
                             "Attachment '%s' has incorrect length field %d (should be %d)",
                             attachmentName, length, writer.getLength());
                     throw new IllegalStateException(errMsg);
@@ -190,7 +191,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         }
 
         if (numAttachmentsInDoc < attachmentsByMd5Digest.size()) {
-            String msg = String.format("More MIME bodies (%d) than attachments (%d) ",
+            String msg = String.format(Locale.ENGLISH, "More MIME bodies (%d) than attachments (%d) ",
                     attachmentsByMd5Digest.size(), numAttachmentsInDoc);
             throw new IllegalStateException(msg);
         }

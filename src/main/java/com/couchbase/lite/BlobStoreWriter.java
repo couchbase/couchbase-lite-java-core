@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
 
 /**
  * Lets you stream a large attachment to a BlobStore asynchronously, e.g. from a network download.
@@ -199,12 +200,12 @@ public class BlobStoreWriter {
 
     public String mD5DigestString() {
         String base64Md5Digest = Base64.encodeBytes(md5DigestResult);
-        return String.format("md5-%s", base64Md5Digest);
+        return String.format(Locale.ENGLISH, "md5-%s", base64Md5Digest);
     }
 
     public String sHA1DigestString() {
         String base64Sha1Digest = Base64.encodeBytes(blobKey.getBytes());
-        return String.format("sha1-%s", base64Sha1Digest);
+        return String.format(Locale.ENGLISH, "sha1-%s", base64Sha1Digest);
     }
 
     public int getLength() {

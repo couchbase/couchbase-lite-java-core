@@ -17,6 +17,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 class ValidationContextImpl implements ValidationContext {
@@ -95,7 +96,7 @@ class ValidationContextImpl implements ValidationContext {
         Map<String, Object> nuu = newRev.getProperties();
         for (String key : getChangedKeys()) {
             if (!changeValidator.validateChange(key, cur.get(key), nuu.get(key))) {
-                reject(String.format("Illegal change to '%s' property", key));
+                reject(String.format(Locale.ENGLISH, "Illegal change to '%s' property", key));
                 return false;
             }
         }

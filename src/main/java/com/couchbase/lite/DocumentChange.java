@@ -17,6 +17,7 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 
 import java.net.URL;
+import java.util.Locale;
 
 /**
  * Provides details about a Document change.
@@ -68,7 +69,7 @@ public class DocumentChange {
 
     @InterfaceAudience.Public
     public String toString() {
-        return String.format("%s[%s]", this.getClass().getName(), addedRevision);
+        return String.format(Locale.ENGLISH, "%s[%s]", this.getClass().getName(), addedRevision);
     }
 
     /**

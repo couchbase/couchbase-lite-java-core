@@ -21,6 +21,7 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
+import java.util.Locale;
 import java.util.Map;
 
 import okhttp3.Headers;
@@ -140,7 +141,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
                 if (attachment.containsKey("encoding"))
                     contentEncoding = (String) attachment.get("encoding");
                 Headers.Builder builder = new Headers.Builder();
-                builder.add("Content-Disposition", String.format("attachment; filename=%s", key));
+                builder.add("Content-Disposition", String.format(Locale.ENGLISH, "attachment; filename=%s", key));
                 //builder.add("Content-Type", contentType);
                 if (contentEncoding != null)
                     builder.add("Content-Encoding", contentEncoding);

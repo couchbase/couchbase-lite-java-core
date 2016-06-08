@@ -15,6 +15,8 @@ package com.couchbase.lite.support;
 
 import com.couchbase.lite.util.Log;
 
+import java.util.Locale;
+
 public class Version {
     public static final String SYNC_PROTOCOL_VERSION = "1.2";
     public static final String VERSION;
@@ -26,9 +28,9 @@ public class Version {
     static {
         int versCode = getVersionCode();
         if (versCode != 0) {
-            VERSION = String.format("%s-%s", getVersionName(), getVersionCode());
+            VERSION = String.format(Locale.ENGLISH, "%s-%s", getVersionName(), getVersionCode());
         } else{
-            VERSION = String.format("%s", getVersionName());
+            VERSION = String.format(Locale.ENGLISH, "%s", getVersionName());
         }
     }
 

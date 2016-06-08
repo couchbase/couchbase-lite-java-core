@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
@@ -116,7 +117,7 @@ public class RemoteRequest implements CancellableRunnable {
     public String toString() {
         if (str == null) {
             String remoteURL = url.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
-            str = String.format("RemoteRequest{%s, %s}", method, remoteURL);
+            str = String.format(Locale.ENGLISH, "RemoteRequest{%s, %s}", method, remoteURL);
         }
         return str;
     }

@@ -20,6 +20,7 @@ package com.couchbase.lite.internal;
 import com.couchbase.lite.util.CollectionUtils;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 
@@ -301,7 +302,7 @@ public class RevisionInternal {
             digest = revID.substring(dashPos + 1);
             return digest;
         }
-        throw new RuntimeException(String.format("Invalid rev id: %s", revID));
+        throw new RuntimeException(String.format(Locale.ENGLISH, "Invalid rev id: %s", revID));
     }
 
     public static int CBLCollateRevIDs(String revId1, String revId2) {

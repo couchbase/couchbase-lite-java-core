@@ -41,6 +41,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
@@ -207,7 +208,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             // afterwards are the revisions that need to be downloaded.
             numRevisionsRemoved = db.findMissingRevisions(inbox);
         } catch (SQLException e) {
-            Log.e(TAG, String.format("%s failed to look up local revs", this), e);
+            Log.e(TAG, String.format(Locale.ENGLISH, "%s failed to look up local revs", this), e);
             inbox = null;
         }
 
@@ -922,7 +923,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
 
     private void waitForPendingFuturesWithNewThread() {
-        String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
+        String threadName = String.format(Locale.ENGLISH, "Thread-waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -981,7 +982,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // this has to be on a different thread than the replicator thread, or else it's a deadlock
         // because it might be waiting for jobs that have been scheduled, and not
         // yet executed (and which will never execute because this will block processing).
-        String threadName = String.format("Thread.waitForAllTasksCompleted[%s]", toString());
+        String threadName = String.format(Locale.ENGLISH, "Thread.waitForAllTasksCompleted[%s]", toString());
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -1056,7 +1057,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
             if (replicationIdentifier == null)
                 replicationIdentifier = "unknown";
-            str = String.format("PullerInternal{%s, %s, %s}",
+            str = String.format(Locale.ENGLISH, "PullerInternal{%s, %s, %s}",
                     maskedRemote, type, replicationIdentifier);
         }
         return str;
