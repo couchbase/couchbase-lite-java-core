@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -123,7 +124,7 @@ public final class Manager {
             directoryFile.mkdirs();
         }
         if (!directoryFile.isDirectory()) {
-            throw new IOException(String.format("Unable to create directory for: %s", directoryFile));
+            throw new IOException(String.format(Locale.ENGLISH, "Unable to create directory for: %s", directoryFile));
         }
 
         upgradeOldDatabaseFiles(directoryFile);
@@ -984,7 +985,7 @@ public final class Manager {
      */
     public static String getUserAgent() {
         if (USER_AGENT == null) {
-            USER_AGENT = String.format("%s/%s (%s/%s)",
+            USER_AGENT = String.format(Locale.ENGLISH, "%s/%s (%s/%s)",
                     PRODUCT_NAME,
                     Version.SYNC_PROTOCOL_VERSION,
                     Version.getVersionName(),

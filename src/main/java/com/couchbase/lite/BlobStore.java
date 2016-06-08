@@ -39,6 +39,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
@@ -668,7 +669,7 @@ public class BlobStore {
             tempDirectory.mkdirs();
         }
         if (!tempDirectory.isDirectory()) {
-            throw new IllegalStateException(String.format("Unable to create directory for: %s", tempDirectory));
+            throw new IllegalStateException(String.format(Locale.ENGLISH, "Unable to create directory for: %s", tempDirectory));
         }
 
         return tempDirectory;

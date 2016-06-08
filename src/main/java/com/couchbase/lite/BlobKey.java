@@ -22,6 +22,7 @@ import com.couchbase.lite.support.Base64;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Locale;
 
 /**
  * Key identifying a data blob. This happens to be a SHA-1 getDigest.
@@ -130,7 +131,7 @@ public class BlobKey {
     }
 
     public String base64Digest() {
-        return String.format("sha1-%s", Base64.encodeBytes(bytes));
+        return String.format(Locale.ENGLISH, "sha1-%s", Base64.encodeBytes(bytes));
     }
 
     public boolean hasBlobKey() {

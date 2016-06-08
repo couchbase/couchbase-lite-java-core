@@ -33,6 +33,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -182,7 +183,7 @@ public class Replication
                 replicationInternal = new PusherInternal(db, remote, clientFactory, lifecycle, this);
                 break;
             default:
-                throw new RuntimeException(String.format("Unknown direction: %s", direction));
+                throw new RuntimeException(String.format(Locale.ENGLISH, "Unknown direction: %s", direction));
         }
 
         addProperties(replicationInternal);
@@ -205,7 +206,8 @@ public class Replication
                 initReplicationInternal();
             } else {
                 Log.w(Log.TAG_SYNC,
-                        String.format("replicationInternal in unexpected state: %s, ignoring start()",
+                        String.format(Locale.ENGLISH,
+                                "replicationInternal in unexpected state: %s, ignoring start()",
                                 replicationInternal.stateMachine.getState()));
             }
         }

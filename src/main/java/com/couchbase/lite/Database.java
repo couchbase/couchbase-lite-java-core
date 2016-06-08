@@ -57,6 +57,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -2065,7 +2066,7 @@ public class Database implements StoreDelegate {
         if (path.length != 2) {
             return null;
         }
-        String docId = String.format("_design/%s", path[0]);
+        String docId = String.format(Locale.ENGLISH, "_design/%s", path[0]);
         RevisionInternal rev = getDocument(docId, null, true);
         if (rev == null) {
             return null;
@@ -2187,7 +2188,7 @@ public class Database implements StoreDelegate {
 
     protected View makeAnonymousView() {
         for (int i = 0; true; ++i) {
-            String name = String.format("anon%d", i);
+            String name = String.format(Locale.ENGLISH, "anon%d", i);
             View existing = getExistingView(name);
             if (existing == null) {
                 // this name has not been used yet, so let's use it
@@ -2388,7 +2389,7 @@ public class Database implements StoreDelegate {
     // Database+LocalDocs
 
     private static String makeLocalDocumentId(String documentId) {
-        return String.format("_local/%s", documentId);
+        return String.format(Locale.ENGLISH, "_local/%s", documentId);
     }
 
     /**

@@ -49,6 +49,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
@@ -240,7 +241,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected void start() {
         try {
             if (!db.isOpen()) {
-                String msg = String.format("Db: %s is not open, abort replication", db);
+                String msg = String.format(Locale.ENGLISH, "Db: %s is not open, abort replication", db);
                 parentReplication.setLastError(new Exception(msg));
                 fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
                 return;
@@ -271,7 +272,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     private void initSessionId() {
-        this.sessionID = String.format("repl%03d", ++lastSessionID);
+        this.sessionID = String.format(Locale.ENGLISH, "repl%03d", ++lastSessionID);
     }
 
     /**
@@ -361,7 +362,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
                         String type = isPull() ? "pull" : "push";
                         String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
-                        threadName = String.format("CBLReplicationExecutor-%s-%s-%s",
+                        threadName = String.format(Locale.ENGLISH, "CBLReplicationExecutor-%s-%s-%s",
                                 maskedRemote, type, replicationIdentifier);
                     } catch (Exception e) {
                         Log.e(Log.TAG_SYNC, "Error creating thread name", e);
@@ -390,7 +391,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                                 String type = isPull() ? "pull" : "push";
                                 String replicationIdentifier =
                                         Utils.shortenString(remoteCheckpointDocID(), 5);
-                                threadName = String.format("CBLRequestWorker-%s-%s-%s-%d",
+                                threadName = String.format(Locale.ENGLISH, "CBLRequestWorker-%s-%s-%s-%d",
                                         maskedRemote, type, replicationIdentifier, counter++);
                             } catch (Exception e) {
                                 Log.e(Log.TAG_SYNC, "Error creating thread name", e);
@@ -889,7 +890,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         if ("_session".equals(relativePath)) {
             try {
                 URL remoteUrl = new URL(remoteUrlString);
-                String relativePathWithLeadingSlash = String.format("/%s", relativePath);  // required on couchbase-lite-java
+                String relativePathWithLeadingSlash = String.format(Locale.ENGLISH, "/%s", relativePath);  // required on couchbase-lite-java
                 URL remoteUrlNoPath = new URL(remoteUrl.getProtocol(), remoteUrl.getHost(),
                         remoteUrl.getPort(), relativePathWithLeadingSlash);
                 remoteUrlString = remoteUrlNoPath.toExternalForm();
@@ -1756,7 +1757,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     fireTrigger(ReplicationTrigger.RESUME);
 
                 // run waitForPendingFutures.
-                String threadName = String.format("Thread-waitForPendingFutures[%s]", toString());
+                String threadName = String.format(Locale.ENGLISH, "Thread-waitForPendingFutures[%s]", toString());
                 new Thread(new Runnable() {
                     @Override
                     public void run() {

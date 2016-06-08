@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -281,7 +282,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 Mapper map = delegate != null ? delegate.getMap() : null;
                 if (map == null) {
                     if (view == this) {
-                        String msg = String.format("Cannot index view %s: " +
+                        String msg = String.format(Locale.ENGLISH, "Cannot index view %s: " +
                                 "no map block registered", view.getName());
                         Log.e(Log.TAG_VIEW, msg);
                         throw new CouchbaseLiteException(msg, new Status(Status.BAD_REQUEST));
@@ -295,7 +296,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
                 int viewID = view.getViewID();
                 if (viewID <= 0) {
-                    String message = String.format("View '%s' not found in database",
+                    String message = String.format(Locale.ENGLISH, "View '%s' not found in database",
                             view.getName());
                     Log.e(Log.TAG_VIEW, message);
                     throw new CouchbaseLiteException(message, new Status(Status.NOT_FOUND));
@@ -307,7 +308,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 long last = view == this ? forViewLastSequence : view.getLastSequenceIndexed();
                 viewLastSequence[i++] = last;
                 if (last < 0) {
-                    String msg = String.format("last < 0 (%d)", last);
+                    String msg = String.format(Locale.ENGLISH, "last < 0 (%d)", last);
                     throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
                 } else if (last < dbMaxSequence) {
                     if (last == 0)
@@ -543,7 +544,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                             emitBlock.setSequence(sequence);
                             mapBlocks.get(i).map(curDoc, emitBlock);
                         } catch (Throwable e) {
-                            String msg = String.format("Error when calling map block of view '%s'",
+                            String msg = String.format(Locale.ENGLISH, "Error when calling map block of view '%s'",
                                     view.getName());
                             Log.e(Log.TAG_VIEW, msg, e);
                             throw new CouchbaseLiteException(msg, e, new Status(Status.CALLBACK_ERROR));
@@ -723,7 +724,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         final Reducer reduce = delegate.getReduce();
         if (options.isReduceSpecified()) {
             if (options.isReduce() && reduce == null) {
-                Log.w(TAG, String.format(
+                Log.w(TAG, String.format(Locale.ENGLISH,
                         "Cannot use reduce option in view %s which has no reduce block defined",
                         name));
                 throw new CouchbaseLiteException(new Status(Status.BAD_PARAM));
@@ -787,7 +788,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             Object reduced = (reduce != null) ?
                     reduce.reduce(keysToReduce, valuesToReduce, false) :
                     null;
-            Log.v(TAG, String.format("Query %s: Reduced to key=%s, value=%s",
+            Log.v(TAG, String.format(Locale.ENGLISH, "Query %s: Reduced to key=%s, value=%s",
                     name, key, reduced));
             QueryRow row = new QueryRow(null, 0, key, reduced, null);
             if (postFilter == null || postFilter.apply(row)) {
@@ -926,7 +927,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         if (options.isIncludeDocs()) {
             sql.append(", revid, json");
         }
-        sql.append(String.format(" FROM 'maps_%s', revs, docs", mapTableName()));
+        sql.append(String.format(Locale.ENGLISH, " FROM 'maps_%s', revs, docs", mapTableName()));
         sql.append(" WHERE 1");
 
         List<String> argsList = new ArrayList<String>();
@@ -969,7 +970,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             argsList.add(minKeyJSON);
             if (minKeyDocId != null && inclusiveMin) {
                 //OPT: This calls the JSON collator a 2nd time unnecessarily.
-                sql.append(String.format(" AND (key > ? %s OR docid >= ?)", collationStr));
+                sql.append(String.format(Locale.ENGLISH, " AND (key > ? %s OR docid >= ?)", collationStr));
                 argsList.add(minKeyJSON);
                 argsList.add(minKeyDocId);
             }
@@ -982,13 +983,13 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             sql.append(collationStr);
             argsList.add(maxKeyJSON);
             if (maxKeyDocId != null && inclusiveMax) {
-                sql.append(String.format(" AND (key < ? %s OR docid <= ?)", collationStr));
+                sql.append(String.format(Locale.ENGLISH, " AND (key < ? %s OR docid <= ?)", collationStr));
                 argsList.add(maxKeyJSON);
                 argsList.add(maxKeyDocId);
             }
         }
 
-        sql.append(String.format(
+        sql.append(String.format(Locale.ENGLISH,
                 " AND revs.sequence = 'maps_%s'.sequence AND docs.doc_id = revs.doc_id ORDER BY key",
                 mapTableName()));
         sql.append(collationStr);

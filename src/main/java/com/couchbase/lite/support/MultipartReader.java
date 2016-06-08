@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 
@@ -227,7 +228,7 @@ public class MultipartReader {
                     }
                     if (tempBoundary.length() < 1)
                         throw new IllegalArgumentException(contentType + " has zero-length boundary");
-                    tempBoundary = String.format("\r\n--%s", tempBoundary);
+                    tempBoundary = String.format(Locale.ENGLISH, "\r\n--%s", tempBoundary);
                     boundary = tempBoundary.getBytes(Charset.forName("UTF-8"));
                     break;
                 }

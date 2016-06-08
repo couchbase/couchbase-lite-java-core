@@ -16,6 +16,7 @@
 
 package com.couchbase.lite.util;
 
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Log {
@@ -138,9 +139,9 @@ public class Log {
     public static void v(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
             try {
-                logger.v(tag, String.format(formatString, args));
+                logger.v(tag, String.format(Locale.ENGLISH, formatString, args));
             } catch (Exception e) {
-                logger.v(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.v(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
 
@@ -157,9 +158,9 @@ public class Log {
     public static void v(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, VERBOSE)) {
             try {
-                logger.v(tag, String.format(formatString, args), tr);
+                logger.v(tag, String.format(Locale.ENGLISH, formatString, args), tr);
             } catch (Exception e) {
-                logger.v(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.v(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -199,9 +200,9 @@ public class Log {
     public static void d(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, DEBUG)) {
             try {
-                logger.d(tag, String.format(formatString, args));
+                logger.d(tag, String.format(Locale.ENGLISH, formatString, args));
             } catch (Exception e) {
-                logger.d(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.d(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -217,9 +218,9 @@ public class Log {
     public static void d(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, DEBUG)) {
             try {
-                logger.d(tag, String.format(formatString, args, tr));
+                logger.d(tag, String.format(Locale.ENGLISH, formatString, args, tr));
             } catch (Exception e) {
-                logger.d(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.d(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -260,9 +261,9 @@ public class Log {
     public static void i(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, INFO)) {
             try {
-                logger.i(tag, String.format(formatString, args));
+                logger.i(tag, String.format(Locale.ENGLISH, formatString, args));
             } catch (Exception e) {
-                logger.i(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.i(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -278,9 +279,9 @@ public class Log {
     public static void i(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, INFO)) {
             try {
-                logger.i(tag, String.format(formatString, args, tr));
+                logger.i(tag, String.format(Locale.ENGLISH, formatString, args, tr));
             } catch (Exception e) {
-                logger.i(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.i(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -333,9 +334,9 @@ public class Log {
     public static void w(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, WARN)) {
             try {
-                logger.w(tag, String.format(formatString, args));
+                logger.w(tag, String.format(Locale.ENGLISH, formatString, args));
             } catch (Exception e) {
-                logger.w(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.w(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -352,9 +353,9 @@ public class Log {
     public static void w(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, WARN)) {
             try {
-                logger.w(tag, String.format(formatString, args), tr);
+                logger.w(tag, String.format(Locale.ENGLISH, formatString, args), tr);
             } catch (Exception e) {
-                logger.w(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.w(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -397,9 +398,9 @@ public class Log {
     public static void e(String tag, String formatString, Throwable tr, Object... args) {
         if (logger != null && isLoggingEnabled(tag, ERROR)) {
             try {
-                logger.e(tag, String.format(formatString, args), tr);
+                logger.e(tag, String.format(Locale.ENGLISH, formatString, args), tr);
             } catch (Exception e) {
-                logger.e(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.e(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
@@ -414,9 +415,9 @@ public class Log {
     public static void e(String tag, String formatString, Object... args) {
         if (logger != null && isLoggingEnabled(tag, ERROR)) {
             try {
-                logger.e(tag, String.format(formatString, args));
+                logger.e(tag, String.format(Locale.ENGLISH, formatString, args));
             } catch (Exception e) {
-                logger.e(tag, String.format("Unable to format log: %s", formatString), e);
+                logger.e(tag, String.format(Locale.ENGLISH, "Unable to format log: %s", formatString), e);
             }
         }
     }
