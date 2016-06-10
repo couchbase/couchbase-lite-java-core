@@ -302,6 +302,26 @@ public interface Store {
      */
     Map<String, Object> purgeRevisions(final Map<String, List<String>> docsToRevs);
 
+    /**
+     * Returns a document's expiration date as a Unix timestamp, or 0 for no expiration.
+     */
+    long expirationOfDocument(String docID);
+
+    /**
+     * Sets a document's expiration to a Unix timestamp, or 0 for no expiration.
+     */
+    boolean setExpirationOfDocument(long timestamp, String docID);
+
+    /**
+     * Returns the next time at which a document will expire.
+     */
+    long nextDocumentExpiry();
+
+    /**
+     * Triggers purging of documents whose expiration time has passed.
+     */
+    int purgeExpiredDocuments();
+
     ///////////////////////////////////////////////////////////////////////////
     // VIEWS:
     ///////////////////////////////////////////////////////////////////////////

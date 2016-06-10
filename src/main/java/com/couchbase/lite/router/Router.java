@@ -1605,6 +1605,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         List<DocumentChange> changes = event.getChanges();
         for (DocumentChange change : changes) {
             RevisionInternal rev = change.getAddedRevision();
+            if (rev == null)
+                continue;
             String winningRevID = change.getWinningRevisionID();
             if (!this.changesIncludesConflicts) {
                 if (winningRevID == null)

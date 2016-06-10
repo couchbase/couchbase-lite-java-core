@@ -54,6 +54,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -62,6 +63,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -70,8 +72,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Database implements StoreDelegate {
 
     public static final String TAG = Log.TAG_DATABASE;
+
     // When this many changes pile up in _changesToNotify, start removing their bodies to save RAM
     private static final int MANY_CHANGES_TO_NOTIFY = 5000;
+
+    // How long to wait after a database opens before expiring docs
+    private static final long kHousekeepingDelayAfterOpening = 3;
 
     private static final String DEFAULT_PBKDF2_KEY_SALT = "Salty McNaCl";
     private static final int DEFAULT_PBKDF2_KEY_ROUNDS = 64000;
@@ -715,8 +721,11 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public void databaseStorageChanged(DocumentChange change) {
-        Log.v(Log.TAG, "---> Added: %s as seq %d",
+        if (change.getRevisionId() != null)
+            Log.v(Log.TAG, "---> Added: %s as seq %d",
                 change.getAddedRevision(), change.getAddedRevision().getSequence());
+        else
+            Log.v(Log.TAG, "---> Purged: docID=%s", change.getDocumentId());
 
         changesToNotify.add(change);
         if (!postChangeNotifications()) {
@@ -1308,6 +1317,8 @@ public class Database implements StoreDelegate {
                 upgrader.deleteSQLiteFiles();
             }
         }
+
+        scheduleDocumentExpiration(kHousekeepingDelayAfterOpening);
     }
 
     /**
@@ -2250,6 +2261,47 @@ public class Database implements StoreDelegate {
         }
     }
 
+    // #pragma mark - EXPIRATION:
+
+    /* package */void setExpirationDate(Date date, String docID) {
+        long timestamp = date != null ? date.getTime() : 0;
+        store.setExpirationOfDocument(timestamp, docID);
+        scheduleDocumentExpiration(0);
+    }
+
+    private void scheduleDocumentExpiration(long minimumDelay) {
+        long nextExpiration = store.nextDocumentExpiry();
+        if (nextExpiration > 0) {
+            long delay = Math.max(nextExpiration - System.currentTimeMillis() + 1, minimumDelay);
+            Log.v(TAG, "Scheduling next doc expiration in %d sec", delay / 1000);
+            manager.getWorkExecutor().schedule(new Runnable() {
+                @Override
+                public void run() {
+                    if(isOpen())
+                        purgeExpiredDocuments();
+                }
+            }, delay, TimeUnit.MILLISECONDS);
+        } else {
+            Log.v(TAG, "No pending doc expirations");
+        }
+    }
+
+    private void purgeExpiredDocuments() {
+        Log.v(TAG, "Purging expired documents...");
+        int nPurged = store.purgeExpiredDocuments();
+        Log.v(TAG, "Purged %d expired documents", nPurged);
+        scheduleDocumentExpiration(1);
+    }
+
+    private void purgeExpiredDocumentsAsync() {
+        runAsync(new AsyncTask() {
+            @Override
+            public void run(Database database) {
+                purgeExpiredDocuments();
+            }
+        });
+    }
+
     // #pragma mark - LOOKING UP ATTACHMENTS:
 
     /**
@@ -2302,7 +2354,7 @@ public class Database implements StoreDelegate {
             // This is a 'while' instead of an 'if' because when we finish posting notifications, there
             // might be new ones that have arrived as a result of notification handlers making document
             // changes of their own (the replicator manager will do this.) So we need to check again.
-            while (!store.inTransaction() && open.get() && changesToNotify.size() > 0) {
+            while (store != null && !store.inTransaction() && open.get() && changesToNotify.size() > 0) {
                 List<DocumentChange> outgoingChanges = new ArrayList<DocumentChange>();
                 synchronized (changesToNotify) {
                     outgoingChanges.addAll(changesToNotify);
