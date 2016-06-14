@@ -657,6 +657,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     if (source != null && source.toURI().equals(remoteUri))
                         return;
                     RevisionInternal rev = change.getAddedRevision();
+                    if (rev == null)
+                        continue;
                     if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
                         if (doneBeginReplicating) {
                             // if not running state anymore, exit from loop.

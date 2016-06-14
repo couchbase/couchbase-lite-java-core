@@ -20,6 +20,7 @@ import com.couchbase.lite.util.Log;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,6 +144,20 @@ public class Document {
     @InterfaceAudience.Public
     public String getId() {
         return documentId;
+    }
+
+    /**
+     * A date/time after which this document will be automatically purged.
+     */
+    public Date getExpirationDate() {
+        long timestamp = database.getStore().expirationOfDocument(documentId);
+        if (timestamp == 0)
+            return null;
+        return new Date(timestamp);
+    }
+
+    public void setExpirationDate(Date date) {
+        database.setExpirationDate(date, documentId);
     }
 
     ////////////////////////////////////////////////////////////
@@ -554,22 +569,29 @@ public class Document {
     }
 
     /**
+     * Notification from the CBLDatabase that a (current, winning) revision has been added
+     *
      * @exclude
      */
     @InterfaceAudience.Private
     protected void revisionAdded(DocumentChange change, boolean notify) {
-        String revID = change.getWinningRevisionID();
-        if (revID == null)
-            return;  // current revision didn't change
+        if (change.getRevisionId() != null) {
+            String revID = change.getWinningRevisionID();
+            if (revID == null)
+                return;  // current revision didn't change
 
-        if (currentRevision != null && !revID.equals(currentRevision.getId())) {
-            RevisionInternal rev = change.getWinningRevisionIfKnown();
-            if (rev == null)
-                forgetCurrentRevision();
-            else if (rev.isDeleted())
-                currentRevision = null;
-            else
-                currentRevision = new SavedRevision(this, rev);
+            if (currentRevision != null && !revID.equals(currentRevision.getId())) {
+                RevisionInternal rev = change.getWinningRevisionIfKnown();
+                if (rev == null)
+                    forgetCurrentRevision();
+                else if (rev.isDeleted())
+                    currentRevision = null;
+                else
+                    currentRevision = new SavedRevision(this, rev);
+            }
+        } else {
+            // Document was purged!
+            currentRevision = null;
         }
 
         if (notify) {

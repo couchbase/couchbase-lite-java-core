@@ -56,6 +56,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SQLiteStore implements Store, EncryptableStore {
     public String TAG = Log.TAG_DATABASE;
@@ -281,6 +282,20 @@ public class SQLiteStore implements Store, EncryptableStore {
                     throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
                 }
                 dbVersion = 101;
+            }
+
+            if (dbVersion < 102) {
+                String upgradeSql = "ALTER TABLE docs ADD COLUMN expiry_timestamp INTEGER; "
+                        + "CREATE INDEX IF NOT EXISTS docs_expiry ON docs(expiry_timestamp) "
+                        + "WHERE expiry_timestamp not null; PRAGMA user_version = 102";
+                try {
+                    initialize(upgradeSql);
+                } catch (SQLException e) {
+                    String message = "Cannot update user_version to " + dbVersion;
+                    Log.e(TAG, message, e);
+                    throw new CouchbaseLiteException(message, e, Status.DB_ERROR);
+                }
+                dbVersion = 102;
             }
 
             if (isNew)
@@ -691,7 +706,6 @@ public class SQLiteStore implements Store, EncryptableStore {
 
     @Override
     public boolean runInTransaction(TransactionalTask transactionalTask) {
-
         boolean shouldCommit = true;
 
         beginTransaction();
@@ -706,6 +720,12 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
 
         return shouldCommit;
+    }
+
+    boolean runInOuterTransaction(TransactionalTask transactionalTask) {
+        if (!inTransaction())
+            return runInTransaction(transactionalTask);
+        return transactionalTask.run();
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1888,6 +1908,96 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     ///////////////////////////////////////////////////////////////////////////
+    // EXPIRATION:
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @return Java Time
+     */
+    @Override
+    public long expirationOfDocument(String docID) {
+        return SQLiteUtils.longForQuery(storageEngine,
+                "SELECT expiry_timestamp FROM docs WHERE docid=?",
+                new String[]{docID}) * 1000L;
+    }
+
+    @Override
+    public boolean setExpirationOfDocument(long unixTime, String docID) {
+        try {
+            ContentValues values = new ContentValues();
+            values.put("expiry_timestamp", unixTime);
+            String[] whereArgs = {docID};
+            int rowsUpdated = storageEngine.update("docs", values, "docid=?", whereArgs);
+            return rowsUpdated > 0 ? true : false;
+        } catch (SQLException e) {
+            Log.w(TAG, "Failed to update expiry_timestamp for docID=%s", e, docID);
+            return false;
+        }
+    }
+
+    /**
+     * @return Java Time
+     */
+    @Override
+    public long nextDocumentExpiry() {
+        return SQLiteUtils.longForQuery(storageEngine,
+                "SELECT MIN(expiry_timestamp) FROM docs WHERE expiry_timestamp not null and expiry_timestamp != 0",
+                null) * 1000L;
+    }
+
+    @Override
+    public int purgeExpiredDocuments() {
+        final AtomicInteger nPurged = new AtomicInteger(0);
+        runInOuterTransaction(new TransactionalTask() {
+            @Override
+            public boolean run() {
+                if (storageEngine == null)
+                    return false;
+
+                long nowUnixTime = System.currentTimeMillis() / 1000L;
+                invalidateDocNumericIDs();
+
+                String[] args = {String.valueOf(nowUnixTime)};
+
+                // First capture the docIDs to be purged, so we can notify about them:
+                List<String> purgedIDs = new ArrayList<String>();
+                String queryString = "SELECT docid FROM docs WHERE expiry_timestamp <= ? and expiry_timestamp != 0";
+                Cursor cursor = storageEngine.rawQuery(queryString, args);
+                try {
+                    cursor.moveToNext();
+                    while (!cursor.isAfterLast()) {
+                        purgedIDs.add(cursor.getString(0));
+                        cursor.moveToNext();
+                    }
+                } finally {
+                    cursor.close();
+                }
+
+                // Now delete the docs:
+                try {
+                    int count = storageEngine.delete("docs", "expiry_timestamp <= ? and expiry_timestamp != 0", args);
+                    Log.v(TAG, "purged doc count: %d/%d", count, purgedIDs.size());
+                } catch (SQLException e) {
+                    Log.w(TAG, "Failed to delete from docs expiry_timestamp <= %d", e, nowUnixTime);
+                    return false;
+                }
+
+                // Finally notify:
+                for (String docID : purgedIDs)
+                    notifyPurgedDocument(docID);
+
+                nPurged.set(purgedIDs.size());
+                return true;
+            }
+        });
+        return nPurged.get();
+    }
+
+    private void notifyPurgedDocument(String docID) {
+        delegate.databaseStorageChanged(new DocumentChange(docID));
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
     // VIEWS:
     ///////////////////////////////////////////////////////////////////////////
 
@@ -2467,9 +2577,17 @@ public class SQLiteStore implements Store, EncryptableStore {
             row = isNew.get() ? createDocNumericID(docID, isNew) : getDocNumericID(docID);
         }
 
-        // TODO: cache
+        // TODO: cache: https://github.com/couchbase/couchbase-lite-java-core/issues/1265
 
         return row;
+    }
+
+    private void invalidateDocNumericID(String docID){
+        // TODO: cache: https://github.com/couchbase/couchbase-lite-java-core/issues/1265
+    }
+
+    private void invalidateDocNumericIDs(){
+        // TODO: cache: https://github.com/couchbase/couchbase-lite-java-core/issues/1265
     }
 
     //private long getOrInsertDocNumericID(String docID) {
