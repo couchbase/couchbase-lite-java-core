@@ -46,6 +46,7 @@ public class Log {
     public static final String TAG_BLOB_STORE = "BlobStore";
     public static final String TAG_SYMMETRIC_KEY = "SymmetricKey";
     public static final String TAG_ACTION = "Action";
+    public static final String TAG_TIMESERIES = "TimeSeries";
 
 
     /**
