@@ -1911,18 +1911,21 @@ public class SQLiteStore implements Store, EncryptableStore {
     // EXPIRATION:
     ///////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @return Java Time
+     */
     @Override
     public long expirationOfDocument(String docID) {
         return SQLiteUtils.longForQuery(storageEngine,
                 "SELECT expiry_timestamp FROM docs WHERE docid=?",
-                new String[]{docID});
+                new String[]{docID}) * 1000L;
     }
 
     @Override
-    public boolean setExpirationOfDocument(long timestamp, String docID) {
+    public boolean setExpirationOfDocument(long unixTime, String docID) {
         try {
             ContentValues values = new ContentValues();
-            values.put("expiry_timestamp", timestamp);
+            values.put("expiry_timestamp", unixTime);
             String[] whereArgs = {docID};
             int rowsUpdated = storageEngine.update("docs", values, "docid=?", whereArgs);
             return rowsUpdated > 0 ? true : false;
@@ -1932,11 +1935,14 @@ public class SQLiteStore implements Store, EncryptableStore {
         }
     }
 
+    /**
+     * @return Java Time
+     */
     @Override
     public long nextDocumentExpiry() {
         return SQLiteUtils.longForQuery(storageEngine,
                 "SELECT MIN(expiry_timestamp) FROM docs WHERE expiry_timestamp not null and expiry_timestamp != 0",
-                null);
+                null) * 1000L;
     }
 
     @Override
@@ -1948,37 +1954,33 @@ public class SQLiteStore implements Store, EncryptableStore {
                 if (storageEngine == null)
                     return false;
 
-                long now = System.currentTimeMillis();
+                long nowUnixTime = System.currentTimeMillis() / 1000L;
                 invalidateDocNumericIDs();
 
-                String[] args = {String.valueOf(now)};
+                String[] args = {String.valueOf(nowUnixTime)};
 
                 // First capture the docIDs to be purged, so we can notify about them:
                 List<String> purgedIDs = new ArrayList<String>();
-                String queryString = "SELECT docid FROM docs WHERE expiry_timestamp <= ?";
+                String queryString = "SELECT docid FROM docs WHERE expiry_timestamp <= ? and expiry_timestamp != 0";
                 Cursor cursor = storageEngine.rawQuery(queryString, args);
                 try {
-                    if (cursor.moveToNext())
+                    cursor.moveToNext();
+                    while (!cursor.isAfterLast()) {
                         purgedIDs.add(cursor.getString(0));
+                        cursor.moveToNext();
+                    }
                 } finally {
                     cursor.close();
                 }
 
                 // Now delete the docs:
-                for (String docID : purgedIDs) {
-                    String[] arg = {docID};
-                    storageEngine.delete("docs", "docid = ?", arg);
-                }
-                /* NOTE: following codes are more efficient, but sometimes docIDs do not match with
-                         previous query results.
                 try {
-                    int count = storageEngine.delete("docs", "expiry_timestamp <= ?", args);
-                    Log.e(TAG, "purged doc count: %d/%d", count, purgedIDs.size());
+                    int count = storageEngine.delete("docs", "expiry_timestamp <= ? and expiry_timestamp != 0", args);
+                    Log.v(TAG, "purged doc count: %d/%d", count, purgedIDs.size());
                 } catch (SQLException e) {
-                    Log.w(TAG, "Failed to delete from docs expiry_timestamp <= %d", e, now);
+                    Log.w(TAG, "Failed to delete from docs expiry_timestamp <= %d", e, nowUnixTime);
                     return false;
                 }
-                */
 
                 // Finally notify:
                 for (String docID : purgedIDs)
@@ -1991,10 +1993,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         return nPurged.get();
     }
 
-    int i = 0;
-
     private void notifyPurgedDocument(String docID) {
-        Log.e(TAG, "notifyPurgedDocument() [%d] docID=%s", i++, docID);
         delegate.databaseStorageChanged(new DocumentChange(docID));
     }
 

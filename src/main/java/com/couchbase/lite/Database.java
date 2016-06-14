@@ -61,9 +61,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -126,6 +127,7 @@ public class Database implements StoreDelegate {
     private boolean postingChangeNotifications;
     private final Object lockPostingChangeNotifications = new Object();
     private final long startTime;
+    private Timer purgeTimer;
 
     /**
      * Each database can have an associated PersistentCookieStore,
@@ -1402,6 +1404,9 @@ public class Database implements StoreDelegate {
         // Clear all replicators:
         allReplicators.clear();
 
+        // cancel purge timer
+        cancelPurgeTimer();
+
         // Close Store:
         if (store != null)
             store.close();
@@ -2264,42 +2269,43 @@ public class Database implements StoreDelegate {
     // #pragma mark - EXPIRATION:
 
     /* package */void setExpirationDate(Date date, String docID) {
-        long timestamp = date != null ? date.getTime() : 0;
-        store.setExpirationOfDocument(timestamp, docID);
+        long unixTime = date != null ? date.getTime() / 1000 : 0;
+        store.setExpirationOfDocument(unixTime, docID);
         scheduleDocumentExpiration(0);
     }
 
     private void scheduleDocumentExpiration(long minimumDelay) {
+        if (store == null) return;
+
         long nextExpiration = store.nextDocumentExpiry();
         if (nextExpiration > 0) {
-            long delay = Math.max(nextExpiration - System.currentTimeMillis() + 1, minimumDelay);
-            Log.v(TAG, "Scheduling next doc expiration in %d sec", delay / 1000);
-            manager.getWorkExecutor().schedule(new Runnable() {
+            long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
+            Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
+            cancelPurgeTimer();
+            purgeTimer = new Timer();
+            purgeTimer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    if(isOpen())
+                    if (isOpen())
                         purgeExpiredDocuments();
                 }
-            }, delay, TimeUnit.MILLISECONDS);
-        } else {
+            }, delay * 1000);
+        } else
             Log.v(TAG, "No pending doc expirations");
-        }
     }
 
     private void purgeExpiredDocuments() {
-        Log.v(TAG, "Purging expired documents...");
+        if (store == null) return;
         int nPurged = store.purgeExpiredDocuments();
         Log.v(TAG, "Purged %d expired documents", nPurged);
         scheduleDocumentExpiration(1);
     }
 
-    private void purgeExpiredDocumentsAsync() {
-        runAsync(new AsyncTask() {
-            @Override
-            public void run(Database database) {
-                purgeExpiredDocuments();
-            }
-        });
+    private void cancelPurgeTimer() {
+        if (purgeTimer != null) {
+            purgeTimer.cancel();
+            purgeTimer = null;
+        }
     }
 
     // #pragma mark - LOOKING UP ATTACHMENTS:
