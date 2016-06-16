@@ -526,12 +526,12 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Map<String, Object> body = revision.getProperties();
         Map<String, Object> attachments = (Map<String, Object>) body.get("_attachments");
 
+        boolean attachmentsFollow = false;
         for (String attachmentKey : attachments.keySet()) {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentKey);
-            if (!attachment.containsKey("follows")) {
-                return false;
-            }
+            if (attachment.containsKey("follows")) attachmentsFollow = true;
         }
+        if (!attachmentsFollow) return false;
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
         addToChangesCount(1);
