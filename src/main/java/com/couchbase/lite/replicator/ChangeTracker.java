@@ -509,15 +509,7 @@ public class ChangeTracker implements Runnable {
 
         if (call != null) {
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
-            //request.abort();
             call.cancel();
-        }
-        if (inputStream != null) {
-            try {
-                inputStream.close();
-                inputStream = null;
-            } catch (IOException ex) {
-            }
         }
 
         try {
