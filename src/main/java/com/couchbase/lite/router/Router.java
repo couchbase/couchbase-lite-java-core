@@ -709,12 +709,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private Status sendResponseHeaders(Status status) {
         // NOTE: Line 572-574 of CBL_Router.m is not in CBL Java Core
         //       This check is in sendResponse();
-
-        connection.getResHeader().add("Server", String.format(Locale.ENGLISH, "Couchbase Lite %s", getVersionString()));
+        connection.getResHeader().add("Server",
+                String.format(Locale.ENGLISH, "Couchbase Lite %s", getVersionString()));
 
         // Check for a mismatch between the Accept request header and the response type:
         String accept = getRequestHeaderValue("Accept");
-        if (accept != null && !"*/*".equals(accept)) {
+        if (accept != null && accept.indexOf("*/*") < 0) {
             String responseType = connection.getBaseContentType();
             if (responseType != null && responseType.indexOf(accept) < 0) {
                 Log.w(TAG, "Error 406: Can't satisfy request Accept: %s", accept);
@@ -732,7 +732,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         // NOTE: Line 596-607 of CBL_Router.m is not in CBL Java Core
-
         return status;
     }
 
