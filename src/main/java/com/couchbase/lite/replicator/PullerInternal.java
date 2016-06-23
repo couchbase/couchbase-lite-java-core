@@ -484,7 +484,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         body.put("keys", keys);
 
         Future future = sendAsyncRequest("POST",
-                "/_all_docs?include_docs=true",
+                "_all_docs?include_docs=true",
                 body,
                 new RemoteRequestCompletion() {
 
@@ -661,8 +661,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // Construct a query. We want the revision history, and the bodies of attachments that have
         // been added since the latest revisions we have locally.
         // See: http://wiki.apache.org/couchdb/HTTP_Document_API#Getting_Attachments_With_a_Document
-        StringBuilder path = new StringBuilder("/");
-        path.append(encodeDocumentId(rev.getDocID()));
+        StringBuilder path = new StringBuilder(encodeDocumentId(rev.getDocID()));
         path.append("?rev=").append(URIUtils.encode(rev.getRevID()));
         path.append("&revs=true&attachments=true");
 

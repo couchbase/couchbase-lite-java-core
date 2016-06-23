@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- * <p/>
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * <p/>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p/>
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Manager;
@@ -24,9 +24,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
 import okhttp3.Call;
@@ -117,7 +120,7 @@ public class RemoteRequest implements CancellableRunnable {
     public String toString() {
         if (str == null) {
             String remoteURL = url.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
-            str = String.format(Locale.ENGLISH, "RemoteRequest{%s, %s}", method, remoteURL);
+            str = String.format(Locale.ENGLISH, "%s {%s, %s}", this.getClass().getName(), method, remoteURL);
         }
         return str;
     }
@@ -252,7 +255,14 @@ public class RemoteRequest implements CancellableRunnable {
                     if (!dontLog404)
                         Log.w(TAG, "%s: Got error status: %d for %s. Reason: %s",
                                 this, response.code(), url, response.message());
-                    error = new RemoteRequestResponseException(response.code(), response.message());
+                    String authHeader = response.header("WWW-Authenticate");
+                    Map<String, String> challenge = parseAuthHeader(authHeader);
+                    Map<String, Object> extra = null;
+                    if (challenge != null) {
+                        extra = new HashMap();
+                        extra.put("AuthChallenge", challenge);
+                    }
+                    error = new RemoteRequestResponseException(response.code(), response.message(), extra);
                     RequestUtils.closeResponseBody(response);
                 }
                 // success
@@ -272,7 +282,7 @@ public class RemoteRequest implements CancellableRunnable {
                 }
             } catch (Exception e) {
                 // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
-                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", e, this, e, url);
                 error = e;
             }
             respondWithResult(fullBody, error, response);
@@ -308,5 +318,32 @@ public class RemoteRequest implements CancellableRunnable {
             }
             factory.addCookies(cookies);
         }
+    }
+
+    static Pattern re = Pattern.compile("(\\w+)\\s+(\\w+)=((\\w+)|\"([^\"]+))");
+
+    /**
+     * BLIPHTTPLogic.m
+     * + (NSDictionary*) parseAuthHeader: (NSString*)authHeader
+     *
+     * @param authHeader
+     * @return
+     */
+    protected static Map<String, String> parseAuthHeader(String authHeader) {
+        if (authHeader == null || authHeader.length() == 0)
+            return null;
+        Map<String, String> challenge = new HashMap<String, String>();
+        Matcher m = re.matcher(authHeader);
+        while (m.find()) {
+            String scheme = m.group(1);
+            String key = m.group(2);
+            String value = m.group(4);
+            if (value == null || value.length() == 0)
+                value = m.group(5);
+            challenge.put(key, value);
+            challenge.put("Scheme", scheme);
+        }
+        challenge.put("WWW-Authenticate", authHeader);
+        return challenge;
     }
 }

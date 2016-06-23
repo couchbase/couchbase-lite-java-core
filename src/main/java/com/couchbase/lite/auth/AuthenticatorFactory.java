@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.auth;
 
 import java.util.HashMap;
@@ -28,7 +28,7 @@ public class AuthenticatorFactory {
      * @param password      password
      */
     public static Authenticator createBasicAuthenticator(String username, String password) {
-        return new BasicAuthenticator(username, password);
+        return new PasswordAuthorizer(username, password);
     }
 
     /*
@@ -46,12 +46,18 @@ public class AuthenticatorFactory {
      * Creates an Authenticator that knows how to do Persona authentication.
      *
      * @param assertion     Persona Assertion
-     * @param email         User email address
      */
-    public static Authenticator createPersonaAuthenticator(String assertion, String email) {
-        // TODO: REVIEW : Do we need email?
+    public static Authenticator createPersonaAuthenticator(String assertion) {
         Map<String, String> params = new HashMap<String, String>();
-        params.put("access_token", assertion);
+        params.put("assertion", assertion);
         return new TokenAuthenticator("_persona", params);
+    }
+
+    /*
+     * Creates an Authenticator that knows how to do OpenID authentication.
+     */
+    public static Authenticator createOpenIDConnectAuthenticator(
+            OpenIDConnectAuthorizer.OIDCLoginCallback callback, TokenStore tokenStore) {
+        return new OpenIDConnectAuthorizer(callback, tokenStore);
     }
 }

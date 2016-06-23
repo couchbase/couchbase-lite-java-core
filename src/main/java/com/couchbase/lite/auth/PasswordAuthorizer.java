@@ -15,18 +15,17 @@ package com.couchbase.lite.auth;
 
 import com.couchbase.lite.util.Log;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-import okhttp3.Headers;
+import okhttp3.Credentials;
+import okhttp3.Request;
 
 /**
- * Authenticator impl that knows how to do token based auth
+ * Authenticator impl that knows how to do basic auth
  *
+ * @note CBLCredentialAuthorizer is not implmented.
  * @exclude
  */
-public class TokenAuthenticator extends BaseAuthorizer implements SessionCookieAuthorizer {
+public class PasswordAuthorizer extends BaseAuthorizer
+        implements CustomHeadersAuthorizer, CredentialAuthorizer {
 
     ////////////////////////////////////////////////////////////
     // Constants
@@ -36,39 +35,38 @@ public class TokenAuthenticator extends BaseAuthorizer implements SessionCookieA
     ////////////////////////////////////////////////////////////
     // Member variables
     ////////////////////////////////////////////////////////////
-    private String loginPath;
-    private Map<String, String> loginParams;
+
+    private String username;
+    private String password;
 
     ////////////////////////////////////////////////////////////
     // Constructors
     ////////////////////////////////////////////////////////////
-    public TokenAuthenticator(String loginPath, Map<String, String> params) {
-        this.loginPath = loginPath;
-        this.loginParams = params;
+    public PasswordAuthorizer(String username, String password) {
+        this.username = username;
+        this.password = password;
     }
 
     ////////////////////////////////////////////////////////////
-    // Implementation of SessionCookieAuthorizer (LoginAuthorizer)
+    // Implementation of CustomHeadersAuthorizer
     ////////////////////////////////////////////////////////////
-
     @Override
-    public List<Object> loginRequest() {
-        if (loginParams == null)
-            return null;
-        return Arrays.asList("POST", loginPath, loginParams);
+    public boolean authorizeURLRequest(Request.Builder builder) {
+        if (authUserInfo() == null)
+            return false;
+        String credential = Credentials.basic(username, password);
+        builder.addHeader("Authorization", credential);
+        return true;
     }
 
+    ////////////////////////////////////////////////////////////
+    // Implementation of CredentialAuthorizer
+    ////////////////////////////////////////////////////////////
     @Override
-    public void loginResponse(Object jsonResponse,
-                              Headers headers,
-                              Throwable error,
-                              ContinuationBlock block) {
-        // @optional
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean implementedLoginResponse() {
-        return false;
+    public String authUserInfo() {
+        if (this.username != null && this.password != null) {
+            return this.username + ':' + this.password;
+        }
+        return null;
     }
 }

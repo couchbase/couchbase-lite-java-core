@@ -340,7 +340,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // Call _revs_diff on the target db:
         Log.v(Log.TAG_SYNC, "%s: posting to /_revs_diff", this);
 
-        CustomFuture future = sendAsyncRequest("POST", "/_revs_diff", diffs, new RemoteRequestCompletion() {
+        CustomFuture future = sendAsyncRequest("POST", "_revs_diff", diffs, new RemoteRequestCompletion() {
 
             @Override
             public void onCompletion(Response httpResponse, Object response, Throwable e) {
@@ -472,7 +472,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         bulkDocsBody.put("docs", docsToSend);
         bulkDocsBody.put("new_edits", false);
 
-        CustomFuture future = sendAsyncRequest("POST", "/_bulk_docs", bulkDocsBody, new RemoteRequestCompletion() {
+        CustomFuture future = sendAsyncRequest("POST", "_bulk_docs", bulkDocsBody, new RemoteRequestCompletion() {
 
             @Override
             public void onCompletion(Response httpResponse, Object result, Throwable e) {
@@ -535,7 +535,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
         Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
         addToChangesCount(1);
-        final String path = String.format(Locale.ENGLISH, "/%s?new_edits=false", encodeDocumentId(revision.getDocID()));
+        final String path = String.format(Locale.ENGLISH, "%s?new_edits=false", encodeDocumentId(revision.getDocID()));
         CustomFuture future = sendAsyncMultipartRequest("PUT", path, body, attachments,
                 new RemoteRequestCompletion() {
                     @Override
@@ -579,7 +579,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return;
         }
 
-        final String path = String.format(Locale.ENGLISH, "/%s?new_edits=false", encodeDocumentId(rev.getDocID()));
+        final String path = String.format(Locale.ENGLISH, "%s?new_edits=false", encodeDocumentId(rev.getDocID()));
         CustomFuture future = sendAsyncRequest("PUT",
                 path,
                 rev.getProperties(),

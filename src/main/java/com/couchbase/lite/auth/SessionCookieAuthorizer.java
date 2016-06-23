@@ -13,7 +13,8 @@
 //
 package com.couchbase.lite.auth;
 
-public interface Authenticator {
-    // @optional
-    String getUsername();
+/**
+ * This protocol is just a marker that the authorizer uses a session cookie.
+ */
+public interface SessionCookieAuthorizer extends LoginAuthorizer {
 }

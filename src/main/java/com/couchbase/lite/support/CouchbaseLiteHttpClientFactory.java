@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.support;
 
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -35,6 +35,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     private ClearableCookieJar cookieJar;
     private SSLSocketFactory sslSocketFactory;
+
+    private boolean followRedirects = true;
 
     // deprecated
     public static int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
@@ -80,6 +82,9 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         // synchronize access to the cookieStore in case there is another
         // thread in the middle of updating it.  wait until they are done so we get their changes.
         builder.cookieJar(cookieJar);
+
+        if(!isFollowRedirects())
+            builder.followRedirects(false);
 
         return builder.build();
     }
@@ -154,5 +159,13 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         } catch (GeneralSecurityException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public boolean isFollowRedirects() {
+        return followRedirects;
+    }
+
+    public void setFollowRedirects(boolean followRedirects) {
+        this.followRedirects = followRedirects;
     }
 }
