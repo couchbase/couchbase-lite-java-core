@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- * <p/>
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * <p/>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p/>
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.router;
 
 import com.couchbase.lite.AsyncTask;
@@ -38,6 +38,7 @@ import com.couchbase.lite.auth.PersonaAuthorizer;
 import com.couchbase.lite.internal.AttachmentInternal;
 import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.replicator.RemoteRequestResponseException;
 import com.couchbase.lite.replicator.Replication;
 import com.couchbase.lite.replicator.Replication.ChangeEvent;
 import com.couchbase.lite.replicator.Replication.ChangeListener;
@@ -45,7 +46,6 @@ import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.store.Store;
-import com.couchbase.lite.replicator.RemoteRequestResponseException;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
@@ -1211,8 +1211,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         String remoteUrl = (String) body.get("remote_url");
         String accessToken = (String) body.get("access_token");
         if (email != null && remoteUrl != null && accessToken != null) {
+            URL siteUrl;
             try {
-                URL siteUrl = new URL(remoteUrl);
+                siteUrl = new URL(remoteUrl);
             } catch (MalformedURLException e) {
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("error", "invalid remote_url: " + e.getLocalizedMessage());
@@ -1220,14 +1221,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 return new Status(Status.BAD_REQUEST);
             }
 
-            try {
-                FacebookAuthorizer.registerAccessToken(accessToken, email, remoteUrl);
-            } catch (Exception e) {
-                Map<String, Object> result = new HashMap<String, Object>();
-                result.put("error", "error registering access token: " + e.getLocalizedMessage());
-                connection.setResponseBody(new Body(result));
-                return new Status(Status.BAD_REQUEST);
-            }
+            FacebookAuthorizer.registerToken(accessToken, email, siteUrl);
 
             Map<String, Object> result = new HashMap<String, Object>();
             result.put("ok", "registered");

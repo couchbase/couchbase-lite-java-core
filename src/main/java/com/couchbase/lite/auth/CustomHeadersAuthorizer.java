@@ -13,9 +13,17 @@
 //
 package com.couchbase.lite.auth;
 
-public interface Authenticator {
-    // @optional
-    String getUsername();
+import okhttp3.Request;
 
-    boolean implementedLoginResponse();
+/**
+ * Authorizer that adds custom headers to an HTTP request
+ */
+public interface CustomHeadersAuthorizer extends Authorizer {
+    /**
+     * May add a header to the request (usually "Authorization:") to convey the authorization token.
+     *
+     * @param builder The URL request to authenticate.
+     * @return true if it added authorization.
+     */
+    boolean authorizeURLRequest(Request.Builder builder);
 }

@@ -1,18 +1,19 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.replicator;
 
+import com.couchbase.lite.AsyncTask;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Misc;
@@ -21,7 +22,9 @@ import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.SavedRevision;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
-import com.couchbase.lite.auth.AuthenticatorImpl;
+import com.couchbase.lite.auth.Authorizer;
+import com.couchbase.lite.auth.LoginAuthorizer;
+import com.couchbase.lite.auth.SessionCookieAuthorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.support.BatchProcessor;
@@ -315,6 +318,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     protected void initAuthorizer() {
         // TODO: add this back in  .. See Replication constructor
+        if (authenticator != null && authenticator instanceof Authorizer) {
+            ((Authorizer) authenticator).setRemoteURL(remote);
+        }
     }
 
     protected void initBatcher() {
@@ -402,13 +408,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
     }
 
+    // Before doing anything else, determine whether we have an active login session.
     @InterfaceAudience.Private
     protected void checkSession() {
-        // REVIEW : This is not in line with the iOS implementation
-        if (getAuthenticator() != null && ((AuthenticatorImpl) getAuthenticator()).usesCookieBasedLogin()) {
-            checkSessionAtPath("/_session");
+        if (getAuthenticator() != null) {
+            Authorizer auth = (Authorizer) getAuthenticator();
+            auth.setRemoteURL(this.remote);
+        }
+        if (getAuthenticator() != null && getAuthenticator() instanceof SessionCookieAuthorizer) {
+            // Sync Gateway session API is at /db/_session; try that first
+            checkSessionAtPath("_session");
         } else {
-            fetchRemoteCheckpointDoc();
+            login();
         }
     }
 
@@ -423,22 +434,27 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         // If not at /db/_session, try CouchDB location /_session
                         if (err instanceof RemoteRequestResponseException &&
                                 ((RemoteRequestResponseException) err).getCode() == 404 &&
-                                "/_session".equalsIgnoreCase(sessionPath)) {
-
-                            checkSessionAtPath("_session");
+                                "_session".equalsIgnoreCase(sessionPath)) {
+                            checkSessionAtPath("/_session");
                             return;
+                        } else if (err instanceof RemoteRequestResponseException &&
+                                ((RemoteRequestResponseException) err).getCode() == 401) {
+                            login();
+                        } else {
+                            Log.w(Log.TAG_SYNC, this + ": Session check failed", err);
+                            setError(err);
                         }
-                        Log.w(Log.TAG_SYNC, this + ": Session check failed", err);
-                        setError(err);
                     } else {
                         Map<String, Object> response = (Map<String, Object>) result;
                         Log.w(Log.TAG_SYNC, "%s checkSessionAtPath() response: %s", this, response);
                         Map<String, Object> userCtx = (Map<String, Object>) response.get("userCtx");
                         String username = (String) userCtx.get("name");
                         if (username != null && username.length() > 0) {
+                            // Found a login session!
                             Log.d(Log.TAG_SYNC, "%s Active session, logged in as %s", this, username);
                             fetchRemoteCheckpointDoc();
                         } else {
+                            // No current login session, so continue to regular login:
                             Log.d(Log.TAG_SYNC, "%s No active session, going to login", this);
                             login();
                         }
@@ -447,47 +463,70 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", this, e);
                 }
             }
-
         });
         pendingFutures.add(future);
     }
 
     @InterfaceAudience.Private
     protected void login() {
-        Map loginParameters = ((AuthenticatorImpl) getAuthenticator()).loginParametersForSite(remote);
-        if (loginParameters == null) {
+        Log.e(TAG, "ReplicationInternal.login()");
+        final LoginAuthorizer loginAuth;
+        List<Object> login = null;
+        loginAuth = getAuthenticator() instanceof LoginAuthorizer ? (LoginAuthorizer) getAuthenticator() : null;
+        if(loginAuth != null)
+            login = loginAuth.loginRequest();
+
+        if (login == null) {
             Log.d(Log.TAG_SYNC, "%s: %s has no login parameters, so skipping login", this, getAuthenticator());
             fetchRemoteCheckpointDoc();
             return;
         }
 
-        final String loginPath = ((AuthenticatorImpl) getAuthenticator()).loginPathForSite(remote);
+        String method = (String) login.get(0);
+        final String loginPath = (String) login.get(1);
+        Map<String, Object> loginParameters = login.size() >= 3 ? (Map<String, Object>) login.get(2) : null;
 
-        Log.d(Log.TAG_SYNC, "%s: Doing login with %s at %s", this, getAuthenticator().getClass(), loginPath);
-
-        Future future = sendAsyncRequest("POST", loginPath, loginParameters, new RemoteRequestCompletion() {
-
+        Log.v(Log.TAG_SYNC, "%s: Doing login with %s at %s", this.getClass().getName(), getAuthenticator().getClass(), loginPath);
+        boolean cancelable = false; // make sure not-canceled during login.
+        Future future = sendAsyncRequest(method, loginPath, cancelable, loginParameters, new RemoteRequestCompletion() {
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable e) {
-                if (e != null) {
-                    Log.d(Log.TAG_SYNC, "%s: Login failed for path: %s", this, loginPath);
-                    setError(e);
-
-                    // TODO: double check this behavior against iOS implementation, especially
-                    // TODO: with regards to behavior of a continuous replication.
-                    // Note: was added in order that unit test testReplicatorErrorStatus() finished and passed.
-                    // (before adding this, the replication would just end up in limbo and never finish)
-                    triggerStopGraceful();
-
+            public void onCompletion(Response httpResponse, Object result, Throwable error) {
+                if (loginAuth != null && loginAuth.implementedLoginResponse()) {
+                    loginAuth.loginResponse(result,
+                            httpResponse != null ? httpResponse.headers() : null,
+                            error,
+                            new LoginAuthorizer.ContinuationBlock() {
+                                @Override
+                                public void call(final boolean loginAgain,
+                                                 final Throwable continuationError) {
+                                    db.runAsync(new AsyncTask() {
+                                        @Override
+                                        public void run(Database database) {
+                                            if (loginAgain) {
+                                                login();
+                                            } else {
+                                                loginFinishedWithError(continuationError);
+                                            }
+                                        }
+                                    });
+                                }
+                            });
                 } else {
-                    Log.v(Log.TAG_SYNC, "%s: Successfully logged in!", this);
-                    fetchRemoteCheckpointDoc();
+                    loginFinishedWithError(error);
                 }
             }
-
         });
         pendingFutures.add(future);
+    }
 
+    private void loginFinishedWithError(Throwable error) {
+        if (error != null) {
+            Log.v(TAG, "%s: Login error: %s", this, error.getMessage());
+            setError(error);
+        } else {
+            Log.v(TAG, "%s: Successfully logged in!", this);
+            fetchRemoteCheckpointDoc();
+        }
     }
 
     @InterfaceAudience.Private
@@ -768,7 +807,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         final String checkpointID = remoteCheckpointDocID;
         Log.d(Log.TAG_SYNC, "%s: start put remote _local document.  checkpointID: %s body: %s",
                 this, checkpointID, body);
-        Future future = sendAsyncRequest("PUT", "/_local/" + checkpointID, false, body, new RemoteRequestCompletion() {
+        Future future = sendAsyncRequest("PUT", "_local/" + checkpointID, false, body, new RemoteRequestCompletion() {
 
             @Override
             public void onCompletion(Response httpResponse, Object result, Throwable e) {
@@ -853,7 +892,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     @InterfaceAudience.Private
     private void refreshRemoteCheckpointDoc() {
         Log.i(Log.TAG_SYNC, "%s: Refreshing remote checkpoint to get its _rev...", this);
-        Future future = sendAsyncRequest("GET", "/_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletion() {
+        Future future = sendAsyncRequest("GET", "_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletion() {
             @Override
             public void onCompletion(Response httpResponse, Object result, Throwable e) {
                 if (db == null) {
@@ -881,6 +920,21 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         //     http://dotcom/db/ + /relpart == http://dotcom/db/relpart
         // which is not compatible with the way the java url concatonation works.
 
+
+        if(relativePath.startsWith("/")) {
+            try {
+                return new URL(remote.getProtocol(), remote.getHost(), remote.getPort(), relativePath).toExternalForm();
+            } catch (MalformedURLException e) {
+                throw new RuntimeException(e);
+            }
+        }else {
+            String remoteUrlString = remote.toExternalForm();
+            if(remoteUrlString.endsWith("/"))
+                return remoteUrlString + relativePath;
+            else
+                return remoteUrlString +"/"+relativePath;
+        }
+        /*
         String remoteUrlString = remote.toExternalForm();
         if (remoteUrlString.endsWith("/") && relativePath.startsWith("/")) {
             remoteUrlString = remoteUrlString.substring(0, remoteUrlString.length() - 1);
@@ -901,6 +955,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
 
         return remoteUrlString + relativePath;
+        */
     }
 
     /**
@@ -912,7 +967,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         String checkpointId = remoteCheckpointDocID();
         final String localLastSequence = db.lastSequenceWithCheckpointId(checkpointId);
         boolean dontLog404 = true;
-        Future future = sendAsyncRequest("GET", "/_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletion() {
+        Future future = sendAsyncRequest("GET", "_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletion() {
 
             @Override
             public void onCompletion(Response httpResponse, Object result, Throwable e) {

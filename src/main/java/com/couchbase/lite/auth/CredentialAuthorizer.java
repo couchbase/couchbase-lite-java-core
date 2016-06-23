@@ -13,9 +13,9 @@
 //
 package com.couchbase.lite.auth;
 
-public interface Authenticator {
-    // @optional
-    String getUsername();
-
-    boolean implementedLoginResponse();
+/**
+ * Created by hideki on 6/16/16.
+ */
+public interface CredentialAuthorizer {
+    String authUserInfo();
 }

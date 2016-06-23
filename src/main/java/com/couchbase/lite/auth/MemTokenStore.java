@@ -14,16 +14,29 @@
 package com.couchbase.lite.auth;
 
 import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Internal protocol for authenticating a user to a server.
- * (The word "authorization" here is a misnomer, but HTTP uses it for historical reasons.)
+ * Created by hideki on 6/22/16.
  */
-public interface Authorizer extends Authenticator {
-    /**
-     * The base URL of the remote service. The replicator sets this property when it starts up.
-     */
-    URL getRemoteURL();
+public class MemTokenStore implements ITokenStore {
+    private Map<URL, Map<String, String>> store = new HashMap<URL, Map<String, String>>();
 
-    void setRemoteURL(URL remoteURL);
+    @Override
+    public Map<String, String> loadTokens(URL remoteURL) throws Exception {
+        return store.get(remoteURL);
+    }
+
+    @Override
+    public boolean saveTokens(URL remoteURL, Map<String, String> tokens) {
+        store.put(remoteURL, tokens);
+        return true;
+    }
+
+    @Override
+    public boolean deleteTokens(URL remoteURL) {
+        store.remove(remoteURL);
+        return true;
+    }
 }
