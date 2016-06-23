@@ -37,7 +37,7 @@ import okhttp3.Request;
 public class OpenIDConnectAuthorizer extends BaseAuthorizer
         implements CustomHeadersAuthorizer, SessionCookieAuthorizer {
 
-    public static final String TAG = Log.TAG_SYNC;
+    private static final String TAG = Log.TAG_SYNC;
 
     public interface OIDCLoginContinuation {
         void callback(URL authURL, Throwable error);
@@ -55,7 +55,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
 
     // internal
     protected OIDCLoginCallback loginCallback;    // App-provided callback to log into the OP
-    protected ITokenStore tokenStore;
+    protected TokenStore tokenStore;
 
     protected URL authURL;                        // The OIDC authentication URL redirected to by the OP
     protected String IDToken;                     // Persistent ID token, when logged-in
@@ -65,7 +65,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     ////////////////////////////////////////////////////////////
     // Constructors
     ////////////////////////////////////////////////////////////
-    public OpenIDConnectAuthorizer(OIDCLoginCallback callback, ITokenStore tokenStore) {
+    public OpenIDConnectAuthorizer(OIDCLoginCallback callback, TokenStore tokenStore) {
         this.loginCallback = callback;
         this.tokenStore = tokenStore;
     }
@@ -118,7 +118,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
             path = String.format(Locale.ENGLISH, "_oidc_callback?%s",
                     authURL.getQuery());
         else
-            path = "_oidc_challenge";
+            path = "_oidc_challenge?offline=true";
         // Note: casting to Object makes Arrays.asList() return List<Object>
         return Arrays.asList("GET", (Object) path);
     }
@@ -162,8 +162,6 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
             if (challenge != null)
                 if ("OIDC".equals(challenge.get("Scheme")))
                     login = (String) challenge.get("login");
-            Log.e(TAG, "loginResponse challenge=%s", challenge);
-            Log.e(TAG, "loginResponse login=%s", login);
             if (login != null) {
                 Log.v(TAG, "OpenIDConnectAuthorizer: Got OpenID Connect login URL: <%s>", login);
                 URL loginURL = null;
@@ -203,11 +201,11 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     // Setter/Getter
     ////////////////////////////////////////////////////////////
 
-    public ITokenStore getTokenStore() {
+    public TokenStore getTokenStore() {
         return tokenStore;
     }
 
-    public void setTokenStore(ITokenStore tokenStore) {
+    public void setTokenStore(TokenStore tokenStore) {
         this.tokenStore = tokenStore;
     }
 
@@ -234,7 +232,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     ////////////////////////////////////////////////////////////
     // static methods
     ////////////////////////////////////////////////////////////
-    public static boolean forgetIDTokensForServer(URL serverURL, ITokenStore tokenStore) {
+    public static boolean forgetIDTokensForServer(URL serverURL, TokenStore tokenStore) {
         OpenIDConnectAuthorizer authorizer = new OpenIDConnectAuthorizer(null, tokenStore);
         authorizer.setRemoteURL(serverURL);
         return authorizer.deleteTokens();

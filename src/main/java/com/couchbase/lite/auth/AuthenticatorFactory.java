@@ -56,8 +56,8 @@ public class AuthenticatorFactory {
     /*
      * Creates an Authenticator that knows how to do OpenID authentication.
      */
-    public static Authenticator createOpenIDConnectAuithenticator(
-            OpenIDConnectAuthorizer.OIDCLoginCallback callback, ITokenStore tokenStore) {
+    public static Authenticator createOpenIDConnectAuthenticator(
+            OpenIDConnectAuthorizer.OIDCLoginCallback callback, TokenStore tokenStore) {
         return new OpenIDConnectAuthorizer(callback, tokenStore);
     }
 }

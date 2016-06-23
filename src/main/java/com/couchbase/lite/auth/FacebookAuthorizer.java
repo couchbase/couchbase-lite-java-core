@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 import okhttp3.Headers;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 /**
  * Authenticator impl that knows how to do facebook auth
@@ -36,9 +35,9 @@ public class FacebookAuthorizer extends BaseAuthorizer implements SessionCookieA
     ////////////////////////////////////////////////////////////
     // Constants
     ////////////////////////////////////////////////////////////
-    public static final String TAG = Log.TAG_SYNC;
+    private static final String TAG = Log.TAG_SYNC;
 
-    public static final String kLoginParamAccessToken = "access_token";
+    private static final String kLoginParamAccessToken = "access_token";
 
     ////////////////////////////////////////////////////////////
     // Member variables
@@ -76,7 +75,7 @@ public class FacebookAuthorizer extends BaseAuthorizer implements SessionCookieA
                               Throwable error,
                               ContinuationBlock block) {
         // @optional
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -317,7 +317,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     protected void initAuthorizer() {
-        // TODO: add this back in  .. See Replication constructor
         if (authenticator != null && authenticator instanceof Authorizer) {
             ((Authorizer) authenticator).setRemoteURL(remote);
         }
@@ -469,11 +468,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void login() {
-        Log.e(TAG, "ReplicationInternal.login()");
         final LoginAuthorizer loginAuth;
         List<Object> login = null;
         loginAuth = getAuthenticator() instanceof LoginAuthorizer ? (LoginAuthorizer) getAuthenticator() : null;
-        if(loginAuth != null)
+        if (loginAuth != null)
             login = loginAuth.loginRequest();
 
         if (login == null) {
@@ -921,18 +919,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         // which is not compatible with the way the java url concatonation works.
 
 
-        if(relativePath.startsWith("/")) {
+        if (relativePath.startsWith("/")) {
             try {
                 return new URL(remote.getProtocol(), remote.getHost(), remote.getPort(), relativePath).toExternalForm();
             } catch (MalformedURLException e) {
                 throw new RuntimeException(e);
             }
-        }else {
+        } else {
             String remoteUrlString = remote.toExternalForm();
-            if(remoteUrlString.endsWith("/"))
+            if (remoteUrlString.endsWith("/"))
                 return remoteUrlString + relativePath;
             else
-                return remoteUrlString +"/"+relativePath;
+                return remoteUrlString + "/" + relativePath;
         }
         /*
         String remoteUrlString = remote.toExternalForm();

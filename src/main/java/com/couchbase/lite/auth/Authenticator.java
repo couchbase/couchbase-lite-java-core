@@ -16,6 +16,4 @@ package com.couchbase.lite.auth;
 public interface Authenticator {
     // @optional
     String getUsername();
-
-    boolean implementedLoginResponse();
 }

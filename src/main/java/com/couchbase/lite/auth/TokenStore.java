@@ -16,7 +16,7 @@ package com.couchbase.lite.auth;
 import java.net.URL;
 import java.util.Map;
 
-public interface ITokenStore {
+public interface TokenStore {
 
     /**
      * Load tokens from the token store

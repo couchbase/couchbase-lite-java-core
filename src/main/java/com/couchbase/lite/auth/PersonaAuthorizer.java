@@ -30,7 +30,6 @@ import java.util.Locale;
 import java.util.Map;
 
 import okhttp3.Headers;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 /**
  * Authorizer for the Persona decentralized-identity system. See http://persona.org
@@ -84,7 +83,7 @@ public class PersonaAuthorizer extends BaseAuthorizer implements SessionCookieAu
                               Throwable error,
                               ContinuationBlock block) {
         // @optional
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 
 import okhttp3.Headers;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 /**
  * Authenticator impl that knows how to do token based auth
@@ -65,7 +64,7 @@ public class TokenAuthenticator extends BaseAuthorizer implements SessionCookieA
                               Throwable error,
                               ContinuationBlock block) {
         // @optional
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override

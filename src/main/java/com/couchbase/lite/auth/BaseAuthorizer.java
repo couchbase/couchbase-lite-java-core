@@ -33,11 +33,6 @@ public abstract class BaseAuthorizer implements Authorizer {
         return null;
     }
 
-    @Override
-    public boolean implementedLoginResponse() {
-        return false;
-    }
-
     ////////////////////////////////////////////////////////////
     // Implementations of IAuthorizer
     ////////////////////////////////////////////////////////////

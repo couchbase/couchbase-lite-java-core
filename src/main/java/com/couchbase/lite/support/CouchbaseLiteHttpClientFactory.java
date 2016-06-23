@@ -42,9 +42,9 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     public static int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
 
     // OkHttp Default Timeout is 10 sec for all timeout settings
-    public static int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 30;
+    public static int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 10;
     public static int DEFAULT_READ_TIMEOUT = DEFAULT_SO_TIMEOUT_SECONDS;
-    public static int DEFAULT_WRITE_TIMEOUT = 30;
+    public static int DEFAULT_WRITE_TIMEOUT = 10;
 
     /**
      * Constructor
