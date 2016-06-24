@@ -32,7 +32,7 @@ import okhttp3.CookieJar;
 import okhttp3.OkHttpClient;
 
 public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
-
+    private OkHttpClient client;
     private ClearableCookieJar cookieJar;
     private SSLSocketFactory sslSocketFactory;
 
@@ -67,37 +67,39 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     @Override
     @InterfaceAudience.Private
-    public OkHttpClient getOkHttpClient() {
+    synchronized public OkHttpClient getOkHttpClient() {
+        if (client == null) {
+            OkHttpClient.Builder builder = new OkHttpClient.Builder();
 
-        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+            // timeout settings
+            builder.connectTimeout(DEFAULT_CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .writeTimeout(DEFAULT_WRITE_TIMEOUT, TimeUnit.SECONDS)
+                    .readTimeout(DEFAULT_READ_TIMEOUT, TimeUnit.SECONDS);
 
-        // timeout settings
-        builder.connectTimeout(DEFAULT_CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .writeTimeout(DEFAULT_WRITE_TIMEOUT, TimeUnit.SECONDS)
-                .readTimeout(DEFAULT_READ_TIMEOUT, TimeUnit.SECONDS);
+            if (sslSocketFactory != null)
+                builder.sslSocketFactory(sslSocketFactory);
 
-        if (sslSocketFactory != null)
-            builder.sslSocketFactory(sslSocketFactory);
+            // synchronize access to the cookieStore in case there is another
+            // thread in the middle of updating it.  wait until they are done so we get their changes.
+            builder.cookieJar(cookieJar);
 
-        // synchronize access to the cookieStore in case there is another
-        // thread in the middle of updating it.  wait until they are done so we get their changes.
-        builder.cookieJar(cookieJar);
+            if (!isFollowRedirects())
+                builder.followRedirects(false);
 
-        if(!isFollowRedirects())
-            builder.followRedirects(false);
-
-        return builder.build();
+            client = builder.build();
+        }
+        return client;
     }
 
     @InterfaceAudience.Private
-    public void addCookies(List<Cookie> cookies) {
+    synchronized public void addCookies(List<Cookie> cookies) {
         if (cookieJar != null) {
             // TODO: HttpUrl parameter should be revisited.
             cookieJar.saveFromResponse(null, cookies);
         }
     }
 
-    public void deleteCookie(String name) {
+    synchronized public void deleteCookie(String name) {
         // since CookieStore does not have a way to delete an individual cookie, do workaround:
         // 1. get all cookies
         // 2. filter list to strip out the one we want to delete
@@ -161,10 +163,16 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         }
     }
 
+    /**
+     * This method is for unit tests only.
+     */
     public boolean isFollowRedirects() {
         return followRedirects;
     }
 
+    /**
+     * This method is for unit tests only.
+     */
     public void setFollowRedirects(boolean followRedirects) {
         this.followRedirects = followRedirects;
     }
