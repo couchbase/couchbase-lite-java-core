@@ -1754,19 +1754,17 @@ public class SQLiteStore implements Store, EncryptableStore {
             if (gen > maxRevTreeDepth) {
                 int minGen = gen;
                 int maxGen = gen;
-                Iterator<String> itr = localRevs.keySet().iterator();
-                while (itr.hasNext()) {
-                    String key = itr.next();
-                    RevisionInternal r = localRevs.get(key);
+                for (RevisionInternal r : localRevs.values()) {
                     int generation = r.getGeneration();
                     minGen = Math.min(minGen, generation);
                     maxGen = Math.max(maxGen, generation);
-                    int minGenToKeep = maxGen - maxRevTreeDepth + 1;
-                    if (minGen < minGenToKeep) {
-                        int pruned = pruneDocument(docID, docNumericID, minGenToKeep);
-                        if (pruned > 0)
-                            Log.v(TAG, "Pruned %d old revisions of doc '%s'", pruned, docID);
-                    }
+                }
+
+                int minGenToKeep = maxGen - maxRevTreeDepth + 1;
+                if (minGen < minGenToKeep) {
+                    int pruned = pruneDocument(docID, docNumericID, minGenToKeep);
+                    if (pruned > 0)
+                        Log.v(TAG, "Pruned %d old revisions of doc '%s'", pruned, docID);
                 }
             }
 
