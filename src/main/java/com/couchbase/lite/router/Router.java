@@ -631,8 +631,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             connection.setResponseCode(status.getCode());
 
-            if (status.isSuccessful() && connection.getResponseBody() == null &&
-                    connection.getHeaderField("Content-Type") == null) {
+            if (status.isSuccessful() &&
+                connection.getResponseBody() == null &&
+                connection.getResponseInputStream() == null &&
+                connection.getHeaderField("Content-Type") == null) {
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 
