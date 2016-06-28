@@ -162,7 +162,8 @@ public class AttachmentInternal {
         Map<String, Object> dict = new HashMap<String, Object>();
         dict.put("stub", true);
         dict.put("digest", blobKey.base64Digest());
-        dict.put("content_type", contentType);
+        if (contentType != null)
+            dict.put("content_type", contentType);
         dict.put("revpos", revpos);
         dict.put("length", length);
         if (encodedLength > 0)
