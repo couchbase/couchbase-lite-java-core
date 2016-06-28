@@ -72,10 +72,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     boolean doneBeginReplicating = false;
     List<RevisionInternal> queueChanges = new ArrayList<RevisionInternal>();
     private String str = null; // for toString()
-
+    // for pause
     private boolean paused = false;
     private final Object pausedObj = new Object();
-    private ExecutorService supportExecutor;
+    private ExecutorService supportExecutor; // executor to submit revision into batcher
 
     /**
      * Constructor
@@ -93,7 +93,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     @Override
     protected void finalize() throws Throwable {
-        // make sure supportExecutor is shut down
+        // make sure if supportExecutor is shut down
         terminateSupportExecutor();
         super.finalize();
     }
@@ -121,8 +121,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         super.start();
     }
 
+    // create single thread supportExecutor for push replication
     private void initSupportExecutor() {
-        // create single thread supportExecutor for push relication
         if (supportExecutor == null || supportExecutor.isShutdown()) {
             supportExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
                 @Override
@@ -135,10 +135,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
     }
 
+    // shutdown supportExecutor immediately
     private void terminateSupportExecutor() {
-        // shutdown supportExecutor immediately, does not add any more tasks.
         if (supportExecutor != null && !supportExecutor.isShutdown()) {
-            supportExecutor.shutdownNow();
+            Utils.shutdownAndAwaitTermination(supportExecutor, 0, 5);
         }
     }
 
@@ -204,12 +204,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 } else {
                     Log.v(TAG, "%s: Created remote db", this);
                     createTarget = false;
-                    supportExecutor.submit(new Runnable() {
-                        @Override
-                        public void run() {
-                            beginReplicating();
-                        }
-                    });
+                    beginReplicating();
                 }
             }
 
@@ -219,10 +214,21 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     /**
      * - (void) beginReplicating in CBL_Replicator.m
+     * 
+     * beginReplicating() method is called from GET /_local/{checkpoint id} or PUT /{db}
      */
     @Override
     @InterfaceAudience.Private
     public void beginReplicating() {
+        supportExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                beginReplicatingInternal();
+            }
+        });
+    }
+
+    private void beginReplicatingInternal() {
         // If we're still waiting to create the remote db, do nothing now. (This method will be
         // re-invoked after that request finishes; see -maybeCreateRemoteDB above.)
 
