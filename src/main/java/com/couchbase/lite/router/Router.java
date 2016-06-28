@@ -83,7 +83,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public static final String TAG = Log.TAG_ROUTER;
 
-    private final static long MIN_HEARTBEAT = 5000; // 5 second
+    private static final long MIN_HEARTBEAT = 5000; // 5 second
+
+    private static final String CONTENT_TYPE_JSON = "application/json";
 
     /**
      * Options for what metadata to include in document bodies
@@ -224,7 +226,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private Map<String, Object> getBodyAsDictionary() throws CouchbaseLiteException {
         // check if content-type is `application/json`
         String contentType = getRequestHeaderContentType();
-        if (contentType != null && !contentType.equals("application/json"))
+        if (contentType != null && !contentType.equals(CONTENT_TYPE_JSON))
             throw new CouchbaseLiteException(Status.NOT_ACCEPTABLE);
 
         // parse body text
@@ -427,15 +429,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 if (!Manager.isValidDatabaseName(dbName)) {
                     Header resHeader = connection.getResHeader();
                     if (resHeader != null) {
-                        resHeader.add("Content-Type", "application/json");
+                        resHeader.add("Content-Type", CONTENT_TYPE_JSON);
                     }
                     Map<String, Object> result = new HashMap<String, Object>();
                     result.put("error", "Invalid database");
                     result.put("status", Status.BAD_REQUEST);
                     connection.setResponseBody(new Body(result));
+
                     ByteArrayInputStream bais = new ByteArrayInputStream(connection.getResponseBody().getJson());
                     connection.setResponseInputStream(bais);
-
                     connection.setResponseCode(Status.BAD_REQUEST);
                     try {
                         connection.getResponseOutputStream().close();
@@ -634,12 +636,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 
-            if (status.getCode() != 0 && status.isSuccessful() == false &&
-                    connection.getResponseBody() == null) {
+            if (!status.isSuccessful() && connection.getResponseBody() == null) {
                 Map<String, Object> result = new HashMap<String, Object>();
                 result.put("status", status.getCode());
                 result.put("error", status.getHTTPMessage());
                 connection.setResponseBody(new Body(result));
+                connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
             }
 
             setResponse();
@@ -712,23 +714,34 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         connection.getResHeader().add("Server",
                 String.format(Locale.ENGLISH, "Couchbase Lite %s", getVersionString()));
 
+        // When response body is not null, we can assume that the body is JSON:
+        boolean hasJSONBody = connection.getResponseBody() != null;
+        String contentType = hasJSONBody ? CONTENT_TYPE_JSON : null;
+
         // Check for a mismatch between the Accept request header and the response type:
         String accept = getRequestHeaderValue("Accept");
         if (accept != null && accept.indexOf("*/*") < 0) {
-            String responseType = connection.getBaseContentType();
-            if (responseType != null && responseType.indexOf(accept) < 0) {
-                Log.w(TAG, "Error 406: Can't satisfy request Accept: %s", accept);
+            String baseContentType = connection.getBaseContentType();
+            if (baseContentType == null)
+                baseContentType = contentType;
+            if (baseContentType != null && baseContentType.indexOf(accept) < 0) {
+                Log.w(TAG, "Error 406: Can't satisfy request Accept: %s (Content-Type = %s)",
+                        accept, contentType);
+
+                // Reset response body:
+                connection.setResponseBody(null);
+
                 status = new Status(Status.NOT_ACCEPTABLE);
+                return status;
             }
         }
 
-        if (connection.getResponseBody() != null && connection.getResponseBody().isValidJSON()) {
+        if (contentType != null) {
             Header resHeader = connection.getResHeader();
-            if (resHeader != null) {
-                resHeader.add("Content-Type", "application/json");
-            } else {
+            if (resHeader != null && resHeader.get("Content-Type") != null)
+                resHeader.add("Content-Type", contentType);
+            else
                 Log.w(TAG, "Cannot add Content-Type header because getResHeader() returned null");
-            }
         }
 
         // NOTE: Line 596-607 of CBL_Router.m is not in CBL Java Core
@@ -1829,7 +1842,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             boolean isLocalDoc = docID.startsWith("_local");
             EnumSet<TDContentOptions> options = getContentOptions();
             String openRevsParam = getQuery("open_revs");
-            boolean mustSendJSON = explicitlyAcceptsType("application/json");
+            boolean mustSendJSON = explicitlyAcceptsType(CONTENT_TYPE_JSON);
             if (openRevsParam == null || isLocalDoc) {
                 // Regular GET:
                 String revID = getQuery("rev");  // often null
