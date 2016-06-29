@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.ChangesOptions;
@@ -40,7 +40,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 
 import okhttp3.Response;
 
@@ -54,6 +57,9 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     // Max in-memory size of buffered bulk_docs dictionary
     private static long kMaxBulkDocsObjectSize = 5 * 1000 * 1000;
 
+    public static final int MAX_PENDING_DOCS = 200;
+    private static final int TIMEOUT_FOR_PAUSE = 1000; // 1 sec
+
     private boolean createTarget;
     private boolean creatingTarget;
     private boolean observing;
@@ -66,6 +72,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     boolean doneBeginReplicating = false;
     List<RevisionInternal> queueChanges = new ArrayList<RevisionInternal>();
     private String str = null; // for toString()
+    // for pause
+    private boolean paused = false;
+    private final Object pausedObj = new Object();
+    private ExecutorService supportExecutor; // executor to submit revision into batcher
 
     /**
      * Constructor
@@ -79,6 +89,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                           Replication.Lifecycle lifecycle,
                           Replication parentReplication) {
         super(db, remote, clientFactory, lifecycle, parentReplication);
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        // make sure if supportExecutor is shut down
+        terminateSupportExecutor();
+        super.finalize();
     }
 
     @Override
@@ -98,13 +115,47 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     }
 
     @Override
+    protected void start() {
+        // create single thread supportExecutor for push relication
+        initSupportExecutor();
+        super.start();
+    }
+
+    // create single thread supportExecutor for push replication
+    private void initSupportExecutor() {
+        if (supportExecutor == null || supportExecutor.isShutdown()) {
+            supportExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    String maskedRemote = remote.toExternalForm();
+                    maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                    return new Thread(r, "CBLPusherSupportExecutor-" + maskedRemote);
+                }
+            });
+        }
+    }
+
+    // shutdown supportExecutor immediately
+    private void terminateSupportExecutor() {
+        if (supportExecutor != null && !supportExecutor.isShutdown()) {
+            Utils.shutdownAndAwaitTermination(supportExecutor, 0, 5);
+        }
+    }
+
+    @Override
     protected void stop() {
         if (stateMachine.isInState(ReplicationState.STOPPED))
             return;
 
-        Log.d(Log.TAG_SYNC, "%s STOPPING...", toString());
+        Log.d(TAG, "%s STOPPING...", toString());
 
         stopObserving();
+
+        // Awake thread if it is wait for pause
+        setPaused(false);
+
+        // shutdown supportExecutor immediately, does not add any more tasks.
+        terminateSupportExecutor();
 
         super.stop();
 
@@ -119,10 +170,10 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     // wait for all tasks completed
                     waitForPendingFutures();
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "stop.run() had exception: %s", e);
+                    Log.e(TAG, "stop.run() had exception: %s", e);
                 } finally {
                     triggerStopImmediate();
-                    Log.d(Log.TAG_SYNC, "PusherInternal stop.run() finished");
+                    Log.d(TAG, "PusherInternal stop.run() finished");
                 }
             }
         }, threadName).start();
@@ -138,7 +189,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return;
         }
         creatingTarget = true;
-        Log.v(Log.TAG_SYNC, "Remote db might not exist; creating it...");
+        Log.v(TAG, "Remote db might not exist; creating it...");
 
         Future future = sendAsyncRequest("PUT", "", null, new RemoteRequestCompletion() {
 
@@ -147,11 +198,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 creatingTarget = false;
                 if (e != null && e instanceof RemoteRequestResponseException &&
                         ((RemoteRequestResponseException) e).getCode() != 412) {
-                    Log.e(Log.TAG_SYNC, this + ": Failed to create remote db", e);
+                    Log.e(TAG, this + ": Failed to create remote db", e);
                     setError(e);
                     triggerStopGraceful();  // this is fatal: no db to push to!
                 } else {
-                    Log.v(Log.TAG_SYNC, "%s: Created remote db", this);
+                    Log.v(TAG, "%s: Created remote db", this);
                     createTarget = false;
                     beginReplicating();
                 }
@@ -163,6 +214,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     /**
      * - (void) beginReplicating in CBL_Replicator.m
+     * 
+     * beginReplicating() method is called from GET /_local/{checkpoint id} or PUT /{db}
      */
     @Override
     @InterfaceAudience.Private
@@ -170,7 +223,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // If we're still waiting to create the remote db, do nothing now. (This method will be
         // re-invoked after that request finishes; see -maybeCreateRemoteDB above.)
 
-        Log.d(Log.TAG_SYNC, "%s: beginReplicating() called", this);
+        Log.d(TAG, "%s: beginReplicating() called", this);
 
         // reset doneBeginReplicating
         doneBeginReplicating = false;
@@ -178,7 +231,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         // If we're still waiting to create the remote db, do nothing now. (This method will be
         // re-invoked after that request finishes; see maybeCreateRemoteDB() above.)
         if (creatingTarget) {
-            Log.d(Log.TAG_SYNC, "%s: creatingTarget == true, doing nothing", this);
+            Log.d(TAG, "%s: creatingTarget == true, doing nothing", this);
             return;
         }
 
@@ -186,13 +239,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         try {
             maxPendingSequence = Long.parseLong(lastSequence);
         } catch (NumberFormatException e) {
-            Log.w(Log.TAG_SYNC, "Error converting lastSequence: %s to long.  Using 0", lastSequence);
+            Log.w(TAG, "Error converting lastSequence: %s to long.  Using 0", lastSequence);
             maxPendingSequence = new Long(0);
         }
 
         filter = compilePushReplicationFilter();
         if (filterName != null && filter == null) {
-            Log.w(Log.TAG_SYNC, "%s: No ReplicationFilter registered for filter '%s'; ignoring",
+            Log.w(TAG, "%s: No ReplicationFilter registered for filter '%s'; ignoring",
                     this, filterName);
         }
 
@@ -209,23 +262,25 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
         ChangesOptions options = new ChangesOptions();
         options.setIncludeConflicts(true);
-        Log.d(Log.TAG_SYNC, "%s: Getting changes since %d", this, lastSequenceLong);
+        Log.d(TAG, "%s: Getting changes since %d", this, lastSequenceLong);
         final RevisionList changes = db.changesSince(lastSequenceLong, options, filter, filterParams);
         if (changes.size() > 0) {
-            Log.d(Log.TAG_SYNC, "%s: Queuing %d changes since %d", this, changes.size(), lastSequenceLong);
+            Log.d(TAG, "%s: Queuing %d changes since %d", this, changes.size(), lastSequenceLong);
             // NOTE: Needs to submit changes into inbox from RemoteRequest thread for beginReplication.
             //       RemoteRequest thread is observed by pendingFuture, if using other thread to
             //       submit changes  into inbox, there are chance both inbox and pendingFutures are
             //       empty.
             submitRevisions(changes);
         } else {
-            Log.d(Log.TAG_SYNC, "%s: No changes since %d", this, lastSequenceLong);
+            Log.d(TAG, "%s: No changes since %d", this, lastSequenceLong);
         }
 
         // process queued changes by `changed()` callback
         synchronized (changesLock) {
             for (RevisionInternal rev : queueChanges) {
                 if (!changes.contains(rev)) {
+                    pauseOrResume();
+                    waitIfPaused();
                     addToInbox(rev);
                 }
             }
@@ -239,7 +294,13 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @Override
     @InterfaceAudience.Private
     public void changed(Database.ChangeEvent event) {
-        submitRevisions(event.getChanges());
+        final List<DocumentChange> changes = event.getChanges();
+        supportExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                submitRevisions(changes);
+            }
+        });
     }
 
     /**
@@ -286,15 +347,16 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         synchronized (pendingSequencesLock) {
             long seq = revisionInternal.getSequence();
             if (pendingSequences == null || pendingSequences.isEmpty()) {
-                Log.w(Log.TAG_SYNC, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
+                Log.w(TAG, "%s: removePending() called w/ rev: %s, but pendingSequences empty",
                         this, revisionInternal);
                 if (revisionInternal.getBody() != null)
                     revisionInternal.getBody().release();
+                pauseOrResume();
                 return;
             }
             boolean wasFirst = (seq == pendingSequences.first());
             if (!pendingSequences.contains(seq)) {
-                Log.w(Log.TAG_SYNC, "%s: removePending: sequence %s not in set, for rev %s",
+                Log.w(TAG, "%s: removePending: sequence %s not in set, for rev %s",
                         this, seq, revisionInternal);
             }
             pendingSequences.remove(seq);
@@ -311,6 +373,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
             if (revisionInternal.getBody() != null)
                 revisionInternal.getBody().release();
+            pauseOrResume();
         }
     }
 
@@ -321,7 +384,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     protected void processInbox(final RevisionList changes) {
 
-        Log.v(Log.TAG_SYNC, "processInbox() changes=" + changes.size());
+        Log.v(TAG, "processInbox() changes=" + changes.size());
 
         // Generate a set of doc/rev IDs in the JSON format that _revs_diff wants:
         // <http://wiki.apache.org/couchdb/HttpPostRevsDiff>
@@ -338,14 +401,14 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         }
 
         // Call _revs_diff on the target db:
-        Log.v(Log.TAG_SYNC, "%s: posting to /_revs_diff", this);
+        Log.v(TAG, "%s: posting to /_revs_diff", this);
 
         CustomFuture future = sendAsyncRequest("POST", "_revs_diff", diffs, new RemoteRequestCompletion() {
 
             @Override
             public void onCompletion(Response httpResponse, Object response, Throwable e) {
 
-                Log.v(Log.TAG_SYNC, "%s: got /_revs_diff response", this);
+                Log.v(TAG, "%s: got /_revs_diff response", this);
                 Map<String, Object> results = (Map<String, Object>) response;
                 if (e != null) {
                     setError(e);
@@ -380,7 +443,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             try {
                                 loadedRev = db.loadRevisionBody(rev);
                             } catch (CouchbaseLiteException e1) {
-                                Log.w(Log.TAG_SYNC, "%s Couldn't get local contents of %s", rev, PusherInternal.this);
+                                Log.w(TAG, "%s Couldn't get local contents of %s", rev, PusherInternal.this);
                                 continue;
                             }
 
@@ -407,7 +470,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
                                 Status status = new Status(Status.OK);
                                 if (!db.expandAttachments(populatedRev, minRevPos + 1, !dontSendMultipart, false, status)) {
-                                    Log.w(Log.TAG_SYNC, "%s: Couldn't expand attachments of %s", this, populatedRev);
+                                    Log.w(TAG, "%s: Couldn't expand attachments of %s", this, populatedRev);
                                     continue;
                                 }
 
@@ -448,6 +511,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         });
         future.setQueue(pendingFutures);
         pendingFutures.add(future);
+        pauseOrResume();
     }
 
     /**
@@ -465,7 +529,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             return;
         }
 
-        Log.v(Log.TAG_SYNC, "%s: POSTing " + numDocsToSend + " revisions to _bulk_docs: %s", PusherInternal.this, docsToSend);
+        Log.v(TAG, "%s: POSTing " + numDocsToSend + " revisions to _bulk_docs: %s", PusherInternal.this, docsToSend);
         addToChangesCount(numDocsToSend);
 
         Map<String, Object> bulkDocsBody = new HashMap<String, Object>();
@@ -484,7 +548,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         Status status = statusFromBulkDocsResponseItem(item);
                         if (status.isError()) {
                             // One of the docs failed to save.
-                            Log.w(Log.TAG_SYNC, "%s: _bulk_docs got an error: %s", item, this);
+                            Log.w(TAG, "%s: _bulk_docs got an error: %s", item, this);
                             // 403/Forbidden means validation failed; don't treat it as an error
                             // because I did my job in sending the revision. Other statuses are
                             // actual replication errors.
@@ -508,7 +572,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 if (e != null) {
                     setError(e);
                 } else {
-                    Log.v(Log.TAG_SYNC, "%s: POSTed to _bulk_docs", PusherInternal.this);
+                    Log.v(TAG, "%s: POSTed to _bulk_docs", PusherInternal.this);
                 }
                 addToCompletedChangesCount(numDocsToSend);
             }
@@ -533,7 +597,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             }
         }
 
-        Log.d(Log.TAG_SYNC, "Uploading multipart request.  Revision: %s", revision);
+        Log.d(TAG, "Uploading multipart request.  Revision: %s", revision);
         addToChangesCount(1);
         final String path = String.format(Locale.ENGLISH, "%s?new_edits=false", encodeDocumentId(revision.getDocID()));
         CustomFuture future = sendAsyncMultipartRequest("PUT", path, body, attachments,
@@ -550,11 +614,11 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                                         uploadJsonRevision(revision);
                                     }
                                 } else {
-                                    Log.e(Log.TAG_SYNC, "Exception uploading multipart request", e);
+                                    Log.e(TAG, "Exception uploading multipart request", e);
                                     setError(e);
                                 }
                             } else {
-                                Log.v(Log.TAG_SYNC, "Uploaded multipart request.  Revision: %s", revision);
+                                Log.v(TAG, "Uploaded multipart request.  Revision: %s", revision);
                                 removePending(revision);
                             }
                         } finally {
@@ -588,7 +652,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         if (e != null) {
                             setError(e);
                         } else {
-                            Log.v(Log.TAG_SYNC, "%s: Sent %s (JSON), response=%s", this, rev, result);
+                            Log.v(TAG, "%s: Sent %s (JSON), response=%s", this, rev, result);
                             removePending(rev);
                         }
                     }
@@ -624,6 +688,34 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         return generation;
     }
 
+    private void pauseOrResume() {
+        int pending = batcher.count() + pendingSequences.size();
+        setPaused(pending >= MAX_PENDING_DOCS);
+    }
+
+    private void setPaused(boolean paused) {
+        Log.v(TAG, "setPaused: " + paused);
+        synchronized (pausedObj) {
+            if (this.paused != paused) {
+                this.paused = paused;
+                pausedObj.notifyAll();
+            }
+        }
+    }
+
+    private void waitIfPaused() {
+        synchronized (pausedObj) {
+            while (paused && isRunning()) {
+                Log.v(TAG, "Waiting: " + paused);
+                try {
+                    // every 1 sec, wake by myself to check if still needs to pause
+                    pausedObj.wait(TIMEOUT_FOR_PAUSE);
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+    }
+
     /**
      * Submit revisions into inbox for changes from changesSince()
      */
@@ -638,6 +730,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             batcher.queueObjects(subChanges);
             start += size;
             remaining -= size;
+            pauseOrResume();
+            waitIfPaused();
             // if not running state anymore, exit from loop.
             if (!isRunning())
                 break;
@@ -661,6 +755,8 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                         continue;
                     if (getLocalDatabase().runFilter(filter, filterParams, rev)) {
                         if (doneBeginReplicating) {
+                            pauseOrResume();
+                            waitIfPaused();
                             // if not running state anymore, exit from loop.
                             if (!isRunning())
                                 break;
@@ -676,7 +772,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 // Not possible since it would not be an active replicator.
                 // However, until we refactor everything to use java.net,
                 // I'm not sure we have a choice but to swallow this.
-                Log.e(Log.TAG_SYNC, "Active replicator found with invalid URI", uriException);
+                Log.e(TAG, "Active replicator found with invalid URI", uriException);
             }
         }
     }
