@@ -220,15 +220,6 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @Override
     @InterfaceAudience.Private
     public void beginReplicating() {
-        supportExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                beginReplicatingInternal();
-            }
-        });
-    }
-
-    private void beginReplicatingInternal() {
         // If we're still waiting to create the remote db, do nothing now. (This method will be
         // re-invoked after that request finishes; see -maybeCreateRemoteDB above.)
 

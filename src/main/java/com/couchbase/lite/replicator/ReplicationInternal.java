@@ -79,6 +79,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
     public static final String CHANNELS_QUERY_PARAM = "channels";
     public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
+    public static final int MIN_EXECUTOR_THREAD_POOL_SIZE = 2;
 
     private static int lastSessionID = 0;
     public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
@@ -382,6 +383,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         if (remoteRequestExecutor == null) {
             int executorThreadPoolSize = db.getManager().getExecutorThreadPoolSize() <= 0 ?
                     EXECUTOR_THREAD_POOL_SIZE : db.getManager().getExecutorThreadPoolSize();
+            executorThreadPoolSize = Math.max(executorThreadPoolSize, MIN_EXECUTOR_THREAD_POOL_SIZE);
             Log.v(Log.TAG_SYNC, "executorThreadPoolSize=" + executorThreadPoolSize);
             remoteRequestExecutor = Executors.newScheduledThreadPool(executorThreadPoolSize,
                     new ThreadFactory() {
