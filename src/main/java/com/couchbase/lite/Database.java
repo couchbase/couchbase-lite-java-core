@@ -43,9 +43,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.CollectionUtils.Functor;
 import com.couchbase.lite.util.IOUtils;
 import com.couchbase.lite.util.Log;
-import com.couchbase.lite.util.StreamUtils;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1636,13 +1634,18 @@ public class Database implements StoreDelegate {
                 if (!attachment.containsKey("follows")) {
                     return attachment;
                 }
-                URL fileURL = fileForAttachmentDict(attachment);
-                byte[] fileData = null;
+
+                byte[] fileData;
                 try {
-                    InputStream is = fileURL.openStream();
-                    ByteArrayOutputStream os = new ByteArrayOutputStream();
-                    StreamUtils.copyStream(is, os);
-                    fileData = os.toByteArray();
+                    BlobStore blobStore = getAttachmentStore();
+                    String base64Digest = (String) attachment.get("digest");
+                    BlobKey blobKey = new BlobKey(base64Digest);
+                    InputStream in = blobStore.blobStreamForKey(blobKey);
+                    try {
+                        fileData = IOUtils.toByteArray(in);
+                    } finally {
+                        in.close();
+                    }
                 } catch (IOException e) {
                     Log.e(Log.TAG_SYNC, "could not retrieve attachment data: %S", e);
                     return null;
