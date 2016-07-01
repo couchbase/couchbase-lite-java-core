@@ -89,7 +89,9 @@ public class RemoteMultipartRequest extends RemoteRequest {
 
     private MultipartBody.Builder createMultipartBody() {
         MultipartBody.Builder multipartBodyBuilder = new MultipartBody.Builder();
-        multipartBodyBuilder.setType(MultipartBody.FORM);
+
+        // https://en.wikipedia.org/wiki/MIME#Related
+        multipartBodyBuilder.setType(MediaType.parse("multipart/related"));
 
         // JSON body
         byte[] bodyBytes = null;
