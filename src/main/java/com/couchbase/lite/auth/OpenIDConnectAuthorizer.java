@@ -137,7 +137,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
             } else {
                 Map response = (Map) jsonResponse;
                 // Generated or refreshed ID token:
-                if (parseTokensFrom(response)) {
+                if (parseTokens(response)) {
                     Log.v(TAG, "%s: Logged in as %s !", this.getClass().getName(), username);
                     saveTokens(response);
                 } else {
@@ -237,7 +237,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
             return false;
 
         try {
-            return parseTokensFrom(tokenStore.loadTokens(remoteURL));
+            return parseTokens(tokenStore.loadTokens(remoteURL));
         } catch (Exception e) {
             Log.w(TAG, "Error in loadTokens()", e);
             return false;
@@ -256,14 +256,23 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
         return tokenStore.deleteTokens(remoteURL);
     }
 
-    private boolean parseTokensFrom(Map<String, String> tokens) {
-        String idToken = tokens.get("id_token");
-        if (idToken == null)
+    private boolean parseTokens(Map<String, String> tokens) {
+        if (tokens == null) {
+            // If there are no tokens in the store, the tokens will be null:
             return false;
+        }
+
+        String idToken = tokens.get("id_token");
+        if (idToken == null) {
+            Log.v(TAG, "OpenIDConnectAuthorizer: the parsed token doesn't have the ID Token");
+            return false;
+        }
+
         IDToken = idToken;
         refreshToken = tokens.get("refresh_token");
         username = tokens.get("name");
         haveSessionCookie = tokens.containsKey("session_id");
+
         return true;
     }
 
@@ -314,6 +323,3 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
         }
     }
 }
-
-
-
