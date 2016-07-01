@@ -31,21 +31,11 @@ import java.util.Map;
 import okhttp3.Headers;
 import okhttp3.Request;
 
-/**
- *
- */
+
 public class OpenIDConnectAuthorizer extends BaseAuthorizer
         implements CustomHeadersAuthorizer, SessionCookieAuthorizer {
 
     private static final String TAG = Log.TAG_SYNC;
-
-    public interface OIDCLoginContinuation {
-        void callback(URL authURL, Throwable error);
-    }
-
-    public interface OIDCLoginCallback {
-        void callback(URL loginURL, URL authBaseURL, OIDCLoginContinuation loginContinuation);
-    }
 
     ////////////////////////////////////////////////////////////
     // Member variables
