@@ -1751,7 +1751,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
             // Delete the deepest revs in the tree to enforce the maxRevTreeDepth:
             int gen = inRev.getGeneration();
-            if (gen > maxRevTreeDepth) {
+            if (localRevs != null && gen > maxRevTreeDepth) {
                 int minGen = gen;
                 int maxGen = gen;
                 for (RevisionInternal r : localRevs.values()) {
@@ -1775,6 +1775,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 status.setCode(Status.CREATED);
             }
         } catch (SQLException e) {
+            Log.e(TAG, "Error inserting revisions", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } finally {
             endTransaction(success);
