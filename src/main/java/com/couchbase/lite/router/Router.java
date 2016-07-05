@@ -740,10 +740,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         if (contentType != null) {
             Header resHeader = connection.getResHeader();
-            if (resHeader != null && resHeader.get("Content-Type") != null)
+            if (resHeader != null && resHeader.get("Content-Type") == null)
                 resHeader.add("Content-Type", contentType);
             else
-                Log.w(TAG, "Cannot add Content-Type header because getResHeader() returned null");
+                Log.d(TAG, "Cannot add Content-Type header because getResHeader() returned null");
         }
 
         // NOTE: Line 596-607 of CBL_Router.m is not in CBL Java Core
