@@ -1751,13 +1751,19 @@ public class SQLiteStore implements Store, EncryptableStore {
 
             // Delete the deepest revs in the tree to enforce the maxRevTreeDepth:
             int gen = inRev.getGeneration();
-            if (localRevs != null && gen > maxRevTreeDepth) {
-                int minGen = gen;
+            String oldestRevID = null;
+            if (history.size() > 0)
+                oldestRevID = history.get(history.size() - 1);
+            int oldGen = Revision.generationFromRevID(oldestRevID);
+            if (gen > maxRevTreeDepth) {
+                int minGen = oldGen;
                 int maxGen = gen;
-                for (RevisionInternal r : localRevs.values()) {
-                    int generation = r.getGeneration();
-                    minGen = Math.min(minGen, generation);
-                    maxGen = Math.max(maxGen, generation);
+                if (localRevs != null) {
+                    for (RevisionInternal r : localRevs.values()) {
+                        int generation = r.getGeneration();
+                        minGen = Math.min(minGen, generation);
+                        maxGen = Math.max(maxGen, generation);
+                    }
                 }
 
                 int minGenToKeep = maxGen - maxRevTreeDepth + 1;
