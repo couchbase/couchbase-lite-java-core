@@ -1474,9 +1474,8 @@ public class Database implements StoreDelegate {
                                                                              List<String> ancestorRevIDs) {
         List<RevisionInternal> history = getRevisionHistory(rev);
         // (this is in reverse order, newest..oldest
-        if (ancestorRevIDs != null && ancestorRevIDs.size() > 0) {
-            int n = history.size();
-            for (int i = 0; i < n; ++i) {
+        if (ancestorRevIDs != null && ancestorRevIDs.size() > 0 && history != null) {
+            for (int i = 0; i < history.size(); ++i) {
                 if (ancestorRevIDs.contains(history.get(i).getRevID())) {
                     history = history.subList(0, i + 1);
                     break;

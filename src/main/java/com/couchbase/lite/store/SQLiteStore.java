@@ -896,7 +896,6 @@ public class SQLiteStore implements Store, EncryptableStore {
         List<RevisionInternal> result;
         try {
             cursor = storageEngine.rawQuery(sql, args);
-
             cursor.moveToNext();
             long lastSequence = 0;
             result = new ArrayList<RevisionInternal>();
