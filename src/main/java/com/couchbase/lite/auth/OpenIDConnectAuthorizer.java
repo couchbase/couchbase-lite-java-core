@@ -24,6 +24,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -118,7 +119,8 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                               Headers headers,
                               Throwable error,
                               ContinuationBlock block) {
-        if (error != null && (!(error instanceof RemoteRequestResponseException) || ((RemoteRequestResponseException) error).getCode() != 401)) {
+        if (error != null && (!(error instanceof RemoteRequestResponseException) ||
+                              ((RemoteRequestResponseException) error).getCode() != 401)) {
             block.call(false, error);
             return;
         }
@@ -136,19 +138,28 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                 }
             } else {
                 Map response = (Map) jsonResponse;
+                if (refreshToken != null && response.get("refresh_token") == null) {
+                    // The response from a refresh may not contain the refresh token, so to avoid
+                    // losing it, add it to the response map that will be saved to the key store:
+                    response = new HashMap<String, Object>(response);
+                    response.put("refresh_token", refreshToken);
+                }
+
                 // Generated or refreshed ID token:
                 if (parseTokens(response)) {
                     Log.v(TAG, "%s: Logged in as %s !", this.getClass().getName(), username);
                     saveTokens(response);
                 } else {
-                    error = new CouchbaseLiteException("Server didn't return a refreshed ID token", Status.UPSTREAM_ERROR);
+                    error = new CouchbaseLiteException("Server didn't return a refreshed ID token",
+                            Status.UPSTREAM_ERROR);
                 }
             }
         } else {
             // Login challenge: get the info & ask the app callback to log into the OP:
             String login = null;
             RemoteRequestResponseException rrre = (RemoteRequestResponseException) error;
-            Map challenge = rrre.getUserInfo() != null ? (Map) rrre.getUserInfo().get("AuthChallenge") : null;
+            Map challenge = rrre.getUserInfo() != null ?
+                    (Map) rrre.getUserInfo().get("AuthChallenge") : null;
             if (challenge != null)
                 if ("OIDC".equals(challenge.get("Scheme")))
                     login = (String) challenge.get("login");
@@ -164,7 +175,8 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                     error = new CouchbaseLiteException(Status.UNKNOWN);
                 }
             } else {
-                error = new CouchbaseLiteException("Server didn't provide an OpenID login URL", Status.UPSTREAM_ERROR);
+                error = new CouchbaseLiteException("Server didn't provide an OpenID login URL",
+                        Status.UPSTREAM_ERROR);
             }
         }
 
@@ -285,12 +297,17 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                 @Override
                 public void callback(URL url, Throwable error) {
                     if (url != null) {
-                        Log.v(TAG, "OpenIDConnectAuthorizer: App login callback returned authURL=<%s>", url.toExternalForm());
+                        Log.v(TAG, "OpenIDConnectAuthorizer: App login callback returned authURL " +
+                                "<%s>", url.toExternalForm());
                         // Verify that the authURL matches the site:
-                        if (remoteURL == null || url.getHost().compareToIgnoreCase(remoteURL.getHost()) != 0 || url.getPort() != remoteURL.getPort()) {
-                            Log.w(TAG, "OpenIDConnectAuthorizer: App-provided authURL <%s> doesn't match server URL; ignoring it", url.toExternalForm());
+                        if (remoteURL == null ||
+                            url.getHost().compareToIgnoreCase(remoteURL.getHost()) != 0 ||
+                            url.getPort() != remoteURL.getPort()) {
+                            Log.w(TAG, "OpenIDConnectAuthorizer: App-provided authURL <%s> " +
+                                    "doesn't match server URL; ignoring it", url.toExternalForm());
                             url = null;
-                            error = new RemoteRequestResponseException(RemoteRequestResponseException.BAD_URL, null, null);
+                            error = new RemoteRequestResponseException(
+                                    RemoteRequestResponseException.BAD_URL, null, null);
                         }
                     }
                     if (url != null) {
@@ -298,7 +315,8 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                         block.call(true, null);
                     } else {
                         if (error == null)
-                            error = new RemoteRequestResponseException(RemoteRequestResponseException.USER_DENIED_AUTH, null, null);
+                            error = new RemoteRequestResponseException(
+                                    RemoteRequestResponseException.USER_DENIED_AUTH, null, null);
                         Log.w(TAG, "OpenIDConnectAuthorizer: App login callback returned error=" + error);
                         block.call(false, error);
                     }
