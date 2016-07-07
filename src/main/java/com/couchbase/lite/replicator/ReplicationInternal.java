@@ -467,7 +467,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         if (username != null && username.length() > 0) {
                             // Found a login session!
                             Log.d(Log.TAG_SYNC, "%s Active session, logged in as %s", this, username);
-                            fetchRemoteCheckpointDoc();
+                            // currently only OpenIDConnectAuthorizer supports setUsername() method
+                            if (authenticator != null && authenticator instanceof OpenIDConnectAuthorizer)
+                                ((OpenIDConnectAuthorizer) authenticator).setUsername(username);
+                            loginFinishedWithError(null);
                         } else {
                             // No current login session, so continue to regular login:
                             Log.d(Log.TAG_SYNC, "%s No active session, going to login", this);
