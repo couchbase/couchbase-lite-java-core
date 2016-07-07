@@ -24,6 +24,7 @@ import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.auth.LoginAuthorizer;
+import com.couchbase.lite.auth.OpenIDConnectAuthorizer;
 import com.couchbase.lite.auth.SessionCookieAuthorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
@@ -84,6 +85,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private static int lastSessionID = 0;
     public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
 
+    private static ReplicationStateTransition TRANS_RUNNING_TO_IDLE =
+            new ReplicationStateTransition(ReplicationState.RUNNING,
+                    ReplicationState.IDLE, ReplicationTrigger.WAITING_FOR_CHANGES);
+    private static ReplicationStateTransition TRANS_IDLE_TO_RUNNING =
+            new ReplicationStateTransition(ReplicationState.IDLE,
+                    ReplicationState.RUNNING, ReplicationTrigger.RESUME);
+
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle {
         SYNC, ASYNC
@@ -95,6 +103,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected HttpClientFactory clientFactory;
     protected String lastSequence;
     protected Authenticator authenticator;
+    protected boolean authenticating = false;
     protected String filterName;
     protected Map<String, Object> filterParams;
     protected List<String> documentIDs;
@@ -148,6 +157,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.clientFactory = clientFactory;
         this.lifecycle = lifecycle;
         this.requestHeaders = new HashMap<String, Object>();
+        this.authenticating = false;
 
         // The reason that notifications are ASYNC is to make the public API call
         // Replication.getStatus() work as expected.  Because if this is set to SYNC,
@@ -252,6 +262,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             }
             db.addReplication(parentReplication);
             db.addActiveReplication(parentReplication);
+            this.authenticating = false;
             initSessionId();
             // initialize batcher
             initBatcher();
@@ -298,6 +309,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Close all resources associated with this replicator.
      */
     protected void close() {
+        this.authenticating = false;
+
         // cancel pending futures
         for (Future future : pendingFutures) {
             future.cancel(false);
@@ -426,6 +439,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void checkSessionAtPath(final String sessionPath) {
+        // First check whether a session exists
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletion() {
 
             @Override
@@ -470,6 +484,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void login() {
+        authenticating = true;
+
         final LoginAuthorizer loginAuth;
         List<Object> login = null;
         loginAuth = getAuthenticator() instanceof LoginAuthorizer ? (LoginAuthorizer) getAuthenticator() : null;
@@ -520,6 +536,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     private void loginFinishedWithError(Throwable error) {
+        authenticating = false;
+
         if (error != null) {
             Log.v(TAG, "%s: Login error: %s", this, error.getMessage());
             setError(error);
@@ -1183,6 +1201,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      * Actual work of stopping the replication process.
      */
     protected void stop() {
+        this.authenticating = false;
         // clear batcher
         batcher.clear();
         // set non-continuous
@@ -1452,9 +1471,19 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 transition.getSource(), transition.getDestination(), transition.getTrigger(), this);
     }
 
-    private void notifyChangeListenersStateTransition(Transition<ReplicationState, ReplicationTrigger> transition) {
+    private void notifyChangeListenersStateTransition(
+            Transition<ReplicationState, ReplicationTrigger> transition) {
         logTransition(transition);
-        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this, new ReplicationStateTransition(transition));
+
+        ReplicationStateTransition replStateTrans = new ReplicationStateTransition(transition);
+
+        if ((TRANS_RUNNING_TO_IDLE.equals(replStateTrans)
+                || TRANS_IDLE_TO_RUNNING.equals(replStateTrans)) && authenticating) {
+            Log.i(TAG, "During middle of authentication, not notify Replicator state change");
+            return;
+        }
+
+        Replication.ChangeEvent changeEvent = new Replication.ChangeEvent(this, replStateTrans);
         notifyChangeListeners(changeEvent);
     }
 
