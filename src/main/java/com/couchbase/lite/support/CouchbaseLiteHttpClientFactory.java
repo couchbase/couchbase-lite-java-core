@@ -39,11 +39,12 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     private boolean followRedirects = true;
 
     // deprecated
-    public static int DEFAULT_SO_TIMEOUT_SECONDS = 60 * 5;
+    public static int DEFAULT_SO_TIMEOUT_SECONDS = 40; // 40 sec (previously it was 5 min)
+                                                       // heartbeat value 30sec + 10 sec
 
     // OkHttp Default Timeout is 10 sec for all timeout settings
     public static int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 10;
-    public static int DEFAULT_READ_TIMEOUT = DEFAULT_SO_TIMEOUT_SECONDS;
+    public static int DEFAULT_READ_TIMEOUT  = DEFAULT_SO_TIMEOUT_SECONDS;
     public static int DEFAULT_WRITE_TIMEOUT = 10;
 
     /**
