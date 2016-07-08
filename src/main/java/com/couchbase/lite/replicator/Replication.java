@@ -68,7 +68,7 @@ public class Replication
      */
     public static final String REPLICATOR_DATABASE_NAME = "_replicator";
     public static long DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN = 60; // 60 sec
-    public static int DEFAULT_HEARTBEAT = 300; // 5min (300 sec)
+    public static int DEFAULT_HEARTBEAT = 30; // 30 sec (till v1.2.0 and iOS uses 5min)
 
     /**
      * Options for what metadata to include in document bodies
