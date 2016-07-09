@@ -69,4 +69,20 @@ public class PasswordAuthorizer extends BaseAuthorizer
         }
         return null;
     }
+    ////////////////////////////////////////////////////////////
+    // Implementation of Authorizer
+    ////////////////////////////////////////////////////////////
+
+    @Override
+    public boolean removeStoredCredentials() {
+        this.username = null;
+        this.password = null;
+        return true;
+    }
+
+    @Override
+    public String getUsername() {
+        // @optional
+        return username;
+    }
 }

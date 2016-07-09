@@ -66,6 +66,10 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         this.sslSocketFactory = sslSocketFactory;
     }
 
+    ////////////////////////////////////////////////////////////
+    // Implementations of HttpClientFactory
+    ////////////////////////////////////////////////////////////
+
     @Override
     @InterfaceAudience.Private
     synchronized public OkHttpClient getOkHttpClient() {
@@ -92,6 +96,7 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         return client;
     }
 
+    @Override
     @InterfaceAudience.Private
     synchronized public void addCookies(List<Cookie> cookies) {
         if (cookieJar != null) {
@@ -100,6 +105,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         }
     }
 
+    @Override
+    @InterfaceAudience.Private
     synchronized public void deleteCookie(String name) {
         // since CookieStore does not have a way to delete an individual cookie, do workaround:
         // 1. get all cookies
@@ -121,6 +128,15 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         cookieJar.saveFromResponse(null, retainedCookies);
     }
 
+    @Override
+    @InterfaceAudience.Private
+    synchronized public void resetCookieStore(){
+        if (cookieJar == null)
+            return;
+        cookieJar.clear();
+    }
+
+    @Override
     @InterfaceAudience.Private
     public CookieJar getCookieStore() {
         return cookieJar;

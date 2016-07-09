@@ -39,4 +39,13 @@ public class URLUtils {
         }
         return query_pairs;
     }
+
+    public static String getUser(URL url) {
+        if (url == null || url.getUserInfo() == null)
+            return null;
+        String[] tokens = url.getUserInfo().split(":");
+        if (tokens == null || tokens.length == 0)
+            return null;
+        return tokens[0];
+    }
 }

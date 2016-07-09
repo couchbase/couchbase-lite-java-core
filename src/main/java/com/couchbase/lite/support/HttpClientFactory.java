@@ -26,5 +26,7 @@ public interface HttpClientFactory {
 
     void deleteCookie(String name);
 
+    void resetCookieStore();
+
     CookieJar getCookieStore();
 }
