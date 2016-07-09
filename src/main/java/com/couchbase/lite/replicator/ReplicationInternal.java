@@ -487,8 +487,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     @InterfaceAudience.Private
     protected void login() {
-        authenticating = true;
-
         final LoginAuthorizer loginAuth;
         List<Object> login = null;
         loginAuth = getAuthenticator() instanceof LoginAuthorizer ? (LoginAuthorizer) getAuthenticator() : null;
@@ -504,6 +502,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         String method = (String) login.get(0);
         final String loginPath = (String) login.get(1);
         Map<String, Object> loginParameters = login.size() >= 3 ? (Map<String, Object>) login.get(2) : null;
+
+        // authenticating flag on.
+        authenticating = true;
 
         Log.v(Log.TAG_SYNC, "%s: Doing login with %s at %s", this.getClass().getName(), getAuthenticator().getClass(), loginPath);
         boolean cancelable = false; // make sure not-canceled during login.
