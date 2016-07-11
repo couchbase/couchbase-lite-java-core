@@ -1,17 +1,16 @@
-/**
- * Copyright (c) 2011 James Smith <james@loopj.com>
- * Copyright (c) 2016 Couchbase, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.support;
 
 import com.couchbase.lite.CouchbaseLiteException;
@@ -19,6 +18,7 @@ import com.couchbase.lite.Database;
 import com.couchbase.lite.util.Log;
 
 import java.lang.ref.WeakReference;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -136,9 +136,21 @@ public class PersistentCookieJar implements ClearableCookieJar {
         }
     }
 
+    /**
+     * @return return all cookies if httpUrl is null, otherwise return matched cookies.
+     */
     @Override
     public List<okhttp3.Cookie> loadForRequest(HttpUrl httpUrl) {
-        return new ArrayList(cookies.values());
+        List<Cookie> list = new ArrayList<Cookie>();
+        if (httpUrl == null) {
+            list.addAll(cookies.values());
+        } else {
+            for (Cookie cookie : cookies.values()) {
+                if (cookie.matches(httpUrl))
+                    list.add(cookie);
+            }
+        }
+        return list;
     }
 
     ////////////////////////////////////////////////////////////

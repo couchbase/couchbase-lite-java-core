@@ -105,7 +105,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected String lastSequence;
     protected Authenticator authenticator;
     protected boolean authenticating = false;
-    protected String username;
+    private String username;
     protected String filterName;
     protected Map<String, Object> filterParams;
     protected List<String> documentIDs;
@@ -1799,7 +1799,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.clientFactory.deleteCookie(name);
     }
 
-    /* package */ void resetCookieStore(){
+    /* package */ void deleteCookie(URL url) {
+        this.clientFactory.deleteCookie(url);
+    }
+
+    /* package */ void resetCookieStore() {
         this.clientFactory.resetCookieStore();
     }
 
