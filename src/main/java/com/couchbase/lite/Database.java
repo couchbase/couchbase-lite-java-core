@@ -904,10 +904,8 @@ public class Database implements StoreDelegate {
 
                 int revPos = (Integer) attachment.get("revpos");
                 if (revPos < minRevPos && revPos != 0) {
-                    Map<String, Object> map = new HashMap<String, Object>();
-                    map.put("stub", true);
-                    map.put("revpos", revPos);
-                    return map;
+                    //nothing changed
+                    return attachment;
                 } else {
                     Map<String, Object> expanded = new HashMap<String, Object>();
                     expanded.putAll(attachment);
