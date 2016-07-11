@@ -25,16 +25,7 @@ public abstract class BaseAuthorizer implements Authorizer {
     protected URL remoteURL;
 
     ////////////////////////////////////////////////////////////
-    // Implementation of Authenticator
-    ////////////////////////////////////////////////////////////
-    @Override
-    public String getUsername() {
-        // @optional
-        return null;
-    }
-
-    ////////////////////////////////////////////////////////////
-    // Implementations of IAuthorizer
+    // Implementations of Authorizer
     ////////////////////////////////////////////////////////////
 
     @Override
@@ -45,5 +36,16 @@ public abstract class BaseAuthorizer implements Authorizer {
     @Override
     public void setRemoteURL(URL remoteURL) {
         this.remoteURL = remoteURL;
+    }
+
+    @Override
+    public boolean removeStoredCredentials() {
+        return true;
+    }
+
+    @Override
+    public String getUsername() {
+        // @optional
+        return null;
     }
 }

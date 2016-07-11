@@ -15,6 +15,7 @@ package com.couchbase.lite.support;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 
+import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -29,6 +30,7 @@ import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Cookie;
 import okhttp3.CookieJar;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 
 public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
@@ -40,11 +42,11 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
     // deprecated
     public static int DEFAULT_SO_TIMEOUT_SECONDS = 40; // 40 sec (previously it was 5 min)
-                                                       // heartbeat value 30sec + 10 sec
+    // heartbeat value 30sec + 10 sec
 
     // OkHttp Default Timeout is 10 sec for all timeout settings
     public static int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 10;
-    public static int DEFAULT_READ_TIMEOUT  = DEFAULT_SO_TIMEOUT_SECONDS;
+    public static int DEFAULT_READ_TIMEOUT = DEFAULT_SO_TIMEOUT_SECONDS;
     public static int DEFAULT_WRITE_TIMEOUT = 10;
 
     /**
@@ -65,6 +67,10 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         }
         this.sslSocketFactory = sslSocketFactory;
     }
+
+    ////////////////////////////////////////////////////////////
+    // Implementations of HttpClientFactory
+    ////////////////////////////////////////////////////////////
 
     @Override
     @InterfaceAudience.Private
@@ -92,6 +98,7 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         return client;
     }
 
+    @Override
     @InterfaceAudience.Private
     synchronized public void addCookies(List<Cookie> cookies) {
         if (cookieJar != null) {
@@ -100,6 +107,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         }
     }
 
+    @Override
+    @InterfaceAudience.Private
     synchronized public void deleteCookie(String name) {
         // since CookieStore does not have a way to delete an individual cookie, do workaround:
         // 1. get all cookies
@@ -121,6 +130,44 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         cookieJar.saveFromResponse(null, retainedCookies);
     }
 
+    static private boolean isMatch(Cookie cookie, URL url) {
+        return cookie.matches(HttpUrl.get(url));
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    synchronized public void deleteCookie(URL url) {
+        // since CookieStore does not have a way to delete an individual cookie, do workaround:
+        // 1. get all cookies
+        // 2. filter list to strip out the one we want to delete
+        // 3. clear cookie store
+        // 4. re-add all cookies except the one we want to delete
+        if (cookieJar == null)
+            return;
+
+        List<Cookie> cookies = cookieJar.loadForRequest(null);
+        List<Cookie> retainedCookies = new ArrayList<Cookie>();
+        for (Cookie cookie : cookies) {
+            // matching rely on OkHttp's matching logic
+            // https://square.github.io/okhttp/3.x/okhttp/okhttp3/Cookie.html#matches-okhttp3.HttpUrl-
+            if (!cookie.matches(HttpUrl.get(url)))
+                retainedCookies.add(cookie);
+        }
+        cookieJar.clear();
+
+        // TODO: HttpUrl parameter should be revisited.
+        cookieJar.saveFromResponse(null, retainedCookies);
+    }
+
+    @Override
+    @InterfaceAudience.Private
+    synchronized public void resetCookieStore() {
+        if (cookieJar == null)
+            return;
+        cookieJar.clear();
+    }
+
+    @Override
     @InterfaceAudience.Private
     public CookieJar getCookieStore() {
         return cookieJar;

@@ -39,6 +39,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.TextUtils;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.URLUtils;
 import com.couchbase.lite.util.Utils;
 import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.delegates.Action1;
@@ -104,6 +105,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected String lastSequence;
     protected Authenticator authenticator;
     protected boolean authenticating = false;
+    private String username;
     protected String filterName;
     protected Map<String, Object> filterParams;
     protected List<String> documentIDs;
@@ -158,6 +160,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.lifecycle = lifecycle;
         this.requestHeaders = new HashMap<String, Object>();
         this.authenticating = false;
+        this.username = URLUtils.getUser(remote);
 
         // The reason that notifications are ASYNC is to make the public API call
         // Replication.getStatus() work as expected.  Because if this is set to SYNC,
@@ -547,6 +550,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             setError(error);
         } else {
             Log.v(TAG, "%s: Successfully logged in!", this);
+            if (authenticator != null && authenticator instanceof OpenIDConnectAuthorizer)
+                this.username = ((OpenIDConnectAuthorizer) authenticator).getUsername();
             fetchRemoteCheckpointDoc();
         }
     }
@@ -1794,6 +1799,14 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         this.clientFactory.deleteCookie(name);
     }
 
+    /* package */ void deleteCookie(URL url) {
+        this.clientFactory.deleteCookie(url);
+    }
+
+    /* package */ void resetCookieStore() {
+        this.clientFactory.resetCookieStore();
+    }
+
     protected HttpClientFactory getClientFactory() {
         return clientFactory;
     }
@@ -1954,5 +1967,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         } catch (Exception e) {
             Log.e(TAG, "Exception waiting for pending futures: %s", e);
         }
+    }
+
+    /*package*/ String getUsername() {
+        return username;
     }
 }

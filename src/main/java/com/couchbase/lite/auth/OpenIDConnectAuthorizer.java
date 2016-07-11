@@ -88,7 +88,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     }
 
     ////////////////////////////////////////////////////////////
-    // Implementations of ISessionCookieAuthorizer(ILoginAuthorizer)
+    // Implementations of SessionCookieAuthorizer(LoginAuthorizer)
     ////////////////////////////////////////////////////////////
 
     // #pragma mark - LOGIN:
@@ -184,19 +184,30 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
         block.call(false, error);
     }
 
+    @Override
+    public boolean implementedLoginResponse() {
+        return true;
+    }
 
     ////////////////////////////////////////////////////////////
-    // Implementation of Authenticator
+    // Implementation of Authorizer
     ////////////////////////////////////////////////////////////
+
+    @Override
+    public boolean removeStoredCredentials() {
+        if(!deleteTokens())
+            return false;
+        IDToken = null;
+        refreshToken = null;
+        haveSessionCookie = false;
+        authURL = null;
+        return true;
+    }
+
     @Override
     public String getUsername() {
         // @optional
         return username;
-    }
-
-    @Override
-    public boolean implementedLoginResponse() {
-        return true;
     }
 
     ////////////////////////////////////////////////////////////

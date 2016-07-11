@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.AsyncTask;
@@ -21,11 +21,13 @@ import com.couchbase.lite.NetworkReachabilityListener;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.auth.Authenticator;
+import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieJar;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.URLUtils;
 
 import java.net.URL;
 import java.util.Date;
@@ -694,6 +696,12 @@ public class Replication
         replicationInternal.setFilterParams(filterParams);
     }
 
+    /** The server user name that the authenticator has logged in as, if known. */
+    @InterfaceAudience.Public
+    public String getUsername() {
+        return replicationInternal.getUsername();
+    }
+
     /**
      * Sets an HTTP cookie for the Replication.
      *
@@ -736,6 +744,23 @@ public class Replication
     @InterfaceAudience.Public
     public void deleteCookie(String name) {
         replicationInternal.deleteCookie(name);
+    }
+
+    /**
+     * Deletes any persistent credentials (passwords, auth tokens...) associated with this
+     * replication's CBLAuthenticator. Also removes session cookies from the cookie store.
+     */
+    @InterfaceAudience.Public
+    public boolean removeStoredCredentials() {
+        if (getAuthenticator() != null) {
+            if (!(getAuthenticator() instanceof Authorizer) ||
+                    !((Authorizer) getAuthenticator()).removeStoredCredentials())
+                return false;
+        } else {
+            // CBL Java does not use credential. No thing to do
+        }
+        replicationInternal.deleteCookie(remote);
+        return true;
     }
 
     /**

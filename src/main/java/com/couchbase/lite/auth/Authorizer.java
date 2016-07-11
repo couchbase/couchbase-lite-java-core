@@ -26,4 +26,9 @@ public interface Authorizer extends Authenticator {
     URL getRemoteURL();
 
     void setRemoteURL(URL remoteURL);
+
+    boolean removeStoredCredentials();
+
+    // @optional
+    String getUsername();
 }
