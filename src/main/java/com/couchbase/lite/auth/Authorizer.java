@@ -27,6 +27,13 @@ public interface Authorizer extends Authenticator {
 
     void setRemoteURL(URL remoteURL);
 
+    /**
+     * The unique ID of the local database. The replicator sets this property when it starts up.
+     */
+    String getLocalUUID();
+
+    void setLocalUUID(String localUUID);
+
     boolean removeStoredCredentials();
 
     // @optional

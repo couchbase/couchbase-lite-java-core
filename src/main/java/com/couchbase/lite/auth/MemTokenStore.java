@@ -25,44 +25,47 @@ public class MemTokenStore implements TokenStore {
     private Map<String, Map<String, String>> store = new HashMap<String, Map<String, String>>();
 
     @Override
-    public Map<String, String> loadTokens(URL remoteURL) throws Exception {
-        if(remoteURL == null)
+    public Map<String, String> loadTokens(URL remoteURL, String localUUID) throws Exception {
+        if (remoteURL == null)
             return null;
-        String key = getKey(remoteURL);
+        String key = getKey(remoteURL, localUUID);
         if (!store.containsKey(key))
             return null;
         return store.get(key);
     }
 
     @Override
-    public boolean saveTokens(URL remoteURL, Map<String, String> tokens) {
-        if(tokens == null)
-            return deleteTokens(remoteURL);
+    public boolean saveTokens(URL remoteURL, String localUUID, Map<String, String> tokens) {
+        if (tokens == null)
+            return deleteTokens(remoteURL, localUUID);
 
-        if(remoteURL == null)
+        if (remoteURL == null)
             return false;
 
-        String key = getKey(remoteURL);
+        String key = getKey(remoteURL, localUUID);
         store.put(key, tokens);
         return true;
     }
 
     @Override
-    public boolean deleteTokens(URL remoteURL) {
-        if(remoteURL == null)
+    public boolean deleteTokens(URL remoteURL, String localUUID) {
+        if (remoteURL == null)
             return false;
-        String key = getKey(remoteURL);
+        String key = getKey(remoteURL, localUUID);
         if (!store.containsKey(key))
             return false;
         store.remove(key);
         return true;
     }
 
-    /*package*/  String getKey(URL remoteURL) {
-        if(remoteURL == null)
+    /*package*/  String getKey(URL remoteURL, String localUUID) {
+        if (remoteURL == null)
             throw new IllegalArgumentException("remoteURL is null");
-        String account = remoteURL.toExternalForm();
+        String service = remoteURL.toExternalForm();
         String label = String.format(Locale.ENGLISH, "%s OpenID Connect tokens", remoteURL.getHost());
-        return String.format(Locale.ENGLISH, "%s%s", label, account);
+        if (localUUID == null)
+            return String.format(Locale.ENGLISH, "%s%s", label, service);
+        else
+            return String.format(Locale.ENGLISH, "%s%s%s", label, service, localUUID);
     }
 }

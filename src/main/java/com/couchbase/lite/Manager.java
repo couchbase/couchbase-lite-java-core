@@ -628,21 +628,6 @@ public final class Manager {
             remoteMap = sourceMap;
         }
 
-        Map<String, Object> authMap = (Map<String, Object>) remoteMap.get("auth");
-        if (authMap != null) {
-
-            Map<String, Object> persona = (Map<String, Object>) authMap.get("persona");
-            if (persona != null) {
-                String email = (String) persona.get("email");
-                authorizer = new PersonaAuthorizer(email);
-            }
-            Map<String, Object> facebook = (Map<String, Object>) authMap.get("facebook");
-            if (facebook != null) {
-                String email = (String) facebook.get("email");
-                authorizer = new FacebookAuthorizer(email);
-            }
-        }
-
         // Can't specify both a filter and doc IDs
         if (properties.get("filter") != null && properties.get("doc_ids") != null)
             throw new CouchbaseLiteException("Can't specify both a filter and doc IDs",
@@ -658,6 +643,25 @@ public final class Manager {
             throw new CouchbaseLiteException("remote URL is null: " + remoteStr,
                     new Status(Status.BAD_REQUEST));
         }
+
+        Map<String, Object> authMap = (Map<String, Object>) remoteMap.get("auth");
+        if (authMap != null) {
+
+            Map<String, Object> persona = (Map<String, Object>) authMap.get("persona");
+            if (persona != null) {
+                String email = (String) persona.get("email");
+                authorizer = new PersonaAuthorizer(email);
+            }
+            Map<String, Object> facebook = (Map<String, Object>) authMap.get("facebook");
+            if (facebook != null) {
+                String email = (String) facebook.get("email");
+                authorizer = new FacebookAuthorizer(email);
+            }
+            authorizer.setRemoteURL(remote);
+            authorizer.setLocalUUID(db.publicUUID());
+        }
+
+
 
         if (!cancel) {
             repl = db.getReplicator(remote, getDefaultHttpClientFactory(), push, continuous);

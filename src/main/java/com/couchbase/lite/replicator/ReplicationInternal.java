@@ -335,7 +335,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     protected void initAuthorizer() {
         if (authenticator != null && authenticator instanceof Authorizer) {
-            ((Authorizer) authenticator).setRemoteURL(remote);
+            Authorizer authorizer = (Authorizer)authenticator;
+            authorizer.setRemoteURL(remote);
+            authorizer.setLocalUUID(db.publicUUID());
         }
     }
 
@@ -430,7 +432,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected void checkSession() {
         if (getAuthenticator() != null) {
             Authorizer auth = (Authorizer) getAuthenticator();
-            auth.setRemoteURL(this.remote);
+            auth.setRemoteURL(remote);
+            auth.setLocalUUID(db.publicUUID());
         }
         if (getAuthenticator() != null && getAuthenticator() instanceof SessionCookieAuthorizer) {
             // Sync Gateway session API is at /db/_session; try that first

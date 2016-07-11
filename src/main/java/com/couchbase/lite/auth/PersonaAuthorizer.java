@@ -147,9 +147,9 @@ public class PersonaAuthorizer extends BaseAuthorizer implements SessionCookieAu
     ////////////////////////////////////////////////////////////
 
     /*package*/ String assertion() {
-        String assertion = assertionForEmailAndSite(email, remoteURL);
+        String assertion = assertionForEmailAndSite(email, getRemoteURL());
         if (assertion == null) {
-            Log.w(TAG, "PersonaAuthorizer<%s> no assertion found for: %s", email, remoteURL);
+            Log.w(TAG, "PersonaAuthorizer<%s> no assertion found for: %s", email, getRemoteURL());
             return null;
         }
         Map<String, Object> result = parseAssertion(assertion);

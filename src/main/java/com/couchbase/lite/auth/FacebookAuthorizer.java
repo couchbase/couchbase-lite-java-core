@@ -101,7 +101,7 @@ public class FacebookAuthorizer extends BaseAuthorizer implements SessionCookieA
     private String token() {
         List<String> key = new ArrayList<String>();
         key.add(email);
-        key.add(remoteURL.toExternalForm().toLowerCase());
+        key.add(getRemoteURL().toExternalForm().toLowerCase());
         Log.v(TAG, "FacebookAuthorizer looking up key: %s from list of access tokens", key);
         return sRegisteredTokens.get(key);
     }
