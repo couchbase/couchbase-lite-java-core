@@ -22,7 +22,8 @@ public abstract class BaseAuthorizer implements Authorizer {
     ////////////////////////////////////////////////////////////
     // Member variables
     ////////////////////////////////////////////////////////////
-    protected URL remoteURL;
+    private URL remoteURL;
+    private String localUUID;
 
     ////////////////////////////////////////////////////////////
     // Implementations of Authorizer
@@ -41,6 +42,16 @@ public abstract class BaseAuthorizer implements Authorizer {
     @Override
     public boolean removeStoredCredentials() {
         return true;
+    }
+
+    @Override
+    public String getLocalUUID() {
+        return localUUID;
+    }
+
+    @Override
+    public void setLocalUUID(String localUUID) {
+        this.localUUID = localUUID;
     }
 
     @Override

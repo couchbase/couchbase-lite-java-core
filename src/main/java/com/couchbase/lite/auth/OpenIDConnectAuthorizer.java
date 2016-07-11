@@ -66,7 +66,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     ////////////////////////////////////////////////////////////
     @Override
     public String toString() {
-        return String.format(Locale.ENGLISH, "OpenIDConnectAuthorizer[%s]", remoteURL);
+        return String.format(Locale.ENGLISH, "OpenIDConnectAuthorizer[%s]", getRemoteURL());
     }
 
     ////////////////////////////////////////////////////////////
@@ -120,7 +120,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                               Throwable error,
                               ContinuationBlock block) {
         if (error != null && (!(error instanceof RemoteRequestResponseException) ||
-                              ((RemoteRequestResponseException) error).getCode() != 401)) {
+                ((RemoteRequestResponseException) error).getCode() != 401)) {
             block.call(false, error);
             return;
         }
@@ -195,7 +195,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
 
     @Override
     public boolean removeStoredCredentials() {
-        if(!deleteTokens())
+        if (!deleteTokens())
             return false;
         IDToken = null;
         refreshToken = null;
@@ -248,6 +248,8 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     public static boolean forgetIDTokensForServer(URL serverURL, TokenStore tokenStore) {
         OpenIDConnectAuthorizer authorizer = new OpenIDConnectAuthorizer(null, tokenStore);
         authorizer.setRemoteURL(serverURL);
+        // Deliberately don't set auth.localUUID. This will leave kSecAttrAccount unset in the
+        // dictionary passed to SecItemDelete, deleting keychain items for all accounts (databases).
         return authorizer.deleteTokens();
     }
 
@@ -260,7 +262,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
             return false;
 
         try {
-            return parseTokens(tokenStore.loadTokens(remoteURL));
+            return parseTokens(tokenStore.loadTokens(getRemoteURL(), getLocalUUID()));
         } catch (Exception e) {
             Log.w(TAG, "Error in loadTokens()", e);
             return false;
@@ -270,13 +272,13 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
     /*package*/  boolean saveTokens(Map<String, String> tokens) {
         if (tokenStore == null)
             return false;
-        return tokenStore.saveTokens(remoteURL, tokens);
+        return tokenStore.saveTokens(getRemoteURL(), getLocalUUID(), tokens);
     }
 
     /*package*/  boolean deleteTokens() {
         if (tokenStore == null)
             return false;
-        return tokenStore.deleteTokens(remoteURL);
+        return tokenStore.deleteTokens(getRemoteURL(), getLocalUUID());
     }
 
     private boolean parseTokens(Map<String, String> tokens) {
@@ -301,7 +303,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
 
     private void continueAsyncLoginWithURL(URL loginURL, final ContinuationBlock block) {
         Log.v(TAG, "OpenIDConnectAuthorizer: Calling app login callback block...");
-        final URL remoteURL = this.remoteURL;
+        final URL remoteURL = this.getRemoteURL();
         final URL redirectBaseURL = extractRedirectURL(loginURL);
         if (loginCallback != null)
             loginCallback.callback(loginURL, redirectBaseURL, new OIDCLoginContinuation() {
@@ -312,8 +314,8 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                                 "<%s>", url.toExternalForm());
                         // Verify that the authURL matches the site:
                         if (remoteURL == null ||
-                            url.getHost().compareToIgnoreCase(remoteURL.getHost()) != 0 ||
-                            url.getPort() != remoteURL.getPort()) {
+                                url.getHost().compareToIgnoreCase(remoteURL.getHost()) != 0 ||
+                                url.getPort() != remoteURL.getPort()) {
                             Log.w(TAG, "OpenIDConnectAuthorizer: App-provided authURL <%s> " +
                                     "doesn't match server URL; ignoring it", url.toExternalForm());
                             url = null;

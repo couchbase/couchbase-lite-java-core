@@ -23,7 +23,7 @@ public interface TokenStore {
      *
      * @return tokens
      */
-    Map<String, String> loadTokens(URL remoteURL) throws Exception;
+    Map<String, String> loadTokens(URL remoteURL, String localUUID) throws Exception;
 
     /**
      * Save tokens into the token store
@@ -31,12 +31,12 @@ public interface TokenStore {
      * @param tokens to be saved
      * @return true - success, false - failure
      */
-    boolean saveTokens(URL remoteURL, Map<String, String> tokens);
+    boolean saveTokens(URL remoteURL, String localUUID, Map<String, String> tokens);
 
     /**
      * Delete tokens from the token store
      *
      * @return true - success, false - failure
      */
-    boolean deleteTokens(URL remoteURL);
+    boolean deleteTokens(URL remoteURL, String localUUID);
 }
