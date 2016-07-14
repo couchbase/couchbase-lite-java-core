@@ -36,6 +36,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
     ////////////////////////////////////////////////////////////
     private Map<String, Object> attachments;
     private Database db;
+    private boolean syncGateway;
 
     ////////////////////////////////////////////////////////////
     // Constructors
@@ -45,6 +46,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
             HttpClientFactory clientFactory,
             String method,
             URL url,
+            boolean syncGateway,
             boolean cancelable,
             Map<String, ?> body,
             Map<String, Object> attachments,
@@ -54,6 +56,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
         super(clientFactory, method, url, cancelable, body, requestHeaders, onCompletion);
         this.attachments = attachments;
         this.db = db;
+        this.syncGateway = syncGateway;
     }
 
     ////////////////////////////////////////////////////////////
@@ -148,8 +151,13 @@ public class RemoteMultipartRequest extends RemoteRequest {
                 if (contentEncoding != null)
                     builder.add("Content-Encoding", contentEncoding);
 
+                // check content-length which is stored in attachments table.
+                long declaredLength = 0;
+                if(attachment.containsKey("length"))
+                    declaredLength = ((Integer)attachment.get("length")).longValue();
+
                 MediaType type = MediaType.parse(contentType);
-                RequestBody body = BlobRequestBody.create(type, blobStore, blobKey);
+                RequestBody body = BlobRequestBody.create(type, blobStore, blobKey, declaredLength, syncGateway);
                 multipartBodyBuilder.addPart(builder.build(), body);
             }
         }

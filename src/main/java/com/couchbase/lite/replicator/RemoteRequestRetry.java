@@ -84,6 +84,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
     private Throwable requestThrowable;
     private BlockingQueue<Future> pendingRequests;
     Map<Future, CancellableRunnable> runnables = new HashMap<Future, CancellableRunnable>();
+    private boolean syncGateway = true;
     private boolean cancelable = true;
     // if true, we wont log any 404 errors (useful when getting remote checkpoint doc)
     private boolean dontLog404;
@@ -103,6 +104,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                               HttpClientFactory clientFactory,
                               String method,
                               URL url,
+                              boolean syncGateway,
                               boolean cancelable,
                               Map<String, Object> body,
                               Map<String, Object> attachments,
@@ -114,6 +116,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
         this.clientFactory = clientFactory;
         this.method = method;
         this.url = url;
+        this.syncGateway = syncGateway;
         this.cancelable = cancelable;
         this.body = body;
         this.attachments = attachments;
@@ -247,6 +250,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                         clientFactory,
                         method,
                         url,
+                        syncGateway,
                         cancelable,
                         body,
                         attachments,

@@ -480,43 +480,6 @@ public class BlobStore {
         return null;
     }
 
-    /*
-    NO Usages: Should be removed:
-    public boolean storeBlobStream(InputStream inputStream, BlobKey outKey) {
-        File tmp = null;
-        try {
-            tmp = File.createTempFile(TMP_FILE_PREFIX, TMP_FILE_EXTENSION, new File(path));
-            FileOutputStream fos = new FileOutputStream(tmp);
-            byte[] buffer = new byte[65536];
-            int lenRead = inputStream.read(buffer);
-            while (lenRead > 0) {
-                fos.write(buffer, 0, lenRead);
-                lenRead = inputStream.read(buffer);
-            }
-            inputStream.close();
-            fos.close();
-        } catch (IOException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error writing blob to tmp file", e);
-            return false;
-        }
-
-        BlobKey newKey = keyForBlobFromFile(tmp);
-        outKey.setBytes(newKey.getBytes());
-        String path = getRawPathForKey(outKey);
-        File file = new File(path);
-
-        if (file.canRead()) {
-            // object with this hash already exists, we should delete tmp file and return true
-            tmp.delete();
-            return true;
-        } else {
-            // does not exist, we should rename tmp file to this name
-            tmp.renameTo(file);
-        }
-        return true;
-    }
-    */
-
     public boolean storeBlob(byte[] data, BlobKey outKey) {
         BlobKey newKey = keyForBlob(data);
         outKey.setBytes(newKey.getBytes());
@@ -681,5 +644,9 @@ public class BlobStore {
 
     public SymmetricKey getEncryptionKey() {
         return encryptionKey;
+    }
+
+    public boolean isEncrypted() {
+        return encryptionKey != null;
     }
 }

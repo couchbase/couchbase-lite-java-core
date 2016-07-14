@@ -82,6 +82,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     public static final String CHANNELS_QUERY_PARAM = "channels";
     public static final int EXECUTOR_THREAD_POOL_SIZE = 5;
     public static final int MIN_EXECUTOR_THREAD_POOL_SIZE = 2;
+    public static final String SYNC_GATEWAY_PREFIX = "Couchbase Sync Gateway/";
 
     private static int lastSessionID = 0;
     public static int RETRY_DELAY_SECONDS = 60; // #define kRetryDelay 60.0 in CBL_Replicator.m
@@ -677,6 +678,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 clientFactory,
                 method,
                 url,
+                serverIsSyncGateway(),
                 cancelable,
                 body,
                 null,
@@ -723,6 +725,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 clientFactory,
                 method,
                 url,
+                serverIsSyncGateway(),
                 true,
                 body,
                 attachments,
@@ -753,6 +756,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     clientFactory,
                     method,
                     url,
+                    serverIsSyncGateway(),
                     true,
                     body,
                     null,
@@ -1521,14 +1525,18 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     }
 
     @InterfaceAudience.Private
+    protected boolean serverIsSyncGateway() {
+        return serverType == null || !serverType.startsWith(SYNC_GATEWAY_PREFIX) ? false : true;
+    }
+
+    @InterfaceAudience.Private
     protected static boolean serverIsSyncGatewayVersion(String serverName, String minVersion) {
-        String prefix = "Couchbase Sync Gateway/";
         if (serverName == null) {
             return false;
         } else {
-            if (serverName.startsWith(prefix)) {
-                String versionString = serverName.substring(prefix.length());
-                // NOTE: If version number is higher than 10.xx, this comprison does not work eg. "10.0" < "2.0"
+            if (serverName.startsWith(SYNC_GATEWAY_PREFIX)) {
+                String versionString = serverName.substring(SYNC_GATEWAY_PREFIX.length());
+                // NOTE: If version number is higher than 10.xx, this comparison does not work eg. "10.0" < "2.0"
                 return versionString.compareTo(minVersion) >= 0;
             }
         }
