@@ -115,6 +115,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private boolean waiting = false;
     private URL source = null;
     private Timer timer = null; // timer for heartbeat
+    private boolean dontOverwriteBody = false;
 
     private final Object databaseChangesLongpollLock = new Object();
 
@@ -633,8 +634,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             if (status.isSuccessful() &&
                 connection.getResponseBody() == null &&
-                connection.getResponseInputStream() == null &&
-                connection.getHeaderField("Content-Type") == null) {
+                connection.getHeaderField("Content-Type") == null &&
+                dontOverwriteBody == false) {
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 
@@ -2052,6 +2053,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.getResHeader().add("Content-Encoding", "gzip");
             }
 
+            dontOverwriteBody = true;
             connection.setResponseInputStream(attachment.getContentInputStream());
             return new Status(Status.OK);
 
