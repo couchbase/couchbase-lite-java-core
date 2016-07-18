@@ -751,7 +751,7 @@ public class Replication
      * replication's CBLAuthenticator. Also removes session cookies from the cookie store.
      */
     @InterfaceAudience.Public
-    public boolean removeStoredCredentials() {
+    public boolean clearAuthenticationStores() {
         if (getAuthenticator() != null) {
             if (!(getAuthenticator() instanceof Authorizer) ||
                     !((Authorizer) getAuthenticator()).removeStoredCredentials())
