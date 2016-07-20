@@ -246,11 +246,12 @@ public final class SQLiteDatabase extends SQLiteClosable {
         SQLiteNativeLibrary.load();
     }
 
-    private SQLiteDatabase(String path, int openFlags, CursorFactory cursorFactory,
-            DatabaseErrorHandler errorHandler, com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener connectionListener) {
+    private SQLiteDatabase(String path, int openFlags, int walConnectionPoolSize,
+                           CursorFactory cursorFactory,
+                           DatabaseErrorHandler errorHandler, com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener connectionListener) {
         mCursorFactory = cursorFactory;
         mErrorHandler = errorHandler;
-        mConfigurationLocked = new com.couchbase.lite.internal.database.sqlite.SQLiteDatabaseConfiguration(path, openFlags);
+        mConfigurationLocked = new com.couchbase.lite.internal.database.sqlite.SQLiteDatabaseConfiguration(path, openFlags, walConnectionPoolSize);
         mConnectionListener = connectionListener;
     }
 
@@ -667,8 +668,8 @@ public final class SQLiteDatabase extends SQLiteClosable {
      * @throws com.couchbase.lite.internal.database.sqlite.exception.SQLiteException if the database cannot be opened
      */
     public static SQLiteDatabase openDatabase(String path, CursorFactory factory, int flags,
-            DatabaseErrorHandler errorHandler) {
-        return openDatabase(path, factory, flags, errorHandler, null);
+                                              DatabaseErrorHandler errorHandler) {
+        return openDatabase(path, factory, flags, 0, errorHandler, null);
     }
 
     /**
@@ -682,14 +683,18 @@ public final class SQLiteDatabase extends SQLiteClosable {
      * @param factory an optional factory class that is called to instantiate a
      *            cursor when query is called, or null for default
      * @param flags to control database access mode
+     * @param walConnectionPoolSize maximum connection pool size
      * @param errorHandler the {@link DatabaseErrorHandler} obj to be used to handle corruption
      * when sqlite reports database corruption
      * @return the newly opened database
      * @throws com.couchbase.lite.internal.database.sqlite.exception.SQLiteException if the database cannot be opened
      */
-    public static SQLiteDatabase openDatabase(String path, CursorFactory factory, int flags,
-            DatabaseErrorHandler errorHandler, com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener connectionListener) {
-        SQLiteDatabase db = new SQLiteDatabase(path, flags, factory, errorHandler, connectionListener);
+    public static SQLiteDatabase openDatabase(
+            String path, CursorFactory factory, int flags,
+            int walConnectionPoolSize,
+            DatabaseErrorHandler errorHandler,
+            com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener connectionListener) {
+        SQLiteDatabase db = new SQLiteDatabase(path, flags, walConnectionPoolSize, factory, errorHandler, connectionListener);
         db.open();
         return db;
     }

@@ -22,8 +22,8 @@
 package com.couchbase.lite.internal.database.sqlite;
 
 import com.couchbase.lite.internal.database.CancellationSignal;
-import com.couchbase.lite.internal.database.log.DLog;
 import com.couchbase.lite.internal.database.OperationCanceledException;
+import com.couchbase.lite.internal.database.log.DLog;
 import com.couchbase.lite.internal.database.util.PrefixPrinter;
 import com.couchbase.lite.internal.database.util.Printer;
 
@@ -152,7 +152,7 @@ public final class SQLiteConnectionPool implements Closeable {
                                  com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener connectionListener) {
         mConfiguration = new com.couchbase.lite.internal.database.sqlite.SQLiteDatabaseConfiguration(configuration);
         mConnectionListener = connectionListener;
-        setMaxConnectionPoolSizeLocked();
+        setMaxConnectionPoolSizeLocked(configuration.walConnectionPoolSize);
     }
 
     @Override
@@ -309,11 +309,11 @@ public final class SQLiteConnectionPool implements Closeable {
 
                 mAvailablePrimaryConnection = newPrimaryConnection;
                 mConfiguration.updateParametersFrom(configuration);
-                setMaxConnectionPoolSizeLocked();
+                setMaxConnectionPoolSizeLocked(configuration.walConnectionPoolSize);
             } else {
                 // Reconfigure the database connections in place.
                 mConfiguration.updateParametersFrom(configuration);
-                setMaxConnectionPoolSizeLocked();
+                setMaxConnectionPoolSizeLocked(configuration.walConnectionPoolSize);
 
                 closeExcessConnectionsAndLogExceptionsLocked();
                 reconfigureAllConnectionsLocked();
@@ -931,9 +931,12 @@ public final class SQLiteConnectionPool implements Closeable {
         return (connectionFlags & CONNECTION_FLAG_INTERACTIVE) != 0 ? 1 : 0;
     }
 
-    private void setMaxConnectionPoolSizeLocked() {
+    private void setMaxConnectionPoolSizeLocked(int walConnectionPoolSize) {
         if ((mConfiguration.openFlags & com.couchbase.lite.internal.database.sqlite.SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING) != 0) {
-            mMaxConnectionPoolSize = com.couchbase.lite.internal.database.sqlite.SQLiteGlobal.getWALConnectionPoolSize();
+            if (walConnectionPoolSize > 0)
+                mMaxConnectionPoolSize = walConnectionPoolSize;
+            else
+                mMaxConnectionPoolSize = com.couchbase.lite.internal.database.sqlite.SQLiteGlobal.getWALConnectionPoolSize();
         } else {
             // TODO: We don't actually need to restrict the connection pool size to 1
             // for non-WAL databases.  There might be reasons to use connection pooling

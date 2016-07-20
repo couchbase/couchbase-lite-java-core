@@ -44,6 +44,14 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
 
     abstract protected String getICUDatabasePath();
 
+    /**
+     * Gets the connection pool size when in WAL mode.
+     *
+     * Maximum number of database connections opened and managed by framework layer
+     * to handle queries on each database when using Write-Ahead Logging.
+     */
+    abstract protected int getWALConnectionPoolSize();
+
     @Override
     public boolean open(String path, SymmetricKey encryptionKey) throws SQLException {
         if(database != null && database.isOpen())
@@ -61,6 +69,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
             SQLiteDatabase.setDatabasePlatformSupport(getDatabasePlatformSupport());
             database = SQLiteDatabase.openDatabase(path, null,
                     SQLiteDatabase.CREATE_IF_NECESSARY | SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING,
+                    getWALConnectionPoolSize(),
                     null, new ConnectionListener());
             Log.v(Log.TAG_DATABASE, "%s: Opened Android sqlite db", this);
         } catch(SQLiteDatabaseCorruptException e) {
