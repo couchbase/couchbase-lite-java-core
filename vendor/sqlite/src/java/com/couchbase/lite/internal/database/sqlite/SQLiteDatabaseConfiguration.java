@@ -88,13 +88,20 @@ public final class SQLiteDatabaseConfiguration {
     public boolean foreignKeyConstraintsEnabled;
 
     /**
+     * Maximum number of database connections opened and managed by framework layer
+     * to handle queries on each database when using Write-Ahead Logging.
+     */
+    public int walConnectionPoolSize = 0;
+
+    /**
      * Creates a database configuration with the required parameters for opening a
      * database and default values for all other parameters.
      *
      * @param path The database path.
      * @param openFlags Open flags for the database, such as {@link SQLiteDatabase#OPEN_READWRITE}.
+     * @param walConnectionPoolSize
      */
-    public SQLiteDatabaseConfiguration(String path, int openFlags) {
+    public SQLiteDatabaseConfiguration(String path, int openFlags, int walConnectionPoolSize) {
         if (path == null) {
             throw new IllegalArgumentException("path must not be null.");
         }
@@ -102,6 +109,7 @@ public final class SQLiteDatabaseConfiguration {
         this.path = path;
         label = stripPathForLogs(path);
         this.openFlags = openFlags;
+        this.walConnectionPoolSize = walConnectionPoolSize;
 
         // Set default values for optional parameters.
         maxSqlCacheSize = 25;
