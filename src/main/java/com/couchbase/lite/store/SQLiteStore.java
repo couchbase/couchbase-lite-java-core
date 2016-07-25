@@ -31,6 +31,7 @@ import com.couchbase.lite.View;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.internal.database.ContentValues;
+import com.couchbase.lite.internal.database.sqlite.exception.SQLiteDatabaseLockedException;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLException;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
@@ -62,6 +63,9 @@ public class SQLiteStore implements Store, EncryptableStore {
     public String TAG = Log.TAG_DATABASE;
 
     public static String kDBFilename = "db.sqlite3";
+
+    private static final int kTransactionMaxRetries = 10;
+    private static final int kTransactionRetryDelay = 50; //50ms
 
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     private static final int DEFAULT_MAX_REVS = Integer.MAX_VALUE;
@@ -2298,7 +2302,26 @@ public class SQLiteStore implements Store, EncryptableStore {
         try {
             // Outer (level 0)  transaction. Use SQLiteDatabase.beginTransaction()
             if (tLevel == 0) {
-                storageEngine.beginTransaction();
+                boolean retry = true;
+                int retries = 0;
+                do {
+                    try {
+                        storageEngine.beginTransaction();
+                        retry = false;
+                    } catch (SQLiteDatabaseLockedException lockedException) {
+                        if (++retries > kTransactionMaxRetries) {
+                            Log.e(TAG, "Db busy, too many retries, giving up");
+                            throw lockedException;
+                        }
+                        Log.i(TAG, "Db busy, retrying transaction (#%d)...", retries);
+                        try {
+                            // sleep 50ms to wait db will be unlocked
+                            Thread.sleep(kTransactionRetryDelay);
+                        } catch (InterruptedException e) {
+                        }
+                    }
+                    // other exceptions should be caught outer try-catch block
+                } while (retry);
             }
             // Inner (level 1 or higher) transaction. Use SQLite's SAVEPOINT
             else {
