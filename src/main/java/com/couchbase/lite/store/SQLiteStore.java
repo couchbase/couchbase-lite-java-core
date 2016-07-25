@@ -64,7 +64,6 @@ public class SQLiteStore implements Store, EncryptableStore {
 
     public static String kDBFilename = "db.sqlite3";
 
-    private static final int kSQLiteBusyTimeout = 5000; // 5sec - Currently not used - default: 2.5sec
     private static final int kTransactionMaxRetries = 10;
     private static final int kTransactionRetryDelay = 50; //50ms
 
