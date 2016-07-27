@@ -2390,47 +2390,49 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
         }
 
+        long lastSequenceIndexed;
+
         // according to functional test, view updateIndex() and query should be in sequence.
         synchronized (view) {
             // updateIndex() uses transaction internally, not necessary to apply syncrhonized.
             view.updateIndex();
-
-            long lastSequenceIndexed = view.getLastSequenceIndexed();
-
-            QueryOptions options = new QueryOptions();
-            //if the view contains a reduce block, it should default to reduce=true
-            if (view.getReduce() != null)
-                options.setReduce(true);
-            if (!getQueryOptions(options))
-                return new Status(Status.BAD_REQUEST);
-            if (keys != null)
-                options.setKeys(keys);
-
-            // Check for conditional GET and set response Etag header:
-            if (keys == null) {
-                long eTag = options.isIncludeDocs() ? db.getLastSequenceNumber() : lastSequenceIndexed;
-                if (cacheWithEtag(String.format(Locale.ENGLISH, "%d", eTag))) {
-                    return new Status(Status.NOT_MODIFIED);
-                }
-            }
-
-            // convert from QueryRow -> Map
-            List<QueryRow> queryRows = view.query(options);
-            List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
-            for (QueryRow queryRow : queryRows) {
-                rows.add(queryRow.asJSONDictionary());
-            }
-
-            Map<String, Object> responseBody = new HashMap<String, Object>();
-            responseBody.put("rows", rows);
-            responseBody.put("total_rows", view.getCurrentTotalRows());
-            responseBody.put("offset", options.getSkip());
-            if (options.isUpdateSeq()) {
-                responseBody.put("update_seq", lastSequenceIndexed);
-            }
-            connection.setResponseBody(new Body(responseBody));
-            return new Status(Status.OK);
+            lastSequenceIndexed = view.getLastSequenceIndexed();
         }
+
+        QueryOptions options = new QueryOptions();
+        //if the view contains a reduce block, it should default to reduce=true
+        if (view.getReduce() != null)
+            options.setReduce(true);
+        if (!getQueryOptions(options))
+            return new Status(Status.BAD_REQUEST);
+        if (keys != null)
+            options.setKeys(keys);
+
+        // Check for conditional GET and set response Etag header:
+        if (keys == null) {
+            long eTag = options.isIncludeDocs() ? db.getLastSequenceNumber() : lastSequenceIndexed;
+            if (cacheWithEtag(String.format(Locale.ENGLISH, "%d", eTag))) {
+                return new Status(Status.NOT_MODIFIED);
+            }
+        }
+
+        // convert from QueryRow -> Map
+        List<QueryRow> queryRows = view.query(options);
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        for (QueryRow queryRow : queryRows) {
+            rows.add(queryRow.asJSONDictionary());
+        }
+
+        Map<String, Object> responseBody = new HashMap<String, Object>();
+        responseBody.put("rows", rows);
+        responseBody.put("total_rows", view.getCurrentTotalRows());
+        responseBody.put("offset", options.getSkip());
+        if (options.isUpdateSeq()) {
+            responseBody.put("update_seq", lastSequenceIndexed);
+        }
+        connection.setResponseBody(new Body(responseBody));
+        return new Status(Status.OK);
+
     }
 
     public Status do_GET_DesignDocument(Database _db, String designDocID, String viewName)
