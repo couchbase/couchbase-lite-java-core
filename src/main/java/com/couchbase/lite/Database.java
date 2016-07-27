@@ -126,6 +126,7 @@ public class Database implements StoreDelegate {
     private final Object lockPostingChangeNotifications = new Object();
     private final long startTime;
     private Timer purgeTimer;
+    private final Object lockViews = new Object();
 
     /**
      * Each database can have an associated PersistentCookieStore,
@@ -435,15 +436,17 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public View getExistingView(String name) {
-        View view = views != null ? views.get(name) : null;
-        if (view != null)
-            return view;
+        synchronized (lockViews) {
+            View view = views != null ? views.get(name) : null;
+            if (view != null)
+                return view;
 
-        try {
-            return registerView(new View(this, name, false));
-        } catch (CouchbaseLiteException e) {
-            // View is not exist.
-            return null;
+            try {
+                return registerView(new View(this, name, false));
+            } catch (CouchbaseLiteException e) {
+                // View is not exist.
+                return null;
+            }
         }
     }
 
@@ -500,18 +503,20 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public View getView(String name) {
-        View view = null;
-        if (views != null) {
-            view = views.get(name);
-        }
-        if (view != null) {
-            return view;
-        }
-        try {
-            return registerView(new View(this, name, true));
-        } catch (CouchbaseLiteException e) {
-            Log.w(TAG, "Error in registerView: error=" + e.getLocalizedMessage(), e);
-            return null;
+        synchronized (lockViews) {
+            View view = null;
+            if (views != null) {
+                view = views.get(name);
+            }
+            if (view != null) {
+                return view;
+            }
+            try {
+                return registerView(new View(this, name, true));
+            } catch (CouchbaseLiteException e) {
+                Log.w(TAG, "Error in registerView: error=" + e.getLocalizedMessage(), e);
+                return null;
+            }
         }
     }
 
@@ -688,7 +693,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public String toString() {
-        return this.getClass().getName() + '[' + path + ']';
+        return this.getClass().getName() + "@" + Integer.toHexString(hashCode()) + '[' + path + ']';
     }
 
     ///////////////////////////////////////////////////////////////////////////

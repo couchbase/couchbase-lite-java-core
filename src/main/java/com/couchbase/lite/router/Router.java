@@ -2363,46 +2363,50 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys)
             throws CouchbaseLiteException {
-        String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
-        // getExistingView is not thread-safe, but not access to db. In the database, it should protect instance variable
-        View view = db.getExistingView(tdViewName);
-        if (view == null || view.getMap() == null) {
-            // No TouchDB view is defined, or it hasn't had a map block assigned;
-            // see if there's a CouchDB view definition we can compile:
-            RevisionInternal rev = db.getDocument(String.format(Locale.ENGLISH, "_design/%s", designDoc), null, true);
-            if (rev == null) {
-                return new Status(Status.NOT_FOUND);
+
+        View view;
+
+        // make sure only one view instance per same view.
+        synchronized (db) {
+            String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
+            view = db.getExistingView(tdViewName);
+            if (view == null || view.getMap() == null) {
+                // No TouchDB view is defined, or it hasn't had a map block assigned;
+                // see if there's a CouchDB view definition we can compile:
+                RevisionInternal rev = db.getDocument(String.format(Locale.ENGLISH, "_design/%s", designDoc), null, true);
+                if (rev == null) {
+                    return new Status(Status.NOT_FOUND);
+                }
+                Map<String, Object> views = (Map<String, Object>) rev.getProperties().get("views");
+                Map<String, Object> viewProps = (Map<String, Object>) views.get(viewName);
+                if (viewProps == null) {
+                    return new Status(Status.NOT_FOUND);
+                }
+                // If there is a CouchDB view, see if it can be compiled from source:
+                view = compileView(tdViewName, viewProps);
+                if (view == null) {
+                    return new Status(Status.INTERNAL_SERVER_ERROR);
+                }
             }
-            Map<String, Object> views = (Map<String, Object>) rev.getProperties().get("views");
-            Map<String, Object> viewProps = (Map<String, Object>) views.get(viewName);
-            if (viewProps == null) {
-                return new Status(Status.NOT_FOUND);
-            }
-            // If there is a CouchDB view, see if it can be compiled from source:
-            view = compileView(tdViewName, viewProps);
-            if (view == null) {
-                return new Status(Status.INTERNAL_SERVER_ERROR);
-            }
+        }
+
+        long lastSequenceIndexed;
+
+        // according to functional test, view updateIndex() and query should be in sequence.
+        synchronized (view) {
+            // updateIndex() uses transaction internally, not necessary to apply syncrhonized.
+            view.updateIndex();
+            lastSequenceIndexed = view.getLastSequenceIndexed();
         }
 
         QueryOptions options = new QueryOptions();
-
         //if the view contains a reduce block, it should default to reduce=true
-        if (view.getReduce() != null) {
+        if (view.getReduce() != null)
             options.setReduce(true);
-        }
-
-        if (!getQueryOptions(options)) {
+        if (!getQueryOptions(options))
             return new Status(Status.BAD_REQUEST);
-        }
-        if (keys != null) {
+        if (keys != null)
             options.setKeys(keys);
-        }
-
-        // updateIndex() uses transaction internally, not necessary to apply syncrhonized.
-        view.updateIndex();
-
-        long lastSequenceIndexed = view.getLastSequenceIndexed();
 
         // Check for conditional GET and set response Etag header:
         if (keys == null) {
@@ -2428,6 +2432,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
         connection.setResponseBody(new Body(responseBody));
         return new Status(Status.OK);
+
     }
 
     public Status do_GET_DesignDocument(Database _db, String designDocID, String viewName)
