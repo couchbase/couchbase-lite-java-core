@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/couchbase/couchbase-lite-java-core.png?label=ready&title=Ready)](https://waffle.io/couchbase/couchbase-lite-java-core)
 # What is it?
 
 [![Gitter](https://badges.gitter.im/couchbase/couchbase-lite-java-core.svg)](https://gitter.im/couchbase/couchbase-lite-java-core?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
