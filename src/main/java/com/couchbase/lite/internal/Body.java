@@ -152,4 +152,8 @@ public class Body {
         this.object = null;
         this.json = null;
     }
+
+    public boolean hasContent() {
+        return this.object != null && this.json != null;
+    }
 }
