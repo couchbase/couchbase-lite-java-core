@@ -696,6 +696,7 @@ public final class SQLiteDatabase extends SQLiteClosable {
             com.couchbase.lite.internal.database.sqlite.SQLiteConnectionListener connectionListener) {
         SQLiteDatabase db = new SQLiteDatabase(path, flags, walConnectionPoolSize, factory, errorHandler, connectionListener);
         db.open();
+        db.setEncoding();
         return db;
     }
 
@@ -837,6 +838,14 @@ public final class SQLiteDatabase extends SQLiteClosable {
         // This is a magic string with special meaning for SQLite.
         return openDatabase(com.couchbase.lite.internal.database.sqlite.SQLiteDatabaseConfiguration.MEMORY_DB_PATH,
                 factory, CREATE_IF_NECESSARY);
+    }
+
+    /**
+     * Sets the database encoding.
+     *
+     */
+    public void setEncoding() {
+        execSQL("PRAGMA encoding = \"UTF-8\"");
     }
 
     /**
