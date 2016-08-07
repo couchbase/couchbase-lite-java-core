@@ -211,6 +211,8 @@ public class AttachmentInternal {
         return new ByteArrayInputStream(getContent());
     }
 
+    public InputStream getEncodedContentInputStream() { return new ByteArrayInputStream(getEncodedContent()); }
+
     public URL getContentURL() throws MalformedURLException {
         String path = database.getAttachmentStore().getBlobPathForKey(blobKey);
         return path != null ? new File(path).toURI().toURL() : null;
