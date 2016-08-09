@@ -104,7 +104,6 @@ public class ChangeTracker implements Runnable {
         this.client = client;
         this.requestHeaders = new HashMap<String, Object>();
         this.heartBeatSeconds = Replication.DEFAULT_HEARTBEAT;
-        this.limit = 50;
         this.usePOST = true;
     }
 
