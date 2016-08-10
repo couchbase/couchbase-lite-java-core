@@ -1329,12 +1329,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                             rev = update(db, docID, docBody, false, allOrNothing, outStatus);
                             status.setCode(outStatus.getCode());
                         }
+
                         Map<String, Object> result = null;
                         if (status.isSuccessful()) {
-                            result = new HashMap<String, Object>();
-                            result.put("ok", true);
-                            result.put("id", docID);
-                            if (rev != null) {
+                            // Note: if new_edits=false, will not include the entries for
+                            // any of the successful revisions.
+                            if (!noNewEdits) {
+                                result = new HashMap<String, Object>();
+                                result.put("ok", true);
+                                result.put("id", rev.getDocID());
                                 result.put("rev", rev.getRevID());
                             }
                         } else if (allOrNothing) {
