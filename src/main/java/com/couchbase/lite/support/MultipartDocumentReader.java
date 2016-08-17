@@ -132,10 +132,10 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
             Map<String, Object> attachment = (Map<String, Object>) attachments.get(attachmentName);
             int length = 0;
             if (attachment.containsKey("length")) {
-                length = ((Integer) attachment.get("length")).intValue();
+                length = ((Number)attachment.get("length")).intValue();
             }
             if (attachment.containsKey("encoded_length")) {
-                length = ((Integer) attachment.get("encoded_length")).intValue();
+                length = ((Number)attachment.get("encoded_length")).intValue();
             }
             if (attachment.containsKey("follows") &&
                     ((Boolean) attachment.get("follows")).booleanValue() == true) {

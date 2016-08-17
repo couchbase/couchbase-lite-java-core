@@ -154,7 +154,7 @@ public class RemoteMultipartRequest extends RemoteRequest {
                 // check content-length which is stored in attachments table.
                 long declaredLength = 0;
                 if(attachment.containsKey("length"))
-                    declaredLength = ((Integer)attachment.get("length")).longValue();
+                    declaredLength = ((Number)attachment.get("length")).longValue();
 
                 MediaType type = MediaType.parse(contentType);
                 RequestBody body = BlobRequestBody.create(type, blobStore, blobKey, declaredLength, syncGateway);
