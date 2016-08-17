@@ -938,4 +938,19 @@ public class Replication
     public String toString() {
         return "Replication{" + remote + ", " + (isPull() ? "pull" : "push") + '}';
     }
+
+    @Override
+    public int hashCode() {
+        return replicationInternal.remoteCheckpointDocID().hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof Replication) {
+            Replication replication = (Replication)obj;
+            return this.replicationInternal.remoteCheckpointDocID().equals(
+                    replication.replicationInternal.remoteCheckpointDocID());
+        }
+        return false;
+    }
 }
