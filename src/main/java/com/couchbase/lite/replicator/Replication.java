@@ -470,8 +470,18 @@ public class Replication
 
     public Set<String> getPendingDocumentIDs() {
         synchronized (lockPendingDocIDs) {
-            if (isPull() || (isRunning() && pendingDocIDs != null))
-                return pendingDocIDs;
+
+            /** 
+             * Bug causing code                
+             * Expected Functionality:
+             *      While offline, I expect the return value of this method to reflect
+             *      the number of pendingDocIDs inline with database mutations 
+             * Actual Behavior:
+             *      The commented out lines below, output a cached value for pendingDocIDs 
+             *
+             * if (isPull() || (isRunning() && pendingDocIDs != null))
+             *   return pendingDocIDs;
+            */
 
             final CountDownLatch latch = new CountDownLatch(1);
             db.getManager().getWorkExecutor().submit(new Runnable() {
