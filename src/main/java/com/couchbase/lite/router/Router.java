@@ -51,6 +51,7 @@ import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 
 import java.io.ByteArrayInputStream;
@@ -80,10 +81,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class Router implements Database.ChangeListener, Database.DatabaseListener {
-
     public static final String TAG = Log.TAG_ROUTER;
 
-    private static final long MIN_HEARTBEAT = 5000; // 5 second
+    private static final long MIN_CHANGES_HEARTBEAT = 5000;    // 5 seconds
+    private static final long DEFAULT_CHANGES_TIMEOUT = 10000; // 60 seconds
 
     private static final String CONTENT_TYPE_JSON = "application/json";
 
@@ -109,15 +110,27 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private boolean changesIncludesConflicts = false;
     private RouterCallbackBlock callbackBlock;
     private boolean responseSent = false;
+    private boolean waiting = false;
+    private URL source = null;
+
+    // _changes request:
     private ReplicationFilter changesFilter;
     Map<String, Object> changesFilterParams = null;
     private boolean longpoll = false;
-    private boolean waiting = false;
-    private URL source = null;
-    private Timer timer = null; // timer for heartbeat
-    private boolean dontOverwriteBody = false;
+    private final Object changesLock = new Object();
 
-    private final Object databaseChangesLongpollLock = new Object();
+    // _changes heartbeat:
+    private Timer heartbeatTimer = null;
+
+    // _changes timeout:
+    private Timer timeoutTimer = null;
+    private long timeout = 0;
+    private long lastChangesTimestamp = 0;
+    private boolean isTimeout = false;
+    private long timeoutLastSeqence = 0;
+
+    // Flag for not overwrite the result body:
+    private boolean dontOverwriteBody = false;
 
     public static String getVersionString() {
         return Version.getVersion();
@@ -679,6 +692,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public void stop() {
         stopHeartbeat();
+        stopTimeout();
         callbackBlock = null;
         if (db != null) {
             db.removeChangeListener(this);
@@ -1534,11 +1548,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private Map<String, Object> responseBodyForChanges(List<RevisionInternal> changes, long since) {
         List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
-        for (RevisionInternal rev : changes) {
-            Map<String, Object> changeDict = changesDictForRevision(rev);
-            results.add(changeDict);
-        }
-        if (changes.size() > 0) {
+        if (changes != null && changes.size() > 0) {
+            for (RevisionInternal rev : changes) {
+                Map<String, Object> changeDict = changesDictForRevision(rev);
+                results.add(changeDict);
+            }
             since = changes.get(changes.size() - 1).getSequence();
         }
         Map<String, Object> result = new HashMap<String, Object>();
@@ -1598,12 +1612,84 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 try {
                     os.write(json);
                     os.flush();
-                } catch (Exception e) {
-                    Log.e(TAG, "IOException writing to internal streams", e);
+                } catch (IOException e) {
+                    Log.e(TAG, "Exception writing to internal streams", e);
                 }
             }
         } catch (Exception e) {
             Log.w("Unable to serialize change to JSON", e);
+        }
+    }
+
+    private void sendContinuousChangeLastSequenceAndFinish(long lastSeq) {
+        if (callbackBlock != null) {
+            Map<String, Object> body = new HashMap<String, Object>();
+            body.put("last_seq", lastSeq);
+
+            String bodyString = null;
+            try {
+                bodyString = Manager.getObjectMapper().writeValueAsString(body) + '\n';
+            } catch (JsonProcessingException e) {
+                Log.w("Unable to serialize change to JSON", e);
+                return;
+            }
+
+            OutputStream os = connection.getResponseOutputStream();
+            try {
+                os.write(bodyString.getBytes());
+                os.flush();
+            } catch (IOException e) {
+                Log.e(TAG, "Exception writing to internal streams", e);
+            } finally {
+                try {
+                    if (os != null)
+                        os.close();
+                } catch (IOException e) {
+                    Log.w(TAG, "Failed to close connection: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void sendLongpollChanges(List<RevisionInternal> revs) {
+        sendLongpollChanges(revs, 0);
+    }
+
+    private void sendLongpollChanges(List<RevisionInternal> revs, long since) {
+        // Ensure that the content type is application/json:
+        connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
+        sendResponse();
+
+        OutputStream os = connection.getResponseOutputStream();
+        try {
+            Map<String, Object> body = responseBodyForChanges(revs, since);
+            if (callbackBlock != null) {
+                byte[] data = null;
+                try {
+                    data = Manager.getObjectMapper().writeValueAsBytes(body);
+                } catch (Exception e) {
+                    Log.w(TAG, "Error serializing JSON", e);
+                }
+                os.write(data);
+                os.flush();
+            }
+        } catch (IOException e) {
+            // NOTE: Under multi-threads environment, OutputStream could be already closed
+            // by other thread. Because multiple Database write operations
+            // from multiple threads cause `changed(ChangeEvent)` callbacks
+            // from multiple threads simultaneously because `changed` is fired
+            // at out of transaction after endTransaction(). So this is ignorable error.
+            // So print warning message, and exit from method.
+            // Stacktrace should not be printed, it confuses developer.
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/1043
+            Log.w(TAG, "IOException writing to internal streams: " + e.getMessage());
+        } finally {
+            try {
+                if (os != null)
+                    os.close();
+            } catch (IOException e) {
+                Log.w(TAG, "Failed to close connection: " + e.getMessage());
+            }
         }
     }
 
@@ -1612,77 +1698,55 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
      */
     @Override
     public void changed(Database.ChangeEvent event) {
-        List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
-        List<DocumentChange> changes = event.getChanges();
-        for (DocumentChange change : changes) {
-            RevisionInternal rev = change.getAddedRevision();
-            if (rev == null)
-                continue;
-            String winningRevID = change.getWinningRevisionID();
-            if (!this.changesIncludesConflicts) {
-                if (winningRevID == null)
-                    continue; // // this change doesn't affect the winning rev ID, no need to send it
-                else if (!winningRevID.equals(rev.getRevID())) {
-                    // This rev made a _different_ rev current, so substitute that one.
-                    // We need to emit the current sequence # in the feed, so put it in the rev.
-                    // This isn't correct internally (this is an old rev so it has an older sequence)
-                    // but consumers of the _changes feed don't care about the internal state.
-                    RevisionInternal mRev = db.getDocument(rev.getDocID(), winningRevID, changesIncludesDocs);
-                    mRev.setSequence(rev.getSequence());
-                    rev = mRev;
-                }
-            }
+        synchronized (changesLock) {
+            if (isTimeout)
+                return;
 
-            if (!event.getSource().runFilter(changesFilter, changesFilterParams, rev))
-                continue;
+            lastChangesTimestamp = System.currentTimeMillis();
+
+            // Stop timeout timer:
+            stopTimeout();
+
+            List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
+            List<DocumentChange> changes = event.getChanges();
+            for (DocumentChange change : changes) {
+                RevisionInternal rev = change.getAddedRevision();
+                if (rev == null)
+                    continue;
+                String winningRevID = change.getWinningRevisionID();
+                if (!this.changesIncludesConflicts) {
+                    if (winningRevID == null)
+                        continue; // // this change doesn't affect the winning rev ID, no need to send it
+                    else if (!winningRevID.equals(rev.getRevID())) {
+                        // This rev made a _different_ rev current, so substitute that one.
+                        // We need to emit the current sequence # in the feed, so put it in the rev.
+                        // This isn't correct internally (this is an old rev so it has an older sequence)
+                        // but consumers of the _changes feed don't care about the internal state.
+                        RevisionInternal mRev = db.getDocument(rev.getDocID(), winningRevID, changesIncludesDocs);
+                        mRev.setSequence(rev.getSequence());
+                        rev = mRev;
+                    }
+                }
+
+                if (!event.getSource().runFilter(changesFilter, changesFilterParams, rev))
+                    continue;
+
+                if (longpoll) {
+                    revs.add(rev);
+                } else {
+                    Log.d(TAG, "Router: Sending continuous change chunk");
+                    sendContinuousChange(rev);
+                }
+
+                timeoutLastSeqence = rev.getSequence();
+            }
 
             if (longpoll) {
-                revs.add(rev);
+                if (revs.size() > 0)
+                    sendLongpollChanges(revs);
             } else {
-                Log.i(TAG, "Router: Sending continous change chunk");
-                sendContinuousChange(rev);
-            }
-        }
-
-        if (longpoll && revs.size() > 0) {
-            // in case of /_changes with longpoll, the connection is critical section
-            // when case multiple threads write a doc simultaneously.
-            synchronized (databaseChangesLongpollLock) {
-                Log.i(TAG, "Router: Sending longpoll response: START");
-                sendResponse();
-                OutputStream os = connection.getResponseOutputStream();
-                try {
-                    Map<String, Object> body = responseBodyForChanges(revs, 0);
-                    if (callbackBlock != null) {
-                        byte[] data = null;
-                        try {
-                            data = Manager.getObjectMapper().writeValueAsBytes(body);
-                        } catch (Exception e) {
-                            Log.w(TAG, "Error serializing JSON", e);
-                        }
-                        os.write(data);
-                        os.flush();
-                    }
-                } catch (IOException e) {
-                    // NOTE: Under multi-threads environment, OutputStream could be already closed
-                    // by other thread. Because multiple Database write operations
-                    // from multiple threads cause `changed(ChangeEvent)` callbacks
-                    // from multiple threads simultaneously because `changed` is fired
-                    // at out of transaction after endTransaction(). So this is ignorable error.
-                    // So print warning message, and exit from method.
-                    // Stacktrace should not be printed, it confuses developer.
-                    // https://github.com/couchbase/couchbase-lite-java-core/issues/1043
-                    Log.w(TAG, "IOException writing to internal streams: " + e.getMessage());
-                } finally {
-                    try {
-                        if (os != null) {
-                            os.close();
-                        }
-                    } catch (IOException e) {
-                        Log.w(TAG, "Failed to close connection: " + e.getMessage());
-                    }
-                }
-                Log.i(TAG, "Router: Sending longpoll response: END");
+                // Restart timeout timer for continuous feed request:
+                startTimeout();
             }
         }
     }
@@ -1729,6 +1793,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         options.setLimit(getIntQuery("limit", options.getLimit()));
 
         int since = getIntQuery("since", 0);
+        timeoutLastSeqence = since;
 
         String filterName = getQuery("filter");
         if (filterName != null) {
@@ -1752,15 +1817,29 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         boolean continuous = !longpoll && "continuous".equals(feed);
 
         if (continuous || (longpoll && changes.size() == 0)) {
+            lastChangesTimestamp = System.currentTimeMillis();
             connection.setChunked(true);
             connection.setResponseCode(Status.OK);
-            sendResponse();
             if (continuous) {
+                sendResponse();
                 for (RevisionInternal rev : changes) {
                     sendContinuousChange(rev);
+                    timeoutLastSeqence = rev.getSequence();
                 }
             }
             db.addChangeListener(this);
+
+            //timeout
+            String timeoutParam = getQuery("timeout");
+            if (timeoutParam != null) {
+                try {
+                    timeout = (long) Double.parseDouble(timeoutParam);
+                } catch (Exception e) {
+                    return new Status(Status.BAD_REQUEST);
+                }
+                if (timeout <= 0)
+                    return new Status(Status.BAD_REQUEST);
+            }
 
             // heartbeat
             String heartbeatParam = getQuery("heartbeat");
@@ -1773,10 +1852,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 }
                 if (heartbeat <= 0)
                     return new Status(Status.BAD_REQUEST);
-                else if (heartbeat < MIN_HEARTBEAT)
-                    heartbeat = MIN_HEARTBEAT;
+                else if (heartbeat < MIN_CHANGES_HEARTBEAT)
+                    heartbeat = MIN_CHANGES_HEARTBEAT;
                 startHeartbeat(heartbeat);
+            } else {
+                if (timeout == 0)
+                    timeout = DEFAULT_CHANGES_TIMEOUT;
             }
+
+            startTimeout();
 
             // Don't close connection; more data to come
             return new Status(0);
@@ -1795,15 +1879,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             return;
 
         stopHeartbeat();
-        timer = new Timer();
-        timer.scheduleAtFixedRate(new TimerTask() {
+        heartbeatTimer = new Timer();
+        heartbeatTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                synchronized (databaseChangesLongpollLock) {
+                synchronized (changesLock) {
                     OutputStream os = connection.getResponseOutputStream();
                     if (os != null) {
                         try {
-                            Log.v(TAG, "[%s] Sent heart beat!", this);
+                            Log.d(TAG, "[%s] Changes heartbeat sent!", this);
                             os.write("\r\n".getBytes());
                             os.flush();
                         } catch (IOException e) {
@@ -1818,10 +1902,42 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     private void stopHeartbeat() {
-        if (timer != null) {
-            timer.cancel();
-            timer.purge();
-            timer = null;
+        if (heartbeatTimer != null) {
+            heartbeatTimer.cancel();
+            heartbeatTimer.purge();
+        }
+    }
+
+    private void startTimeout() {
+        if (timeout <= 0)
+            return;
+
+        stopTimeout();
+        timeoutTimer = new Timer();
+        timeoutTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                synchronized (changesLock) {
+                    if (System.currentTimeMillis() - lastChangesTimestamp >= timeout) {
+                        Log.d(TAG, "Changes feed timeout");
+                        isTimeout = true;
+                        OutputStream os = connection.getResponseOutputStream();
+                        if (os != null) {
+                            if (longpoll)
+                                sendLongpollChanges(null, timeoutLastSeqence);
+                            else
+                                sendContinuousChangeLastSequenceAndFinish(timeoutLastSeqence);
+                        }
+                    }
+                }
+            }
+        }, timeout);
+    }
+
+    private void stopTimeout() {
+        if (timeoutTimer != null) {
+            timeoutTimer.cancel();
+            timeoutTimer.purge();
         }
     }
 
