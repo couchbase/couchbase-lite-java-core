@@ -2054,10 +2054,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             if (acceptEncoding != null && acceptEncoding.contains("gzip") &&
                     attachment.getEncoding() == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) {
                 connection.getResHeader().add("Content-Encoding", "gzip");
+                connection.setResponseInputStream(attachment.getEncodedContentInputStream());
             }
-
+            else {
+                connection.setResponseInputStream(attachment.getContentInputStream());
+            }
             dontOverwriteBody = true;
-            connection.setResponseInputStream(attachment.getContentInputStream());
             return new Status(Status.OK);
 
         } catch (CouchbaseLiteException e) {
