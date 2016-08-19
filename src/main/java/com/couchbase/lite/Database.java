@@ -2417,9 +2417,13 @@ public class Database implements StoreDelegate {
 
     protected Replication findActiveReplicator(Replication replicator) {
         synchronized (activeReplicators) {
-            for (Replication active : activeReplicators) {
-                if (active.equals(replicator) && active.isRunning())
-                    return active;
+            String remoteCheckpointDocID = replicator.remoteCheckpointDocID();
+            if (remoteCheckpointDocID == null)
+                return null;
+
+            for (Replication r : activeReplicators) {
+                if (remoteCheckpointDocID.equals(r.remoteCheckpointDocID()) && r.isRunning())
+                    return r;
             }
         }
         return null;

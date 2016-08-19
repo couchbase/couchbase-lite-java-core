@@ -464,7 +464,8 @@ public class Replication
     /**
      * Following two methods for temporary methods instead of CBL_ReplicatorSettings implementation.
      */
-    protected String remoteCheckpointDocID() {
+    @InterfaceAudience.Private
+    public String remoteCheckpointDocID() {
         return replicationInternal.remoteCheckpointDocID();
     }
 
@@ -937,20 +938,5 @@ public class Replication
     @Override
     public String toString() {
         return "Replication{" + remote + ", " + (isPull() ? "pull" : "push") + '}';
-    }
-
-    @Override
-    public int hashCode() {
-        return replicationInternal.remoteCheckpointDocID().hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj instanceof Replication) {
-            Replication replication = (Replication)obj;
-            return this.replicationInternal.remoteCheckpointDocID().equals(
-                    replication.replicationInternal.remoteCheckpointDocID());
-        }
-        return false;
     }
 }
