@@ -413,6 +413,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // Refer to: http://wiki.apache.org/couchdb/Complete_HTTP_API_Reference
 
         String method = connection.getRequestMethod();
+
+        // Support CORS Preflight requests:
+        if ("OPTIONS".equals(method)) {
+            sendResponseCodeAndFinish(Status.OK);
+            return;
+        }
+
         // We're going to map the request into a method call using reflection based on the method and path.
         // Accumulate the method name into the string 'message':
         if ("HEAD".equals(method)) {
@@ -423,13 +430,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // First interpret the components of the request:
         List<String> path = splitPath(connection.getURL());
         if (path == null) {
-            connection.setResponseCode(Status.BAD_REQUEST);
-            try {
-                connection.getResponseOutputStream().close();
-            } catch (IOException e) {
-                Log.e(TAG, "Error closing empty output stream");
-            }
-            sendResponse();
+            sendResponseCodeAndFinish(Status.BAD_REQUEST);
             return;
         }
 
@@ -452,25 +453,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
                     ByteArrayInputStream bais = new ByteArrayInputStream(connection.getResponseBody().getJson());
                     connection.setResponseInputStream(bais);
-                    connection.setResponseCode(Status.BAD_REQUEST);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+
+                    sendResponseCodeAndFinish(Status.BAD_REQUEST);
                     return;
                 } else {
                     boolean mustExist = false;
                     db = manager.getDatabase(dbName, mustExist); // NOTE: synchronized
                     if (db == null) {
-                        connection.setResponseCode(Status.BAD_REQUEST);
-                        try {
-                            connection.getResponseOutputStream().close();
-                        } catch (IOException e) {
-                            Log.e(TAG, "Error closing empty output stream");
-                        }
-                        sendResponse();
+                        sendResponseCodeAndFinish(Status.BAD_REQUEST);
                         return;
                     }
 
@@ -486,39 +476,21 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             // Make sure database exists, then interpret doc name:
             Status status = openDB();
             if (!status.isSuccessful()) {
-                connection.setResponseCode(status.getCode());
-                try {
-                    connection.getResponseOutputStream().close();
-                } catch (IOException e) {
-                    Log.e(TAG, "Error closing empty output stream");
-                }
-                sendResponse();
+                sendResponseCodeAndFinish(status.getCode());
                 return;
             }
             String name = path.get(1);
             if (!name.startsWith("_")) {
                 // Regular document
                 if (!Document.isValidDocumentId(name)) {
-                    connection.setResponseCode(Status.BAD_REQUEST);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    sendResponseCodeAndFinish(Status.BAD_REQUEST);
                     return;
                 }
                 docID = name;
             } else if ("_design".equals(name) || "_local".equals(name)) {
                 // "_design/____" and "_local/____" are document names
                 if (pathLen <= 2) {
-                    connection.setResponseCode(Status.NOT_FOUND);
-                    try {
-                        connection.getResponseOutputStream().close();
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error closing empty output stream");
-                    }
-                    sendResponse();
+                    sendResponseCodeAndFinish(Status.NOT_FOUND);
                     return;
                 }
                 docID = name + '/' + path.get(2);
@@ -781,6 +753,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         connection.getResHeader().add("Location", location);
     }
 
+    private void sendResponseCodeAndFinish(int code) {
+        connection.setResponseCode(code);
+        try {
+            connection.getResponseOutputStream().close();
+        } catch (IOException e) {
+            Log.e(TAG, "Error closing empty output stream");
+        }
+        sendResponse();
+    }
+
     /**
      * SERVER REQUESTS: *
      */
@@ -814,89 +796,82 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     public Status do_POST_replicate(Database _db, String _docID, String _attachmentName) {
+        synchronized (manager) {
+            Replication replicator;
 
-        Replication replicator;
+            // Extract the parameters from the JSON request body:
+            // http://wiki.apache.org/couchdb/Replication
+            Map<String, Object> body = null;
+            try {
+                body = getBodyAsDictionary();
+                replicator = manager.getReplicator(body);
+            } catch (CouchbaseLiteException e) {
+                Map<String, Object> result = new HashMap<String, Object>();
+                result.put("error", e.toString());
+                connection.setResponseBody(new Body(result));
+                return e.getCBLStatus();
+            }
 
-        // Extract the parameters from the JSON request body:
-        // http://wiki.apache.org/couchdb/Replication
-        Map<String, Object> body = null;
-        try {
-            body = getBodyAsDictionary();
-        } catch (CouchbaseLiteException e) {
-            return e.getCBLStatus();
-        }
+            Boolean cancelBoolean = (Boolean) body.get("cancel");
+            boolean cancel = (cancelBoolean != null && cancelBoolean.booleanValue());
 
-        try {
-            // NOTE: replicator instance is created per request. not access shared instances
-            replicator = manager.getReplicator(body);
-        } catch (CouchbaseLiteException e) {
-            Map<String, Object> result = new HashMap<String, Object>();
-            result.put("error", e.toString());
-            connection.setResponseBody(new Body(result));
-            return e.getCBLStatus();
-        }
-
-        Boolean cancelBoolean = (Boolean) body.get("cancel");
-        boolean cancel = (cancelBoolean != null && cancelBoolean.booleanValue());
-
-        if (!cancel) {
-
-            if (!replicator.isRunning()) {
-
-                final CountDownLatch replicationStarted = new CountDownLatch(1);
-                replicator.addChangeListener(new Replication.ChangeListener() {
-                    @Override
-                    public void changed(Replication.ChangeEvent event) {
-                        if (event.getTransition() != null &&
-                                event.getTransition().getDestination() == ReplicationState.RUNNING) {
-                            replicationStarted.countDown();
-                        }
-                    }
-                });
-
-                if (!replicator.isContinuous()) {
+            if (!cancel) {
+                if (!replicator.isRunning()) {
+                    final CountDownLatch replicationStarted = new CountDownLatch(1);
                     replicator.addChangeListener(new Replication.ChangeListener() {
                         @Override
                         public void changed(Replication.ChangeEvent event) {
                             if (event.getTransition() != null &&
-                                    event.getTransition().getDestination() == ReplicationState.STOPPED) {
-                                Status status = new Status(Status.OK);
-                                status = sendResponseHeaders(status);
-                                connection.setResponseCode(status.getCode());
-                                Map<String, Object> result = new HashMap<String, Object>();
-                                result.put("session_id", event.getSource().getSessionID());
-                                connection.setResponseBody(new Body(result));
-
-                                setResponse();
-                                sendResponse();
+                                    event.getTransition().getDestination() == ReplicationState.RUNNING) {
+                                replicationStarted.countDown();
                             }
                         }
                     });
+
+                    if (!replicator.isContinuous()) {
+                        replicator.addChangeListener(new Replication.ChangeListener() {
+                            @Override
+                            public void changed(Replication.ChangeEvent event) {
+                                if (event.getTransition() != null &&
+                                        event.getTransition().getDestination() == ReplicationState.STOPPED) {
+                                    Status status = new Status(Status.OK);
+                                    status = sendResponseHeaders(status);
+                                    connection.setResponseCode(status.getCode());
+
+                                    Map<String, Object> result = new HashMap<String, Object>();
+                                    result.put("session_id", event.getSource().getSessionID());
+                                    connection.setResponseBody(new Body(result));
+
+                                    setResponse();
+                                    sendResponse();
+                                }
+                            }
+                        });
+                    }
+
+                    replicator.start();
+
+                    // wait for replication to start, otherwise replicator.getSessionId() will return null
+                    try {
+                        replicationStarted.await();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
 
-                replicator.start();
-
-                // wait for replication to start, otherwise replicator.getSessionId() will return null
-                try {
-                    replicationStarted.await();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                if (replicator.isContinuous()) {
+                    Map<String, Object> result = new HashMap<String, Object>();
+                    result.put("session_id", replicator.getSessionID());
+                    connection.setResponseBody(new Body(result));
+                    return new Status(Status.OK);
+                } else {
+                    return new Status(0);
                 }
-
-            }
-
-            if (replicator.isContinuous()) {
-                Map<String, Object> result = new HashMap<String, Object>();
-                result.put("session_id", replicator.getSessionID());
-                connection.setResponseBody(new Body(result));
-                return new Status(Status.OK);
             } else {
-                return new Status(0);
+                // Cancel replication:
+                replicator.stop();
+                return new Status(Status.OK);
             }
-        } else {
-            // Cancel replication:
-            replicator.stop();
-            return new Status(Status.OK);
         }
     }
 

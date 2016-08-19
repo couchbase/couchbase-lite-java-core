@@ -2415,40 +2415,27 @@ public class Database implements StoreDelegate {
 
     // Database+Replication
 
-    protected Replication getActiveReplicator(URL remote, boolean push) {
+    protected Replication findActiveReplicator(Replication replicator) {
         synchronized (activeReplicators) {
-            try {
-                java.net.URI remoteUri = remote.toURI();
-                for (Replication replicator : activeReplicators) {
-                    if (replicator.getRemoteUrl().toURI().equals(remoteUri) &&
-                            replicator.isPull() == !push && replicator.isRunning())
-                        return replicator;
-                }
-            } catch (java.net.URISyntaxException uriException) {
-                // Not possible since it would not be an active replicator.
-                // However, until we refactor everything to use java.net,
-                // I'm not sure we have a choice but to swallow this.
-                Log.e(Log.TAG_DATABASE, "Active replicator found with invalid URI", uriException);
+            String remoteCheckpointDocID = replicator.remoteCheckpointDocID();
+            if (remoteCheckpointDocID == null)
+                return null;
+
+            for (Replication r : activeReplicators) {
+                if (remoteCheckpointDocID.equals(r.remoteCheckpointDocID()) && r.isRunning())
+                    return r;
             }
         }
         return null;
     }
 
-    protected Replication getReplicator(URL remote,
-                                        HttpClientFactory httpClientFactory,
-                                        boolean push,
-                                        boolean continuous) {
-        Replication result = getActiveReplicator(remote, push);
-        if (result != null) {
-            return result;
-        }
-        if (push) {
-            result = new Replication(this, remote, Replication.Direction.PUSH, httpClientFactory);
-        } else {
-            result = new Replication(this, remote, Replication.Direction.PULL, httpClientFactory);
-        }
-        result.setContinuous(continuous);
-        return result;
+    protected Replication createReplicator(URL remote, boolean push, HttpClientFactory factory) {
+        Replication replicator;
+        if (push)
+            replicator = new Replication(this, remote, Replication.Direction.PUSH, factory);
+        else
+            replicator = new Replication(this, remote, Replication.Direction.PULL, factory);
+        return replicator;
     }
 
     // Database+LocalDocs

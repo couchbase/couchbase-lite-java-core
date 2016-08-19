@@ -574,14 +574,6 @@ public final class Manager {
      */
     @InterfaceAudience.Private
     public Replication getReplicator(Map<String, Object> properties) throws CouchbaseLiteException {
-
-        // TODO: in the iOS equivalent of this code, there is: {@"doc_ids", _documentIDs}) - write unit test that detects this bug
-        // TODO: ditto for "headers"
-
-        Authorizer authorizer = null;
-        Replication repl = null;
-        URL remote = null;
-
         Map<String, Object> remoteMap;
 
         Map<String, Object> sourceMap = parseSourceOrTarget(properties, "source");
@@ -601,7 +593,7 @@ public final class Manager {
 
         // Map the 'source' and 'target' JSON params to a local database and remote URL:
         if (source == null || target == null) {
-            throw new CouchbaseLiteException("source and target are both null", new Status(Status.BAD_REQUEST));
+            throw new CouchbaseLiteException("Source and target are both null", new Status(Status.BAD_REQUEST));
         }
 
         boolean push = false;
@@ -623,7 +615,7 @@ public final class Manager {
                 db = getExistingDatabase(target);
             }
             if (db == null) {
-                throw new CouchbaseLiteException("database is null", new Status(Status.NOT_FOUND));
+                throw new CouchbaseLiteException("Database is null", new Status(Status.NOT_FOUND));
             }
             remoteMap = sourceMap;
         }
@@ -633,20 +625,21 @@ public final class Manager {
             throw new CouchbaseLiteException("Can't specify both a filter and doc IDs",
                     new Status(Status.BAD_REQUEST));
 
+        URL remote = null;
         try {
             remote = new URL(remoteStr);
         } catch (MalformedURLException e) {
-            throw new CouchbaseLiteException("malformed remote url: " + remoteStr,
+            throw new CouchbaseLiteException("Malformed remote url: " + remoteStr,
                     new Status(Status.BAD_REQUEST));
         }
         if (remote == null) {
-            throw new CouchbaseLiteException("remote URL is null: " + remoteStr,
+            throw new CouchbaseLiteException("Remote URL is null: " + remoteStr,
                     new Status(Status.BAD_REQUEST));
         }
 
+        Authorizer authorizer = null;
         Map<String, Object> authMap = (Map<String, Object>) remoteMap.get("auth");
         if (authMap != null) {
-
             Map<String, Object> persona = (Map<String, Object>) authMap.get("persona");
             if (persona != null) {
                 String email = (String) persona.get("email");
@@ -661,63 +654,51 @@ public final class Manager {
             authorizer.setLocalUUID(db.publicUUID());
         }
 
+        Replication repl = db.createReplicator(remote, push, getDefaultHttpClientFactory());
 
+        repl.setContinuous(continuous);
 
-        if (!cancel) {
-            repl = db.getReplicator(remote, getDefaultHttpClientFactory(), push, continuous);
-            if (repl == null) {
-                throw new CouchbaseLiteException("unable to create replicator with remote: " + remote,
-                        new Status(Status.INTERNAL_SERVER_ERROR));
-            }
+        if (authorizer != null) {
+            repl.setAuthenticator(authorizer);
+        }
 
-            if (authorizer != null) {
-                repl.setAuthenticator(authorizer);
-            }
+        Map<String, Object> headers = null;
+        if (remoteMap != null) {
+            headers = (Map) remoteMap.get("headers");
+        }
 
-            Map<String, Object> headers = null;
-            if (remoteMap != null) {
-                headers = (Map) remoteMap.get("headers");
-            }
+        if (headers != null && !headers.isEmpty()) {
+            repl.setHeaders(headers);
+        }
 
-            if (headers != null && !headers.isEmpty()) {
-                repl.setHeaders(headers);
-            }
-
-            String filterName = (String) properties.get("filter");
-            if (filterName != null) {
-                repl.setFilter(filterName);
-                Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
-                if (filterParams != null) {
-                    repl.setFilterParams(filterParams);
-                }
-            }
-
-            // docIDs
-            if(properties.get("doc_ids") != null) {
-                if(properties.get("doc_ids") instanceof List){
-                    List<String> docIds = (List<String>)properties.get("doc_ids");
-                    repl.setDocIds(docIds);
-                }
-            }
-
-            String remoteUUID = (String) properties.get("remoteUUID");
-            if (remoteUUID != null) {
-                repl.setRemoteUUID(remoteUUID);
-            }
-
-            if (push) {
-                repl.setCreateTarget(createTarget);
-            }
-        } else {
-            // Cancel replication:
-            repl = db.getActiveReplicator(remote, push);
-            if (repl == null) {
-                throw new CouchbaseLiteException("unable to lookup replicator with remote: " + remote,
-                        new Status(Status.NOT_FOUND));
+        String filterName = (String) properties.get("filter");
+        if (filterName != null) {
+            repl.setFilter(filterName);
+            Map<String, Object> filterParams = (Map<String, Object>) properties.get("query_params");
+            if (filterParams != null) {
+                repl.setFilterParams(filterParams);
             }
         }
 
-        return repl;
+        // docIDs
+        if(properties.get("doc_ids") != null) {
+            if(properties.get("doc_ids") instanceof List){
+                List<String> docIds = (List<String>)properties.get("doc_ids");
+                repl.setDocIds(docIds);
+            }
+        }
+
+        String remoteUUID = (String) properties.get("remoteUUID");
+        if (remoteUUID != null) {
+            repl.setRemoteUUID(remoteUUID);
+        }
+
+        if (push) {
+            repl.setCreateTarget(createTarget);
+        }
+
+        Replication activeReplicator = db.findActiveReplicator(repl);
+        return activeReplicator != null ? activeReplicator : repl;
     }
 
     /**

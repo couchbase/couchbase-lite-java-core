@@ -464,7 +464,8 @@ public class Replication
     /**
      * Following two methods for temporary methods instead of CBL_ReplicatorSettings implementation.
      */
-    protected String remoteCheckpointDocID() {
+    @InterfaceAudience.Private
+    public String remoteCheckpointDocID() {
         return replicationInternal.remoteCheckpointDocID();
     }
 
