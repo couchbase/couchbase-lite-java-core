@@ -483,6 +483,9 @@ public class Replication
              *   return pendingDocIDs;
             */
 
+            if (isPull())
+                return pendingDocIDs;
+            
             final CountDownLatch latch = new CountDownLatch(1);
             db.getManager().getWorkExecutor().submit(new Runnable() {
                 @Override
