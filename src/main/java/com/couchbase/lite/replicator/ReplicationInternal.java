@@ -236,7 +236,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                             Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
                             stateMachine.fire(trigger);
                         } catch (Exception e) {
-                            Log.e(Log.TAG_SYNC, "Unknown Error in stateMachine.fire(trigger)", e);
+                            Log.i(Log.TAG_SYNC, "Error in StateMachine.fire(trigger): %s", e.getMessage());
                             throw new RuntimeException(e);
                         }
                     }
