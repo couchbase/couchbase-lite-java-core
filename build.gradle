@@ -3,7 +3,8 @@ apply plugin: 'maven'
 
 version = System.getenv("MAVEN_UPLOAD_VERSION")
 
-sourceCompatibility = 1.6
+sourceCompatibility = JavaVersion.VERSION_1_6
+targetCompatibility = JavaVersion.VERSION_1_6
 
 repositories {
     mavenLocal()
