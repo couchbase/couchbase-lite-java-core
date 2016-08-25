@@ -821,7 +821,8 @@ public final class Manager {
             // Create and open new CBLDatabase with temporary name:
             Database tmpDB = getDatabase(tempName, false);
             if (tmpDB == null) {
-                Log.w(Log.TAG_DATABASE, "Upgrade failed: Creating new db failed: %s", tempName);
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Creating new db failed: %s", tempName);
                 return false;
             }
 
@@ -846,7 +847,8 @@ public final class Manager {
 
             if (tmpDB.exists()) {
                 // the temporary db should not exist. Just double check
-                Log.w(Log.TAG_DATABASE, "Upgrade failed: Failed to delete already existing db: %s", tempName);
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Failed to delete already existing db: %s", tempName);
                 return false;
             }
 
@@ -864,14 +866,19 @@ public final class Manager {
             File tmpPath = new File(pathForDatabaseNamed(tempName));
             File newPath = new File(pathForDatabaseNamed(name));
             if (!tmpPath.renameTo(newPath)) {
-                Log.w(Log.TAG_DATABASE, "Upgrade failed: Failed to rename db folder from temporary name: %s -> %s", tmpPath, newPath);
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Failed to rename db folder from temporary name: %s -> %s",
+                        tmpPath, newPath);
+                upgrader = new DatabaseUpgrade(this, getDatabase(tempName, false), dbPath);
+                upgrader.backOut();
                 return false;
             }
 
             // reopen db with name
             db = getDatabase(name, false);
             if (!db.exists()) {
-                Log.w(Log.TAG_DATABASE, "Upgrade failed: Failed to open the database after migrate: %s", name);
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Failed to open the database after migrate: %s", name);
                 return false;
             }
         }
