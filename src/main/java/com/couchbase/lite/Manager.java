@@ -795,7 +795,8 @@ public final class Manager {
             String filename = file.getName();
             String name = nameOfDatabaseAtPath(filename);
             String oldDbPath = new File(directory, filename).getAbsolutePath();
-            upgradeDatabase(name, oldDbPath, true);
+            if (!upgradeDatabase(name, oldDbPath, true))
+                throw new RuntimeException("Database upgrade failed for: " + name);
         }
     }
 
@@ -804,27 +805,87 @@ public final class Manager {
      * - (BOOL) upgradeDatabaseNamed: (NSString*)name
      * atPath: (NSString*)dbPath
      * error: (NSError**)outError
+     *
+     * NOTE: upgradeDatabase() method is called if the old database exists.
      */
     private boolean upgradeDatabase(String name, String dbPath, boolean close) {
-        Log.v(Log.TAG_DATABASE, "CouchbaseLite: Upgrading database at %s ...", dbPath);
-        if (!name.equals("_replicator")) {
-            // Create and open new CBLDatabase:
-            Database db = getDatabase(name, false);
-            if (db == null) {
-                Log.w(Log.TAG_DATABASE, "Upgrade failed: Creating new db failed");
+        Log.v(Log.TAG_DATABASE, "CouchbaseLite: Upgrading database (%s) at %s ...", name, dbPath);
+
+        // if db with name already exists, not need to migrate. Simply remove old database
+        Database db = getDatabase(name, false);
+        if (!db.exists() && !name.equals("_replicator")) {
+
+            // temporary database name for new db schema
+            String tempName = name + ".tmp";
+
+            // Create and open new CBLDatabase with temporary name:
+            Database tmpDB = getDatabase(tempName, false);
+            if (tmpDB == null) {
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Creating new db failed: %s", tempName);
                 return false;
             }
-            if (!db.exists()) {
-                // Upgrade the old database into the new one:
-                DatabaseUpgrade upgrader = new DatabaseUpgrade(this, db, dbPath);
-                if (!upgrader.importData()) {
-                    upgrader.backOut();
+
+            // upgradeDatabase() is called only if dbPath (old db version) exists. So presence of
+            // temporary db indicates that previous upgrade crashed midway.
+            if (tmpDB.exists()) {
+                Log.v(Log.TAG_DATABASE, "Previous upgrade probably crashed midway. dbPath: " + dbPath);
+
+                // rollback from temporary database to old database
+                // NOTE: Deleting temporary db is not enough because `DatabaseUpgrade.importData()`
+                //       move attachment files instead of copy files.
+                DatabaseUpgrade upgrader = new DatabaseUpgrade(this, tmpDB, dbPath);
+                upgrader.backOut();
+
+                // temporary db is deleted by previous operation, reopen the temporary db.
+                tmpDB = getDatabase(tempName, false);
+                if (tmpDB == null) {
+                    Log.w(Log.TAG_DATABASE, "Upgrade failed: Creating new db failed: %s", tempName);
                     return false;
                 }
             }
-            if (close)
-                db.close();
+
+            if (tmpDB.exists()) {
+                // the temporary db should not exist. Just double check
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Failed to delete already existing db: %s", tempName);
+                return false;
+            }
+
+            // Upgrade the old database into the new one:
+            DatabaseUpgrade upgrader = new DatabaseUpgrade(this, tmpDB, dbPath);
+            if (!upgrader.importData()) {
+                upgrader.backOut();
+                return false;
+            }
+
+            // close temporary database
+            tmpDB.close();
+
+            // rename temporary database name to new name
+            File tmpPath = new File(pathForDatabaseNamed(tempName));
+            File newPath = new File(pathForDatabaseNamed(name));
+            if (!tmpPath.renameTo(newPath)) {
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Failed to rename db folder from temporary name: %s -> %s",
+                        tmpPath, newPath);
+                upgrader = new DatabaseUpgrade(this, getDatabase(tempName, false), dbPath);
+                upgrader.backOut();
+                return false;
+            }
+
+            // reopen db with name
+            db = getDatabase(name, false);
+            if (!db.exists()) {
+                Log.w(Log.TAG_DATABASE,
+                        "Upgrade failed: Failed to open the database after migrate: %s", name);
+                return false;
+            }
         }
+
+        // close db if necessary
+        if (close)
+            db.close();
 
         // Remove old database file and its SQLite side files:
         moveSQLiteDbFiles(dbPath, null);
