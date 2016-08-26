@@ -18,7 +18,7 @@ import com.couchbase.lite.util.Log;
 import java.util.Locale;
 
 public class Version {
-    public static final String SYNC_PROTOCOL_VERSION = "1.2";
+    public static final String SYNC_PROTOCOL_VERSION = "1.3";
     public static final String VERSION;
 
     private static final String VERSION_NAME="%VERSION_NAME%";  // replaced during build process
