@@ -266,10 +266,21 @@ public class ChangeTracker implements Runnable {
     private boolean retryIfFailedPost(Response response) {
         if (!usePOST)
             return false;
-        if (response.code() != Status.METHOD_NOT_ALLOWED)
+        if (response.code() != Status.METHOD_NOT_ALLOWED && !isCloudantAuthError(response))
             return false;
         usePOST = false;
         return true;
+    }
+
+    // Cloudant returns 401 or 403 if we send it a POST to _changes for a write-protected database.
+    // (See issues iOS #1020, #1267, Android #978)
+    private boolean isCloudantAuthError(Response response) {
+        String server = response.header("Server");
+        if (server == null || server.indexOf("CouchDB/1.0.2") == -1)// (Accurate as of 5/2016)
+            return false;
+        // Note: 401 (UNAUTHORIZED) might not be caused by Cloudant
+        //       Before adding fix for 401, we need a test environment.
+        return response.code() == Status.FORBIDDEN;
     }
 
     protected void runLoop() {
