@@ -276,7 +276,8 @@ public class ChangeTracker implements Runnable {
     // (See issues iOS #1020, #1267, Android #978)
     private boolean isCloudantAuthError(Response response) {
         String server = response.header("Server");
-        if (server == null || server.indexOf("CouchDB/1.0.2") == -1)// (Accurate as of 5/2016)
+        // Cloudant could send `CouchDB/ad97a06 (Erlang OTP/17)` as Server header value
+        if (server == null || server.indexOf("CouchDB/") == -1)// (Accurate as of 5/2016)
             return false;
         // Note: 401 (UNAUTHORIZED) might not be caused by Cloudant
         //       Before adding fix for 401, we need a test environment.
