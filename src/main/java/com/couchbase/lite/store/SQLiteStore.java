@@ -749,7 +749,6 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         Cursor cursor = null;
         try {
-            cursor = null;
             String cols = "revid, deleted, sequence";
             if (withBody) {
                 cols += ", json";
@@ -870,7 +869,8 @@ public class SQLiteStore implements Store, EncryptableStore {
                 result.setSequence(seq);
             }
         } finally {
-            cursor.close();
+            if (cursor != null)
+                cursor.close();
         }
         return result;
     }
@@ -947,9 +947,10 @@ public class SQLiteStore implements Store, EncryptableStore {
             sql = "SELECT sequence, revid, deleted FROM revs " +
                     "WHERE doc_id=? ORDER BY sequence DESC";
         String[] args = {Long.toString(docNumericID)};
-        Cursor cursor = storageEngine.rawQuery(sql, args);
+        Cursor cursor = null;
         RevisionList result = null;
         try {
+            cursor = storageEngine.rawQuery(sql, args);
             cursor.moveToNext();
             result = new RevisionList();
             while (!cursor.isAfterLast()) {
@@ -1315,10 +1316,12 @@ public class SQLiteStore implements Store, EncryptableStore {
                 + "AND revs.doc_id = docs.doc_id "
                 + "ORDER BY revs.doc_id, revid DESC";
         String[] args = {Long.toString(lastSequence)};
-        Cursor cursor = storageEngine.rawQuery(sql, args);
-        cursor.moveToNext();
+        Cursor cursor = null;
         long lastDocId = 0;
         try {
+            cursor = storageEngine.rawQuery(sql, args);
+            cursor.moveToNext();
+
             while (!cursor.isAfterLast()) {
                 if (!options.isIncludeConflicts()) {
                     // Only count the first rev for a given doc (the rest will be losing conflicts):
@@ -1970,15 +1973,17 @@ public class SQLiteStore implements Store, EncryptableStore {
                 // First capture the docIDs to be purged, so we can notify about them:
                 List<String> purgedIDs = new ArrayList<String>();
                 String queryString = "SELECT docid FROM docs WHERE expiry_timestamp <= ? and expiry_timestamp != 0";
-                Cursor cursor = storageEngine.rawQuery(queryString, args);
+                Cursor cursor = null;
                 try {
+                    cursor = storageEngine.rawQuery(queryString, args);
                     cursor.moveToNext();
                     while (!cursor.isAfterLast()) {
                         purgedIDs.add(cursor.getString(0));
                         cursor.moveToNext();
                     }
                 } finally {
-                    cursor.close();
+                    if (cursor != null)
+                        cursor.close();
                 }
 
                 // Now delete the docs:
@@ -2705,7 +2710,8 @@ public class SQLiteStore implements Store, EncryptableStore {
                 rev.setJSON(json);
             }
         } finally {
-            cursor.close();
+            if (cursor != null)
+                cursor.close();
         }
         return rev;
     }
