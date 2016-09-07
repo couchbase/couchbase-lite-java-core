@@ -84,7 +84,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     public static final String TAG = Log.TAG_ROUTER;
 
     private static final long MIN_CHANGES_HEARTBEAT = 5000;    // 5 seconds
-    private static final long DEFAULT_CHANGES_TIMEOUT = 10000; // 60 seconds
+    private static final long DEFAULT_CHANGES_TIMEOUT = 60000; // 60 seconds
 
     private static final String CONTENT_TYPE_JSON = "application/json";
 
