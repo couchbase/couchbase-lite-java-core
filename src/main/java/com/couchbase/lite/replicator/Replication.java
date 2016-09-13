@@ -460,12 +460,6 @@ public class Replication
     protected void setLastError(Throwable lastError) {
         this.lastError = lastError;
     }
-    /**
-     * Clear lastError from outside once the error is handled
-     */
-    public void clearLastError() {
-        this.lastError = null;
-    }
 
     /**
      * Following two methods for temporary methods instead of CBL_ReplicatorSettings implementation.
