@@ -226,6 +226,11 @@ public class Replication
             });
         }
 
+        // following is for restarting replicator.
+        // make sure both lastError and ReplicationInternal.error are null.
+        this.lastError = null;
+        replicationInternal.setError(null);
+
         replicationInternal.triggerStart();
     }
 
