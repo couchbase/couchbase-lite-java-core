@@ -713,7 +713,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             String baseContentType = connection.getBaseContentType();
             if (baseContentType == null)
                 baseContentType = contentType;
-            if (baseContentType != null && baseContentType.indexOf(accept) < 0) {
+            if (baseContentType != null && accept.indexOf(baseContentType) < 0) {
                 Log.w(TAG, "Error 406: Can't satisfy request Accept: %s (Content-Type = %s)",
                         accept, contentType);
 
