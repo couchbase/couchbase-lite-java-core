@@ -247,10 +247,12 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         Log.v(Log.TAG_VIEW, "Re-indexing view: %s", name);
         if (getViewID() <= 0) {
             String msg = "getViewID() < 0";
-            throw new CouchbaseLiteException(msg, new Status(Status.NOT_FOUND));
+            throw new CouchbaseLiteException(msg, Status.NOT_FOUND);
         }
 
-        store.beginTransaction();
+        if (!store.beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         boolean success = false;
         Cursor cursor = null;
         try {
@@ -285,7 +287,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                         String msg = String.format(Locale.ENGLISH, "Cannot index view %s: " +
                                 "no map block registered", view.getName());
                         Log.e(Log.TAG_VIEW, msg);
-                        throw new CouchbaseLiteException(msg, new Status(Status.BAD_REQUEST));
+                        throw new CouchbaseLiteException(msg, Status.BAD_REQUEST);
                     }
                     Log.v(Log.TAG_VIEW, "    %s has no map block; skipping it", view.getName());
                     continue;
@@ -299,7 +301,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     String message = String.format(Locale.ENGLISH, "View '%s' not found in database",
                             view.getName());
                     Log.e(Log.TAG_VIEW, message);
-                    throw new CouchbaseLiteException(message, new Status(Status.NOT_FOUND));
+                    throw new CouchbaseLiteException(message, Status.NOT_FOUND);
                 }
 
                 int totalRows = view.getTotalRows();
@@ -309,7 +311,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 viewLastSequence[i++] = last;
                 if (last < 0) {
                     String msg = String.format(Locale.ENGLISH, "last < 0 (%d)", last);
-                    throw new CouchbaseLiteException(msg, new Status(Status.INTERNAL_SERVER_ERROR));
+                    throw new CouchbaseLiteException(msg, Status.INTERNAL_SERVER_ERROR);
                 } else if (last < dbMaxSequence) {
                     if (last == 0)
                         view.createIndex();
@@ -547,7 +549,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                             String msg = String.format(Locale.ENGLISH, "Error when calling map block of view '%s'",
                                     view.getName());
                             Log.e(Log.TAG_VIEW, msg, e);
-                            throw new CouchbaseLiteException(msg, e, new Status(Status.CALLBACK_ERROR));
+                            throw new CouchbaseLiteException(msg, e, Status.CALLBACK_ERROR);
                         }
                     }
                 }
@@ -569,13 +571,15 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             success = true;
             return new Status(Status.OK);
         } catch (SQLException ex) {
-            throw new CouchbaseLiteException(ex, new Status(Status.DB_ERROR));
+            throw new CouchbaseLiteException(ex, Status.DB_ERROR);
         } finally {
             curView = null;
             if (cursor != null)
                 cursor.close();
-            if (store != null)
-                store.endTransaction(success);
+            if (store != null) {
+                if (!store.endTransaction(success))
+                    throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
+            }
         }
     }
 
@@ -727,7 +731,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 Log.w(TAG, String.format(Locale.ENGLISH,
                         "Cannot use reduce option in view %s which has no reduce block defined",
                         name));
-                throw new CouchbaseLiteException(new Status(Status.BAD_PARAM));
+                throw new CouchbaseLiteException(Status.BAD_PARAM);
             }
         }
 

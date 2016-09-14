@@ -234,9 +234,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         boolean isSuccessful = false;
         if (!beginTransaction()) {
             close();
-            String message = "Cannot begin transaction";
-            Log.e(TAG, message);
-            throw new CouchbaseLiteException(message, Status.DB_ERROR);
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
         }
 
         try {
@@ -312,7 +310,11 @@ public class SQLiteStore implements Store, EncryptableStore {
             isSuccessful = true;
         } finally {
             // END TRANSACTION WITH COMMIT OR ROLLBACK
-            endTransaction(isSuccessful);
+            if (!endTransaction(isSuccessful)) {
+                close();
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
+            }
+
             // if failed, close storageEngine before return:
             if (!isSuccessful) {
                 close();
@@ -659,7 +661,10 @@ public class SQLiteStore implements Store, EncryptableStore {
         Log.v(TAG, "Begin database compaction...");
         synchronized (compactLock) {
             boolean shouldCommit = false;
-            beginTransaction();
+
+            if (!beginTransaction())
+                throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
             try {
                 if (getInfo("pruned") == null) {
                     // Bulk pruning is no longer needed, because revisions are pruned incrementally as new
@@ -685,7 +690,8 @@ public class SQLiteStore implements Store, EncryptableStore {
                 }
                 shouldCommit = true;
             } finally {
-                endTransaction(shouldCommit);
+                if (!endTransaction(shouldCommit))
+                    throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
             }
 
             // https://www.sqlite.org/pragma.html#pragma_wal_checkpoint
@@ -708,11 +714,17 @@ public class SQLiteStore implements Store, EncryptableStore {
         Log.v(TAG, "...Finished database compaction.");
     }
 
+    /**
+     * @note Throw RuntimeException if TransactionalTask throw Exception.
+     *       Otherwise return true or false
+     */
     @Override
     public boolean runInTransaction(TransactionalTask transactionalTask) {
         boolean shouldCommit = true;
 
-        beginTransaction();
+        if (!beginTransaction())
+            return false;
+
         try {
             shouldCommit = transactionalTask.run();
         } catch (Exception e) {
@@ -720,7 +732,8 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.e(TAG, e.toString(), e);
             throw new RuntimeException(e);
         } finally {
-            endTransaction(shouldCommit);
+            if (!endTransaction(shouldCommit))
+                return false;
         }
 
         return shouldCommit;
@@ -1275,7 +1288,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error getting all docs", e);
-            throw new CouchbaseLiteException("Error getting all docs", e, new Status(Status.INTERNAL_SERVER_ERROR));
+            throw new CouchbaseLiteException("Error getting all docs", e, Status.INTERNAL_SERVER_ERROR);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1412,7 +1425,9 @@ public class SQLiteStore implements Store, EncryptableStore {
         String winningRevID = null;
         boolean inConflict = false;
 
-        beginTransaction();
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         // try - finally for beginTransaction() and endTransaction()
         try {
             //// PART I: In which are performed lookups and validations prior to the insert...
@@ -1607,7 +1622,8 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
 
         } finally {
-            endTransaction(outStatus.isSuccessful());
+            if (!endTransaction(outStatus.isSuccessful()))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
 
         //// EPILOGUE: A change notification is sent...
@@ -1645,7 +1661,9 @@ public class SQLiteStore implements Store, EncryptableStore {
         AtomicBoolean inConflict = new AtomicBoolean(false);
         boolean success = false;
 
-        beginTransaction();
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         try {
             // First look up the document's row-id and all locally-known revisions of it:
             Map<String, RevisionInternal> localRevs = null;
@@ -1790,7 +1808,8 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.e(TAG, "Error inserting revisions", e);
             throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
         } finally {
-            endTransaction(success);
+            if (!endTransaction(success))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
         // Notify and return:
         if (status.getCode() == Status.CREATED)
@@ -2151,13 +2170,17 @@ public class SQLiteStore implements Store, EncryptableStore {
             throws CouchbaseLiteException {
         RevisionInternal result = null;
         boolean commit = false;
-        beginTransaction();
+
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         try {
             RevisionInternal prevRev = getLocalDocument(revision.getDocID(), null);
             result = putLocalRevision(revision, prevRev == null ? null : prevRev.getRevID(), true);
             commit = true;
         } finally {
-            endTransaction(commit);
+            if (!endTransaction(commit))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
         return result;
     }
@@ -2471,15 +2494,19 @@ public class SQLiteStore implements Store, EncryptableStore {
         // Now prune:
         int outPruned = 0;
         boolean shouldCommit = false;
+
+        if (!beginTransaction())
+            throw new CouchbaseLiteException("Error in beginTransaction()", Status.DB_ERROR);
+
         try {
-            beginTransaction();
             for (Long docNumericID : toPrune.keySet())
                 outPruned += pruneDocument("?", docNumericID, toPrune.get(docNumericID).intValue() + 1);
             shouldCommit = true;
         } catch (Throwable e) {
             throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } finally {
-            endTransaction(shouldCommit);
+            if (!endTransaction(shouldCommit))
+                throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
         }
         return outPruned;
     }
