@@ -1446,7 +1446,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
 
             AtomicBoolean oldWinnerWasDeletion = new AtomicBoolean(false);
-            AtomicBoolean wasConflicted = new AtomicBoolean(false);
+            AtomicBoolean wasConflicted = new AtomicBoolean(true);
             String oldWinningRevID = null;
             if (!isNewDoc.get()) {
                 // Look up which rev is the winner, before this insertion

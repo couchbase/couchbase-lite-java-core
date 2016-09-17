@@ -22,6 +22,10 @@ import java.util.Locale;
 /**
  * Provides details about a Document change.
  */
+/**
+ * Identifies a change to a database, that is, a newly added document revision.
+ * The Database.ChangeEvent contains an List<DocumentChange> in "changes".
+ */
 public class DocumentChange {
     private RevisionInternal addedRevision;
     private String documentID;
@@ -50,26 +54,43 @@ public class DocumentChange {
         this.documentID = docID;
     }
 
+    /**
+     *  The ID of the document that changed.
+     */
     @InterfaceAudience.Public
     public String getDocumentId() {
         return documentID;
     }
 
+    /**
+     * The ID of the newly-added revision. A nil value means the document was purged.
+     */
     @InterfaceAudience.Public
     public String getRevisionId() {
         return addedRevision != null ? addedRevision.getRevID() : null;
     }
 
+    /**
+     * Is the new revision the document's current (default, winning) one?
+     * If not, there's a conflict.
+     */
     @InterfaceAudience.Public
     public boolean isCurrentRevision() {
-        return winningRevisionID != null && addedRevision != null && addedRevision.getRevID().equals(winningRevisionID);
+        return winningRevisionID != null && addedRevision != null &&
+                addedRevision.getRevID().equals(winningRevisionID);
     }
 
+    /**
+     * YES if the document is in conflict. (The conflict might pre-date this change.)
+     */
     @InterfaceAudience.Public
     public boolean isConflict() {
         return isConflict;
     }
 
+    /**
+     * The remote database URL that this change was pulled from, if any.
+     */
     @InterfaceAudience.Public
     public URL getSource() {
         return source;
