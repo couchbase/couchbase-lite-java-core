@@ -478,7 +478,7 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
         try {
             final PreparedStatement statement = acquirePreparedStatement(sql);
             try {
-                warnOrthrowIfStatementForbidden(statement);
+                throwIfStatementForbidden(statement);
                 bindArguments(statement, bindArgs);
                 applyBlockGuardPolicy(statement);
                 attachCancellationSignal(cancellationSignal);
@@ -521,7 +521,7 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
         try {
             final PreparedStatement statement = acquirePreparedStatement(sql);
             try {
-                warnOrthrowIfStatementForbidden(statement);
+                throwIfStatementForbidden(statement);
                 bindArguments(statement, bindArgs);
                 applyBlockGuardPolicy(statement);
                 attachCancellationSignal(cancellationSignal);
@@ -564,7 +564,7 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
         try {
             final PreparedStatement statement = acquirePreparedStatement(sql);
             try {
-                warnOrthrowIfStatementForbidden(statement);
+                throwIfStatementForbidden(statement);
                 bindArguments(statement, bindArgs);
                 applyBlockGuardPolicy(statement);
                 attachCancellationSignal(cancellationSignal);
@@ -609,7 +609,7 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
         try {
             final PreparedStatement statement = acquirePreparedStatement(sql);
             try {
-                warnOrthrowIfStatementForbidden(statement);
+                throwIfStatementForbidden(statement);
                 bindArguments(statement, bindArgs);
                 applyBlockGuardPolicy(statement);
                 attachCancellationSignal(cancellationSignal);
@@ -657,7 +657,7 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
         try {
             final PreparedStatement statement = acquirePreparedStatement(sql);
             try {
-                warnOrthrowIfStatementForbidden(statement);
+                throwIfStatementForbidden(statement);
                 bindArguments(statement, bindArgs);
                 applyBlockGuardPolicy(statement);
                 attachCancellationSignal(cancellationSignal);
@@ -687,7 +687,7 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
                 sql, bindArgs);
         try {
             final PreparedStatement statement = acquirePreparedStatement(sql);
-            warnOrthrowIfStatementForbidden(statement);
+            throwIfStatementForbidden(statement);
             bindArguments(statement, bindArgs);
             applyBlockGuardPolicy(statement);
             return statement;
@@ -827,16 +827,12 @@ public final class SQLiteConnection implements CancellationSignal.OnCancelListen
         }
     }
 
-    private void warnOrthrowIfStatementForbidden(PreparedStatement statement) {
+    // https://github.com/android/platform_frameworks_base/blob/nougat-release/core/java/android/database/sqlite/SQLiteConnection.java#L1023-L1028
+    private void throwIfStatementForbidden(PreparedStatement statement) {
         if (mOnlyAllowReadOnlyOperations && !statement.mReadOnly) {
-            if (mConfiguration.isOpenReadOnly()) {
-                throw new com.couchbase.lite.internal.database.sqlite.exception.SQLiteException("Cannot execute this statement (" + statement.mSql + ") "
-                        + "because it might modify the database but the connection is read-only.");
-            } else {
-                DLog.w(TAG, "The connection is acquired for a read-only statement. "
-                        + "This ongoing statement (" + statement.mSql + ") might modify "
-                        + "the database with the connection.");
-            }
+            throw new com.couchbase.lite.internal.database.sqlite.exception.SQLiteException(
+                    "Cannot execute this statement because it "
+                    + "might modify the database but the connection is read-only.");
         }
     }
 
