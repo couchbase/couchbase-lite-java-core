@@ -2255,7 +2255,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 " WHERE doc_id=? and current=1" +
                 " ORDER BY deleted asc, revid desc LIMIT ?";
 
-        long limit = (outIsConflict != null && outIsConflict.get()) ? 2 : 1;
+        long limit = outIsConflict != null ? 2 : 1;
         String[] args = {Long.toString(docNumericId), Long.toString(limit)};
         String revID = null;
         try {
