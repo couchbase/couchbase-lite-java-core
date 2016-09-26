@@ -20,6 +20,7 @@ import com.couchbase.lite.Manager;
 import com.couchbase.lite.NetworkReachabilityListener;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
+import com.couchbase.lite.SavedRevision;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
@@ -27,7 +28,6 @@ import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieJar;
 import com.couchbase.lite.util.Log;
-import com.couchbase.lite.util.URLUtils;
 
 import java.net.URL;
 import java.util.Date;
@@ -103,8 +103,10 @@ public class Replication
     protected Throwable lastError;
     protected Direction direction;
 
-    private Object lockPendingDocIDs = new Object();
-    private Set<String> pendingDocIDs;
+    private Object _lockPendingDocIDs = new Object();
+    private long _lastSequencePushed;    // The latest sequence pushed by the replicator
+    private Set<String> _pendingDocIDs;  // Cached set of docIDs awaiting push
+    private long _pendingDocIDsSequence; // DB lastSequenceNumber when _pendingDocIDs was set
 
     public enum ReplicationField {
         FILTER_NAME,
@@ -212,18 +214,6 @@ public class Replication
                                 "replicationInternal in unexpected state: %s, ignoring start()",
                                 replicationInternal.stateMachine.getState()));
             }
-        }
-
-        // forget cached IDs (Should be executed in workExecutor)
-        if (pendingDocIDs != null) {
-            db.runAsync(new AsyncTask() {
-                @Override
-                public void run(Database database) {
-                    synchronized (lockPendingDocIDs) {
-                        pendingDocIDs = null;
-                    }
-                }
-            });
         }
 
         // following is for restarting replicator.
@@ -414,12 +404,15 @@ public class Replication
     @Override
     public void changed(ChangeEvent event) {
         // forget cached IDs (Should be executed in workExecutor)
-        if (pendingDocIDs != null) {
+        final long lastSeqPushed = (isPull() || replicationInternal.lastSequence == null) ? -1L :
+                Long.valueOf(replicationInternal.lastSequence);
+        if (lastSeqPushed >= 0 && lastSeqPushed != _lastSequencePushed) {
             db.runAsync(new AsyncTask() {
                 @Override
                 public void run(Database database) {
-                    synchronized (lockPendingDocIDs) {
-                        pendingDocIDs = null;
+                    synchronized (_lockPendingDocIDs) {
+                        _lastSequencePushed = lastSeqPushed;
+                        _pendingDocIDs = null;
                     }
                 }
             });
@@ -475,28 +468,42 @@ public class Replication
     }
 
     public Set<String> getPendingDocumentIDs() {
-        synchronized (lockPendingDocIDs) {
-            if (isPull() || (isRunning() && pendingDocIDs != null))
-                return pendingDocIDs;
+        synchronized (_lockPendingDocIDs) {
+            if (isPull())
+                return null;
+
+            if (_pendingDocIDs != null) {
+                if (_pendingDocIDsSequence == getLocalDatabase().getLastSequenceNumber())
+                    return _pendingDocIDs; // still valid
+                _pendingDocIDs = null;
+            }
 
             final CountDownLatch latch = new CountDownLatch(1);
             db.getManager().getWorkExecutor().submit(new Runnable() {
                 @Override
                 public void run() {
                     try {
+                        long lastSequence = getLastSequencePushed();
+                        if (lastSequence < 0) {
+                            _pendingDocIDs = null;
+                            return;
+                        }
+
+                        long newPendingDocIDsSequence = getLocalDatabase().getLastSequenceNumber();
                         Map<String, Object> filterParams =
                                 (Map<String, Object>) properties.get("query_params");
                         ReplicationFilter filter =
                                 replicationInternal.compilePushReplicationFilter();
-                        String lastSequence = replicationInternal.lastSequence;
-                        if (lastSequence == null)
-                            lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
-                        RevisionList revs = db.unpushedRevisionsSince(lastSequence, filter, filterParams);
-                        if (revs != null) {
-                            pendingDocIDs = new HashSet<String>();
-                            pendingDocIDs.addAll(revs.getAllDocIds());
-                        } else
-                            pendingDocIDs = null;
+                        RevisionList revs = db.unpushedRevisionsSince(
+                                String.format(Locale.ENGLISH, "%d", lastSequence),
+                                filter, filterParams);
+                        _pendingDocIDsSequence = newPendingDocIDsSequence;
+                        if (revs != null && revs.size() > 0) {
+                            _pendingDocIDs = new HashSet<String>();
+                            _pendingDocIDs.addAll(revs.getAllDocIds());
+                        } else {
+                            _pendingDocIDs = null;
+                        }
                     } finally {
                         latch.countDown();
                     }
@@ -509,18 +516,49 @@ public class Replication
                 Log.e(Log.TAG_SYNC, "InterruptedException", e);
             }
 
-            return pendingDocIDs;
+            return _pendingDocIDs;
         }
     }
 
     public boolean isDocumentPending(Document doc) {
-        if (doc == null) return false;
+        synchronized (_lockPendingDocIDs) {
+            long lastSeq = getLastSequencePushed();
+            if (lastSeq < 0)
+                return false; // error
 
-        // getPendingDocumentIDs() is not simple getter. so not cheap.
-        Set<String> ids = getPendingDocumentIDs();
-        if (ids == null) return false;
+            SavedRevision rev = doc.getCurrentRevision();
+            long seq = rev.getSequence();
+            if (seq <= lastSeq)
+                return false;
 
-        return ids.contains(doc.getId());
+            if (getFilter() != null) {
+                // Use _pendingDocIDs as a shortcut, if it's valid
+                if (_pendingDocIDs != null && _pendingDocIDsSequence ==
+                        getLocalDatabase().getLastSequenceNumber())
+                    return _pendingDocIDs.contains(doc.getId());
+
+                // Else run the filter on the doc
+                ReplicationFilter filter = getLocalDatabase().getFilter(getFilter());
+                if (filter != null && !filter.filter(rev,
+                        (Map<String, Object>) properties.get("query_params")))
+                    return false;
+            }
+
+            return true;
+        }
+    }
+
+    // - (SInt64) lastSequencePushed
+    private long getLastSequencePushed() {
+        if (isPull())
+            return -1L;
+        if (_lastSequencePushed <= 0L) {
+            // If running replicator hasn't updated yet, fetch the checkpointed last sequence:
+            String lastSequence = db.lastSequenceWithCheckpointId(remoteCheckpointDocID());
+            if (lastSequence != null)
+                _lastSequencePushed = Long.valueOf(lastSequence);
+        }
+        return _lastSequencePushed;
     }
 
     /**
