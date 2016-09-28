@@ -2159,6 +2159,13 @@ public class Database implements StoreDelegate {
         return view;
     }
 
+    /**
+     * Reference: In CBLQuery.m
+     * - (CBLQueryEnumerator*) queryViewNamed: (NSString*)viewName
+     *                                options: (CBLQueryOptions*)options
+     *                         ifChangedSince: (SequenceNumber)ifChangedSince
+     *                                 status: (CBLStatus*)outStatus
+     */
     protected List<QueryRow> queryViewNamed(String viewName,
                                             QueryOptions options,
                                             List<Long> outLastSequence)
@@ -2173,13 +2180,17 @@ public class Database implements StoreDelegate {
             if (view == null) {
                 throw new CouchbaseLiteException(new Status(Status.NOT_FOUND));
             }
+            boolean reindex = false;
             lastSequence = view.getLastSequenceIndexed();
             if (options.getStale() == Query.IndexUpdateMode.BEFORE || lastSequence <= 0) {
                 view.updateIndex();
                 lastSequence = view.getLastSequenceIndexed();
             } else if (options.getStale() == Query.IndexUpdateMode.AFTER &&
                     lastSequence < getLastSequenceNumber()) {
-
+                reindex = true;
+            }
+            rows = view.query(options);
+            if (reindex) {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -2191,7 +2202,6 @@ public class Database implements StoreDelegate {
                     }
                 }).start();
             }
-            rows = view.query(options);
         } else {
             // nil view means query _all_docs
             // note: this is a little kludgy, but we have to pull out the "rows" field from the
