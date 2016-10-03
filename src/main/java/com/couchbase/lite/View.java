@@ -18,6 +18,7 @@
 package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
+import com.couchbase.lite.store.Store;
 import com.couchbase.lite.store.ViewStore;
 import com.couchbase.lite.store.ViewStoreDelegate;
 import com.couchbase.lite.util.Log;
@@ -53,10 +54,15 @@ public final class View implements ViewStoreDelegate {
     protected View(Database database, String name, boolean create) throws CouchbaseLiteException {
         this.database = database;
         this.name = name;
-        this.viewStore = database.getStore().getViewStorage(name, create);
-        if (this.viewStore == null)
-            throw new CouchbaseLiteException(Status.NOT_FOUND);
-        this.viewStore.setDelegate(this);
+        Store store = database.retainStore();
+        try {
+            this.viewStore = store.getViewStorage(name, create);
+            if (this.viewStore == null)
+                throw new CouchbaseLiteException(Status.NOT_FOUND);
+            this.viewStore.setDelegate(this);
+        } finally {
+            database.releaseStore();
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////

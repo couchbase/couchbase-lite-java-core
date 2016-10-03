@@ -15,6 +15,7 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.store.Store;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
@@ -150,10 +151,15 @@ public class Document {
      * A date/time after which this document will be automatically purged.
      */
     public Date getExpirationDate() {
-        long timestamp = database.getStore().expirationOfDocument(documentId);
-        if (timestamp == 0)
-            return null;
-        return new Date(timestamp);
+        Store store = database.retainStore();
+        try {
+            long timestamp = store.expirationOfDocument(documentId);
+            if (timestamp == 0)
+                return null;
+            return new Date(timestamp);
+        } finally {
+            database.releaseStore();
+        }
     }
 
     public void setExpirationDate(Date date) {
@@ -464,19 +470,24 @@ public class Document {
     @InterfaceAudience.Private
     protected List<SavedRevision> getLeafRevisions(boolean includeDeleted)
             throws CouchbaseLiteException {
-        List<SavedRevision> result = new ArrayList<SavedRevision>();
-        RevisionList revs = database.getStore().getAllRevisions(documentId, true);
-        if (revs != null) {
-            for (RevisionInternal rev : revs) {
-                // add it to result, unless we are not supposed to include deleted and it's deleted
-                if (!includeDeleted && rev.isDeleted()) {
-                    // don't add it
-                } else {
-                    result.add(getRevisionFromRev(rev));
+        Store store = database.retainStore();
+        try {
+            List<SavedRevision> result = new ArrayList<SavedRevision>();
+            RevisionList revs = store.getAllRevisions(documentId, true);
+            if (revs != null) {
+                for (RevisionInternal rev : revs) {
+                    // add it to result, unless we are not supposed to include deleted and it's deleted
+                    if (!includeDeleted && rev.isDeleted()) {
+                        // don't add it
+                    } else {
+                        result.add(getRevisionFromRev(rev));
+                    }
                 }
             }
+            return Collections.unmodifiableList(result);
+        } finally {
+            database.releaseStore();
         }
-        return Collections.unmodifiableList(result);
     }
 
     protected Map<String, Object> propertiesToInsert(Map<String, Object> properties)

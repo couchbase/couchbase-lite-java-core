@@ -24,6 +24,7 @@ import com.couchbase.lite.TransactionalTask;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.store.Store;
 import com.couchbase.lite.support.BatchProcessor;
 import com.couchbase.lite.support.Batcher;
 import com.couchbase.lite.support.CustomFuture;
@@ -554,77 +555,80 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     @InterfaceAudience.Private
     public void insertDownloads(final List<RevisionInternal> downloads) {
-
         Log.d(TAG, this + " inserting " + downloads.size() + " revisions...");
         final long time = System.currentTimeMillis();
         Collections.sort(downloads, getRevisionListComparator());
-
-        db.getStore().runInTransaction(new TransactionalTask() {
-            @Override
-            public boolean run() {
-                boolean success = false;
-                try {
-                    for (RevisionInternal rev : downloads) {
-                        long fakeSequence = rev.getSequence();
-                        List<String> history = db.parseCouchDBRevisionHistory(rev.getProperties());
-                        if (history.isEmpty() && rev.getGeneration() > 1) {
-                            Log.w(TAG, "%s: Missing revision history in response for: %s", this, rev);
-                            setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));
-                            continue;
-                        }
-
-                        Log.v(TAG, "%s: inserting %s %s", this, rev.getDocID(), history);
-
-                        // Insert the revision
-                        try {
-                            db.forceInsert(rev, history, remote);
-                        } catch (CouchbaseLiteException e) {
-                            if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
-                                Log.i(TAG, "%s: Remote rev failed validation: %s", this, rev);
-                            } else {
-                                Log.w(TAG, "%s: failed to write %s: status=%s",
-                                        this, rev, e.getCBLStatus().getCode());
-                                setError(new RemoteRequestResponseException(e.getCBLStatus().getCode(), null));
+        Store store = db.retainStore();
+        try {
+            store.runInTransaction(new TransactionalTask() {
+                @Override
+                public boolean run() {
+                    boolean success = false;
+                    try {
+                        for (RevisionInternal rev : downloads) {
+                            long fakeSequence = rev.getSequence();
+                            List<String> history = db.parseCouchDBRevisionHistory(rev.getProperties());
+                            if (history.isEmpty() && rev.getGeneration() > 1) {
+                                Log.w(TAG, "%s: Missing revision history in response for: %s", this, rev);
+                                setError(new CouchbaseLiteException(Status.UPSTREAM_ERROR));
                                 continue;
                             }
+
+                            Log.v(TAG, "%s: inserting %s %s", this, rev.getDocID(), history);
+
+                            // Insert the revision
+                            try {
+                                db.forceInsert(rev, history, remote);
+                            } catch (CouchbaseLiteException e) {
+                                if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
+                                    Log.i(TAG, "%s: Remote rev failed validation: %s", this, rev);
+                                } else {
+                                    Log.w(TAG, "%s: failed to write %s: status=%s",
+                                            this, rev, e.getCBLStatus().getCode());
+                                    setError(new RemoteRequestResponseException(e.getCBLStatus().getCode(), null));
+                                    continue;
+                                }
+                            }
+
+                            //if(rev.getBody() != null) rev.getBody().release();
+                            if (rev.getBody() != null) rev.getBody().compact();
+
+                            // Mark this revision's fake sequence as processed:
+                            pendingSequences.removeSequence(fakeSequence);
                         }
 
-                        //if(rev.getBody() != null) rev.getBody().release();
-                        if (rev.getBody() != null) rev.getBody().compact();
+                        Log.v(TAG, "%s: finished inserting %d revisions", this, downloads.size());
+                        success = true;
 
-                        // Mark this revision's fake sequence as processed:
-                        pendingSequences.removeSequence(fakeSequence);
+                    } catch (SQLException e) {
+                        Log.e(TAG, this + ": Exception inserting revisions", e);
+                    } finally {
+                        if (success) {
+
+                            // Checkpoint:
+                            setLastSequence(pendingSequences.getCheckpointedValue());
+
+                            long delta = System.currentTimeMillis() - time;
+                            Log.v(TAG,
+                                    "%s: inserted %d revs in %d milliseconds",
+                                    this, downloads.size(), delta);
+
+                            int newCompletedChangesCount = getCompletedChangesCount().get() + downloads.size();
+                            Log.d(TAG,
+                                    "%s insertDownloads() updating completedChangesCount from %d -> %d ",
+                                    this, getCompletedChangesCount().get(), newCompletedChangesCount);
+
+                            addToCompletedChangesCount(downloads.size());
+                        }
+
+                        pauseOrResume();
+                        return success;
                     }
-
-                    Log.v(TAG, "%s: finished inserting %d revisions", this, downloads.size());
-                    success = true;
-
-                } catch (SQLException e) {
-                    Log.e(TAG, this + ": Exception inserting revisions", e);
-                } finally {
-                    if (success) {
-
-                        // Checkpoint:
-                        setLastSequence(pendingSequences.getCheckpointedValue());
-
-                        long delta = System.currentTimeMillis() - time;
-                        Log.v(TAG,
-                                "%s: inserted %d revs in %d milliseconds",
-                                this, downloads.size(), delta);
-
-                        int newCompletedChangesCount = getCompletedChangesCount().get() + downloads.size();
-                        Log.d(TAG,
-                                "%s insertDownloads() updating completedChangesCount from %d -> %d ",
-                                this, getCompletedChangesCount().get(), newCompletedChangesCount);
-
-                        addToCompletedChangesCount(downloads.size());
-                    }
-
-                    pauseOrResume();
-                    return success;
                 }
-            }
-        });
+            });
+        } finally {
+            db.releaseStore();
+        }
     }
 
     @InterfaceAudience.Private

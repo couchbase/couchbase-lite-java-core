@@ -1273,8 +1273,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             connection.setResponseBody(new Body(result));
             return new Status(Status.BAD_REQUEST);
         }
-
-
     }
 
     public Status do_POST_Document_bulk_docs(Database _db, String _docID, String _attachmentName) {
@@ -1294,74 +1292,78 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         final List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
         // Transaction provide synchronized feature by SQLiteDatabase.
         // In the transaction block, should not use `synchronized` block
-        boolean ret = db.getStore().runInTransaction(new TransactionalTask() {
-            @Override
-            public boolean run() {
-                boolean ok = false;
-                try {
-                    for (Map<String, Object> doc : docs) {
-                        String docID = (String) doc.get("_id");
-                        RevisionInternal rev = null;
+        Store store = db.retainStore();
+        try {
+            boolean ret = store.runInTransaction(new TransactionalTask() {
+                @Override
+                public boolean run() {
+                    boolean ok = false;
+                    try {
+                        for (Map<String, Object> doc : docs) {
+                            String docID = (String) doc.get("_id");
+                            RevisionInternal rev = null;
 
-                        Body docBody = new Body(doc);
-                        if (noNewEdits) {
-                            rev = new RevisionInternal(docBody);
-                            if (rev.getRevID() == null || rev.getDocID() == null ||
-                                    !rev.getDocID().equals(docID)) {
-                                status.setCode(Status.BAD_REQUEST);
+                            Body docBody = new Body(doc);
+                            if (noNewEdits) {
+                                rev = new RevisionInternal(docBody);
+                                if (rev.getRevID() == null || rev.getDocID() == null ||
+                                        !rev.getDocID().equals(docID)) {
+                                    status.setCode(Status.BAD_REQUEST);
+                                } else {
+                                    List<String> history = Database.parseCouchDBRevisionHistory(doc);
+                                    db.forceInsert(rev, history, source);
+                                }
                             } else {
-                                List<String> history = Database.parseCouchDBRevisionHistory(doc);
-                                db.forceInsert(rev, history, source);
+                                Status outStatus = new Status();
+                                rev = update(db, docID, docBody, false, allOrNothing, outStatus);
+                                status.setCode(outStatus.getCode());
                             }
-                        } else {
-                            Status outStatus = new Status();
-                            rev = update(db, docID, docBody, false, allOrNothing, outStatus);
-                            status.setCode(outStatus.getCode());
-                        }
 
-                        Map<String, Object> result = null;
-                        if (status.isSuccessful()) {
-                            // Note: if new_edits=false, will not include the entries for
-                            // any of the successful revisions.
-                            if (!noNewEdits) {
+                            Map<String, Object> result = null;
+                            if (status.isSuccessful()) {
+                                // Note: if new_edits=false, will not include the entries for
+                                // any of the successful revisions.
+                                if (!noNewEdits) {
+                                    result = new HashMap<String, Object>();
+                                    result.put("ok", true);
+                                    result.put("id", rev.getDocID());
+                                    result.put("rev", rev.getRevID());
+                                }
+                            } else if (allOrNothing) {
+                                return false;
+                            } else if (status.getCode() == Status.FORBIDDEN) {
                                 result = new HashMap<String, Object>();
-                                result.put("ok", true);
-                                result.put("id", rev.getDocID());
-                                result.put("rev", rev.getRevID());
+                                result.put("error", "validation failed");
+                                result.put("id", docID);
+                            } else if (status.getCode() == Status.CONFLICT) {
+                                result = new HashMap<String, Object>();
+                                result.put("error", "conflict");
+                                result.put("id", docID);
+                            } else {
+                                //return status;  // abort the whole thing if something goes badly wrong
+                                return false;
                             }
-                        } else if (allOrNothing) {
-                            return false;
-                        } else if (status.getCode() == Status.FORBIDDEN) {
-                            result = new HashMap<String, Object>();
-                            result.put("error", "validation failed");
-                            result.put("id", docID);
-                        } else if (status.getCode() == Status.CONFLICT) {
-                            result = new HashMap<String, Object>();
-                            result.put("error", "conflict");
-                            result.put("id", docID);
-                        } else {
-                            //return status;  // abort the whole thing if something goes badly wrong
-                            return false;
+                            if (result != null) {
+                                results.add(result);
+                            }
                         }
-                        if (result != null) {
-                            results.add(result);
-                        }
+                        Log.w(TAG, "%s finished inserting %d revisions in bulk", this, docs.size());
+                        ok = true;
+                    } catch (Exception e) {
+                        Log.e(TAG, "%s: Exception inserting revisions in bulk", e, this);
+                    } finally {
+                        return ok;
                     }
-                    Log.w(TAG, "%s finished inserting %d revisions in bulk", this, docs.size());
-                    ok = true;
-                } catch (Exception e) {
-                    Log.e(TAG, "%s: Exception inserting revisions in bulk", e, this);
-                } finally {
-                    return ok;
                 }
+            });
+            if (ret) {
+                connection.setResponseBody(new Body(results));
+                return new Status(Status.CREATED);
+            } else {
+                return status;
             }
-        });
-
-        if (ret) {
-            connection.setResponseBody(new Body(results));
-            return new Status(Status.CREATED);
-        } else {
-            return status;
+        } finally {
+            db.releaseStore();
         }
     }
 
@@ -1968,17 +1970,22 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     return new Status(Status.NOT_MODIFIED);  // set ETag and check conditional GET
 
                 if (!isLocalDoc && includeAttachments) {
-                    int minRevPos = 1;
-                    List<String> attsSince = parseJSONRevArrayQuery(getQuery("atts_since"));
-                    String ancestorID = db.getStore().findCommonAncestorOf(rev, attsSince);
-                    if (ancestorID != null)
-                        minRevPos = Revision.generationFromRevID(ancestorID) + 1;
-                    RevisionInternal expandedRev = rev.copy();
-                    Status status = new Status(Status.OK);
-                    if (!db.expandAttachments(expandedRev, minRevPos, sendMultipart,
-                            !getBooleanQuery("att_encoding_info"), status))
-                        return status;
-                    rev = expandedRev;
+                    Store store = db.retainStore();
+                    try {
+                        int minRevPos = 1;
+                        List<String> attsSince = parseJSONRevArrayQuery(getQuery("atts_since"));
+                        String ancestorID = store.findCommonAncestorOf(rev, attsSince);
+                        if (ancestorID != null)
+                            minRevPos = Revision.generationFromRevID(ancestorID) + 1;
+                        RevisionInternal expandedRev = rev.copy();
+                        Status status = new Status(Status.OK);
+                        if (!db.expandAttachments(expandedRev, minRevPos, sendMultipart,
+                                !getBooleanQuery("att_encoding_info"), status))
+                            return status;
+                        rev = expandedRev;
+                    } finally {
+                        db.releaseStore();
+                    }
                 }
 
                 // TODO: Needs to support multi-part
@@ -1988,26 +1995,30 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 List<Map<String, Object>> result = null;
                 if ("all".equals(openRevsParam)) {
                     // Get all conflicting revisions:
-                    RevisionList allRevs = db.getStore().getAllRevisions(docID, true);
-                    result = new ArrayList<Map<String, Object>>(allRevs.size());
-                    for (RevisionInternal rev : allRevs) {
-
-                        try {
-                            // loadRevisionBody is synchronized with store instance.
-                            db.loadRevisionBody(rev);
-                        } catch (CouchbaseLiteException e) {
-                            if (e.getCBLStatus().getCode() != Status.INTERNAL_SERVER_ERROR) {
-                                Map<String, Object> dict = new HashMap<String, Object>();
-                                dict.put("missing", rev.getRevID());
-                                result.add(dict);
-                            } else {
-                                throw e;
+                    Store store = db.retainStore();
+                    try {
+                        RevisionList allRevs = store.getAllRevisions(docID, true);
+                        result = new ArrayList<Map<String, Object>>(allRevs.size());
+                        for (RevisionInternal rev : allRevs) {
+                            try {
+                                // loadRevisionBody is synchronized with store instance.
+                                db.loadRevisionBody(rev);
+                            } catch (CouchbaseLiteException e) {
+                                if (e.getCBLStatus().getCode() != Status.INTERNAL_SERVER_ERROR) {
+                                    Map<String, Object> dict = new HashMap<String, Object>();
+                                    dict.put("missing", rev.getRevID());
+                                    result.add(dict);
+                                } else {
+                                    throw e;
+                                }
                             }
-                        }
 
-                        Map<String, Object> dict = new HashMap<String, Object>();
-                        dict.put("ok", rev.getProperties());
-                        result.add(dict);
+                            Map<String, Object> dict = new HashMap<String, Object>();
+                            dict.put("ok", rev.getProperties());
+                            result.add(dict);
+                        }
+                    } finally {
+                        db.releaseStore();
                     }
                 } else {
                     // ?open_revs=[...] returns an array of revisions of the document:
@@ -2060,8 +2071,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             Map<String, Object> dst = new HashMap<String, Object>();
             dst.putAll(rev.getProperties());
-            Store store = db.getStore();
-
             if (options.contains(TDContentOptions.TDIncludeLocalSeq)) {
                 dst.put("_local_seq", rev.getSequence());
                 rev.setProperties(dst);
@@ -2092,19 +2101,24 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 rev.setProperties(dst);
             }
             if (options.contains(TDContentOptions.TDIncludeConflicts)) {
-                RevisionList revs = store.getAllRevisions(rev.getDocID(), true);
-                if (revs.size() > 1) {
-                    List<String> conflicts = new ArrayList<String>();
-                    for (RevisionInternal aRev : revs) {
-                        if (aRev.equals(rev) || aRev.isDeleted()) {
-                            // don't add in this case
-                        } else {
-                            conflicts.add(aRev.getRevID());
+                Store store = db.retainStore();
+                try {
+                    RevisionList revs = store.getAllRevisions(rev.getDocID(), true);
+                    if (revs.size() > 1) {
+                        List<String> conflicts = new ArrayList<String>();
+                        for (RevisionInternal aRev : revs) {
+                            if (aRev.equals(rev) || aRev.isDeleted()) {
+                                // don't add in this case
+                            } else {
+                                conflicts.add(aRev.getRevID());
+                            }
                         }
+                        dst.put("_conflicts", conflicts);
                     }
-                    dst.put("_conflicts", conflicts);
+                    rev.setProperties(dst);
+                } finally {
+                    db.releaseStore();
                 }
-                rev.setProperties(dst);
             }
             if (options.contains(TDContentOptions.TDBigAttachmentsFollow)) {
                 RevisionInternal nuRev = new RevisionInternal(dst);
@@ -2217,24 +2231,28 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             if (isLocalDoc) {
                 // NOTE: putLocalRevision() does not use transaction internally with obeyMVCC=true
-
                 final Database fDb = _db;
                 final RevisionInternal _rev = rev;
                 final String _prevRevID = prevRevID;
                 final List<RevisionInternal> _revs = new ArrayList<RevisionInternal>();
                 try {
-                    fDb.getStore().runInTransaction(new TransactionalTask() {
-                        @Override
-                        public boolean run() {
-                            try {
-                                RevisionInternal r = fDb.getStore().putLocalRevision(_rev, _prevRevID, true);
-                                _revs.add(r);
-                                return true;
-                            } catch (CouchbaseLiteException e) {
-                                throw new RuntimeException(e);
+                    final Store store = fDb.retainStore();
+                    try {
+                        store.runInTransaction(new TransactionalTask() {
+                            @Override
+                            public boolean run() {
+                                try {
+                                    RevisionInternal r = store.putLocalRevision(_rev, _prevRevID, true);
+                                    _revs.add(r);
+                                    return true;
+                                } catch (CouchbaseLiteException e) {
+                                    throw new RuntimeException(e);
+                                }
                             }
-                        }
-                    });
+                        });
+                    } finally {
+                        fDb.releaseStore();
+                    }
                     // success
                     if (_revs.size() > 0)
                         result = _revs.get(0);

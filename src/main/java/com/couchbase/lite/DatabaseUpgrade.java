@@ -18,6 +18,7 @@ import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.storage.Cursor;
 import com.couchbase.lite.storage.SQLiteStorageEngine;
 import com.couchbase.lite.storage.SQLiteStorageEngineFactory;
+import com.couchbase.lite.store.Store;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.util.Log;
 
@@ -421,18 +422,23 @@ public final class DatabaseUpgrade {
     }
 
     private void importInfo() {
-        // CREATE TABLE info (key TEXT PRIMARY KEY, value TEXT);
-        String sql = "SELECT key, value FROM info";
-        Cursor cursor = storageEngine.rawQuery(sql, null);
+        Store store = db.retainStore();
         try {
-            cursor.moveToNext();
-            while (!cursor.isAfterLast()) {
-                db.getStore().setInfo(cursor.getString(0), cursor.getString(1));
+            // CREATE TABLE info (key TEXT PRIMARY KEY, value TEXT);
+            String sql = "SELECT key, value FROM info";
+            Cursor cursor = storageEngine.rawQuery(sql, null);
+            try {
                 cursor.moveToNext();
+                while (!cursor.isAfterLast()) {
+                    store.setInfo(cursor.getString(0), cursor.getString(1));
+                    cursor.moveToNext();
+                }
+            } finally {
+                if (cursor != null)
+                    cursor.close();
             }
         } finally {
-            if (cursor != null)
-                cursor.close();
+            db.releaseStore();
         }
     }
 }
