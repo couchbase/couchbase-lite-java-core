@@ -102,7 +102,6 @@ public class Database implements StoreDelegate {
     private String name;
 
     private final AtomicBoolean open = new AtomicBoolean(false);
-    private final AtomicBoolean opening = new AtomicBoolean(false);
     private final AtomicBoolean closing = new AtomicBoolean(false);
     private final RefCounter storeRef = new RefCounter();
 
@@ -1271,144 +1270,139 @@ public class Database implements StoreDelegate {
             return;
 
         Log.v(TAG, "Opening %s", this);
-        opening.set(true);
-        try {
 
-            // Create the database directory:
-            File dir = new File(path);
-            if (!dir.exists()) {
-                if (!dir.mkdirs())
-                    throw new CouchbaseLiteException("Cannot create database directory",
-                            Status.INTERNAL_SERVER_ERROR);
-            } else if (!dir.isDirectory())
-                throw new CouchbaseLiteException("Database directory is not directory",
+        // Create the database directory:
+        File dir = new File(path);
+        if (!dir.exists()) {
+            if (!dir.mkdirs())
+                throw new CouchbaseLiteException("Cannot create database directory",
                         Status.INTERNAL_SERVER_ERROR);
+        } else if (!dir.isDirectory())
+            throw new CouchbaseLiteException("Database directory is not directory",
+                    Status.INTERNAL_SERVER_ERROR);
 
-            String storageType = options.getStorageType();
-            if (storageType == null) {
-                storageType = manager.getStorageType();
-                if (storageType == null)
-                    storageType = DEFAULT_STORAGE;
-            }
-
-            Store primaryStore = createStoreInstance(storageType);
-            if (primaryStore == null) {
-                if (storageType.equals(Manager.SQLITE_STORAGE) || storageType.equals(Manager.FORESTDB_STORAGE))
-                    Log.w(TAG, "storageType is '%s' but no class implementation found", storageType);
-                throw new CouchbaseLiteException("Can't open database in that storage format",
-                        Status.INVALID_STORAGE_TYPE);
-            }
-
-            boolean primarySQLite = Manager.SQLITE_STORAGE.equals(storageType);
-            Store otherStore = createStoreInstance(primarySQLite ? Manager.FORESTDB_STORAGE : Manager.SQLITE_STORAGE);
-
-            boolean upgrade = false;
-            if (options.getStorageType() != null) {
-                // If explicit storage type given in options, always use primary storage type,
-                // and if secondary db exists, try to upgrade from it:
-                if (otherStore != null && otherStore.databaseExists(path) && !primaryStore.databaseExists(path))
-                    upgrade = true;
-
-                if (upgrade && primarySQLite)
-                    throw new CouchbaseLiteException("Cannot upgrade to SQLite Storage", Status.INVALID_STORAGE_TYPE);
-            } else {
-                // If options don't specify, use primary unless secondary db already exists in dir:
-                if (otherStore != null && otherStore.databaseExists(path))
-                    primaryStore = otherStore;
-            }
-
-            store = primaryStore;
-            store.setAutoCompact(autoCompact);
-
-            // Set encryption key:
-            SymmetricKey encryptionKey = null;
-            if (store instanceof EncryptableStore) {
-                Object keyOrPassword = options.getEncryptionKey();
-                if (keyOrPassword != null) {
-                    encryptionKey = createSymmetricKey(keyOrPassword);
-                    ((EncryptableStore) store).setEncryptionKey(encryptionKey);
-                }
-            }
-
-            store.open();
-
-            // First-time setup:
-            if (privateUUID() == null) {
-                if (store.setInfo("privateUUID", Misc.CreateUUID()) != Status.OK)
-                    throw new CouchbaseLiteException("Unable to set privateUUID in info", Status.DB_ERROR);
-                if (store.setInfo("publicUUID", Misc.CreateUUID()) != Status.OK)
-                    throw new CouchbaseLiteException("Unable to set publicUUID in info", Status.DB_ERROR);
-            }
-
-            String sMaxRevs = store.getInfo("max_revs");
-            int maxRevs = (sMaxRevs == null) ? DEFAULT_MAX_REVS : Integer.parseInt(sMaxRevs);
-            store.setMaxRevTreeDepth(maxRevs);
-
-            // NOTE: Migrate attachment directory path if necessary
-            // https://github.com/couchbase/couchbase-lite-java-core/issues/604
-            File obsoletedAttachmentStorePath = new File(getObsoletedAttachmentStorePath());
-            if (obsoletedAttachmentStorePath != null &&
-                    obsoletedAttachmentStorePath.exists() &&
-                    obsoletedAttachmentStorePath.isDirectory()) {
-                File attachmentStorePath = new File(getAttachmentStorePath());
-                if (attachmentStorePath != null && !attachmentStorePath.exists()) {
-                    boolean success = obsoletedAttachmentStorePath.renameTo(attachmentStorePath);
-                    if (!success) {
-                        Log.e(Database.TAG, "Could not rename attachment store path");
-                        store.close();
-                        //store = null;
-                        throw new CouchbaseLiteException("Could not rename attachment store path",
-                                Status.INTERNAL_SERVER_ERROR);
-                    }
-                }
-            }
-
-            // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
-            //       Needs to delete /files/<database name>/ too
-            File obsoletedAttachmentStoreParentPath = new File(getObsoletedAttachmentStoreParentPath());
-            if (obsoletedAttachmentStoreParentPath != null &&
-                    obsoletedAttachmentStoreParentPath.exists()) {
-                obsoletedAttachmentStoreParentPath.delete();
-            }
-
-            try {
-                if (isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()) {
-                    attachments = new BlobStore(manager.getContext(),
-                            getAttachmentStorePath(), encryptionKey, false);
-                } else {
-                    attachments = new BlobStore(manager.getContext(),
-                            getAttachmentStorePath(), encryptionKey, true);
-                    markBlobstoreMigrated();
-                }
-
-            } catch (IllegalArgumentException e) {
-                Log.e(Database.TAG, "Could not initialize attachment store", e);
-                store.close();
-                //store = null;
-                throw new CouchbaseLiteException("Could not initialize attachment store", e,
-                        Status.INTERNAL_SERVER_ERROR);
-            }
-
-            open.set(true);
-
-            if (upgrade) {
-                Log.i(TAG, "Upgrading to %s ...", storageType);
-                String dbPath = new File(path, "db.sqlite3").getAbsolutePath();
-                DatabaseUpgrade upgrader = new DatabaseUpgrade(manager, this, dbPath);
-                if (!upgrader.importData()) {
-                    Log.w(TAG, "Upgrade to %s failed", storageType);
-                    upgrader.backOut();
-                    close();
-                    throw new CouchbaseLiteException("Cannot upgrade to " + storageType, Status.DB_ERROR);
-                } else {
-                    upgrader.deleteSQLiteFiles();
-                }
-            }
-
-            scheduleDocumentExpiration(kHousekeepingDelayAfterOpening);
-        }finally{
-            opening.set(false);
+        String storageType = options.getStorageType();
+        if (storageType == null) {
+            storageType = manager.getStorageType();
+            if (storageType == null)
+                storageType = DEFAULT_STORAGE;
         }
+
+        Store primaryStore = createStoreInstance(storageType);
+        if (primaryStore == null) {
+            if (storageType.equals(Manager.SQLITE_STORAGE) || storageType.equals(Manager.FORESTDB_STORAGE))
+                Log.w(TAG, "storageType is '%s' but no class implementation found", storageType);
+            throw new CouchbaseLiteException("Can't open database in that storage format",
+                    Status.INVALID_STORAGE_TYPE);
+        }
+
+        boolean primarySQLite = Manager.SQLITE_STORAGE.equals(storageType);
+        Store otherStore = createStoreInstance(primarySQLite ? Manager.FORESTDB_STORAGE : Manager.SQLITE_STORAGE);
+
+        boolean upgrade = false;
+        if (options.getStorageType() != null) {
+            // If explicit storage type given in options, always use primary storage type,
+            // and if secondary db exists, try to upgrade from it:
+            if (otherStore != null && otherStore.databaseExists(path) && !primaryStore.databaseExists(path))
+                upgrade = true;
+
+            if (upgrade && primarySQLite)
+                throw new CouchbaseLiteException("Cannot upgrade to SQLite Storage", Status.INVALID_STORAGE_TYPE);
+        } else {
+            // If options don't specify, use primary unless secondary db already exists in dir:
+            if (otherStore != null && otherStore.databaseExists(path))
+                primaryStore = otherStore;
+        }
+
+        store = primaryStore;
+        store.setAutoCompact(autoCompact);
+
+        // Set encryption key:
+        SymmetricKey encryptionKey = null;
+        if (store instanceof EncryptableStore) {
+            Object keyOrPassword = options.getEncryptionKey();
+            if (keyOrPassword != null) {
+                encryptionKey = createSymmetricKey(keyOrPassword);
+                ((EncryptableStore) store).setEncryptionKey(encryptionKey);
+            }
+        }
+
+        store.open();
+
+        open.set(true);
+
+        // First-time setup:
+        if (privateUUID() == null) {
+            if (store.setInfo("privateUUID", Misc.CreateUUID()) != Status.OK)
+                throw new CouchbaseLiteException("Unable to set privateUUID in info", Status.DB_ERROR);
+            if (store.setInfo("publicUUID", Misc.CreateUUID()) != Status.OK)
+                throw new CouchbaseLiteException("Unable to set publicUUID in info", Status.DB_ERROR);
+        }
+
+        String sMaxRevs = store.getInfo("max_revs");
+        int maxRevs = (sMaxRevs == null) ? DEFAULT_MAX_REVS : Integer.parseInt(sMaxRevs);
+        store.setMaxRevTreeDepth(maxRevs);
+
+        // NOTE: Migrate attachment directory path if necessary
+        // https://github.com/couchbase/couchbase-lite-java-core/issues/604
+        File obsoletedAttachmentStorePath = new File(getObsoletedAttachmentStorePath());
+        if (obsoletedAttachmentStorePath != null &&
+                obsoletedAttachmentStorePath.exists() &&
+                obsoletedAttachmentStorePath.isDirectory()) {
+            File attachmentStorePath = new File(getAttachmentStorePath());
+            if (attachmentStorePath != null && !attachmentStorePath.exists()) {
+                boolean success = obsoletedAttachmentStorePath.renameTo(attachmentStorePath);
+                if (!success) {
+                    Log.e(Database.TAG, "Could not rename attachment store path");
+                    store.close();
+                    //store = null;
+                    throw new CouchbaseLiteException("Could not rename attachment store path",
+                            Status.INTERNAL_SERVER_ERROR);
+                }
+            }
+        }
+
+        // NOTE: obsoleted directory is /files/<database name>/attachments/xxxx
+        //       Needs to delete /files/<database name>/ too
+        File obsoletedAttachmentStoreParentPath = new File(getObsoletedAttachmentStoreParentPath());
+        if (obsoletedAttachmentStoreParentPath != null &&
+                obsoletedAttachmentStoreParentPath.exists()) {
+            obsoletedAttachmentStoreParentPath.delete();
+        }
+
+        try {
+            if (isBlobstoreMigrated() || !manager.isAutoMigrateBlobStoreFilename()) {
+                attachments = new BlobStore(manager.getContext(),
+                        getAttachmentStorePath(), encryptionKey, false);
+            } else {
+                attachments = new BlobStore(manager.getContext(),
+                        getAttachmentStorePath(), encryptionKey, true);
+                markBlobstoreMigrated();
+            }
+
+        } catch (IllegalArgumentException e) {
+            Log.e(Database.TAG, "Could not initialize attachment store", e);
+            store.close();
+            //store = null;
+            throw new CouchbaseLiteException("Could not initialize attachment store", e,
+                    Status.INTERNAL_SERVER_ERROR);
+        }
+
+        if (upgrade) {
+            Log.i(TAG, "Upgrading to %s ...", storageType);
+            String dbPath = new File(path, "db.sqlite3").getAbsolutePath();
+            DatabaseUpgrade upgrader = new DatabaseUpgrade(manager, this, dbPath);
+            if (!upgrader.importData()) {
+                Log.w(TAG, "Upgrade to %s failed", storageType);
+                upgrader.backOut();
+                close();
+                throw new CouchbaseLiteException("Cannot upgrade to " + storageType, Status.DB_ERROR);
+            } else {
+                upgrader.deleteSQLiteFiles();
+            }
+        }
+
+        scheduleDocumentExpiration(kHousekeepingDelayAfterOpening);
     }
 
     /**
@@ -2143,7 +2137,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public boolean isOpen() {
-        return (open.get() && !closing.get()) || opening.get();
+        return (open.get() && !closing.get());
     }
 
     @InterfaceAudience.Private
