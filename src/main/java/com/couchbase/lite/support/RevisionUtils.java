@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.support;
 
 import com.couchbase.lite.Database;
@@ -19,6 +19,7 @@ import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.Utils;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
@@ -156,7 +157,15 @@ public class RevisionUtils {
 
         byte[] json = null;
         try {
-            json = Manager.getObjectMapper().writeValueAsBytes(properties);
+            // https://fasterxml.github.io/jackson-databind/javadoc/2.5/com/fasterxml/jackson/databind/SerializationFeature.html#ORDER_MAP_ENTRIES_BY_KEYS
+            // public static final SerializationFeature ORDER_MAP_ENTRIES_BY_KEYS
+            // Feature that determines whether Map entries are first sorted by key before
+            // serialization or not: if enabled, additional sorting step is performed if necessary
+            // (not necessary for SortedMaps), if disabled, no additional sorting is needed.
+            // Feature is disabled by default.
+            json = Manager.getObjectMapper()
+                    .writer(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+                    .writeValueAsBytes(properties);
         } catch (Exception e) {
             Log.e(Database.TAG, "Error serializing " + properties + " to JSON", e);
         }
