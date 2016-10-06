@@ -554,12 +554,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      */
     @InterfaceAudience.Private
     public void insertDownloads(final List<RevisionInternal> downloads) {
-
         Log.d(TAG, this + " inserting " + downloads.size() + " revisions...");
         final long time = System.currentTimeMillis();
         Collections.sort(downloads, getRevisionListComparator());
-
-        db.getStore().runInTransaction(new TransactionalTask() {
+        db.runInTransaction(new TransactionalTask() {
             @Override
             public boolean run() {
                 boolean success = false;
@@ -588,8 +586,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                                 continue;
                             }
                         }
-
-                        //if(rev.getBody() != null) rev.getBody().release();
                         if (rev.getBody() != null) rev.getBody().compact();
 
                         // Mark this revision's fake sequence as processed:
@@ -598,12 +594,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                     Log.v(TAG, "%s: finished inserting %d revisions", this, downloads.size());
                     success = true;
-
                 } catch (SQLException e) {
                     Log.e(TAG, this + ": Exception inserting revisions", e);
                 } finally {
                     if (success) {
-
                         // Checkpoint:
                         setLastSequence(pendingSequences.getCheckpointedValue());
 
@@ -619,7 +613,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
                         addToCompletedChangesCount(downloads.size());
                     }
-
                     pauseOrResume();
                     return success;
                 }

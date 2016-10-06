@@ -29,6 +29,7 @@ import com.couchbase.lite.store.EncryptableStore;
 import com.couchbase.lite.store.StorageValidation;
 import com.couchbase.lite.store.Store;
 import com.couchbase.lite.store.StoreDelegate;
+import com.couchbase.lite.store.ViewStore;
 import com.couchbase.lite.support.Base64;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
@@ -43,6 +44,7 @@ import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.CollectionUtils.Functor;
 import com.couchbase.lite.util.IOUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.RefCounter;
 
 import java.io.File;
 import java.io.IOException;
@@ -95,10 +97,13 @@ public class Database implements StoreDelegate {
     // Default value for maxRevTreeDepth, the max rev depth to preserve in a prune operation
     public static int DEFAULT_MAX_REVS = 20;
 
-    private Store store = null;
+    private Store store;
     private final String path;
     private String name;
+
     private final AtomicBoolean open = new AtomicBoolean(false);
+    private final AtomicBoolean closing = new AtomicBoolean(false);
+    private final RefCounter storeRef = new RefCounter();
 
     private Map<String, View> views;
     private Map<String, String> viewDocTypes;
@@ -206,11 +211,17 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public List<Replication> getAllReplications() {
-        List<Replication> allReplicatorsList = new ArrayList<Replication>();
-        synchronized (allReplicators) {
-            allReplicatorsList.addAll(allReplicators);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            List<Replication> allReplicatorsList = new ArrayList<Replication>();
+            synchronized (allReplicators) {
+                allReplicatorsList.addAll(allReplicators);
+            }
+            return allReplicatorsList;
+        } finally {
+            storeRef.release();
         }
-        return allReplicatorsList;
     }
 
     /**
@@ -218,7 +229,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public int getDocumentCount() {
-        return store.getDocumentCount();
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getDocumentCount();
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -228,7 +245,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public long getLastSequenceNumber() {
-        return store.getLastSequence();
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getLastSequence();
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -266,8 +289,14 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void compact() throws CouchbaseLiteException {
-        store.compact();
-        garbageCollectAttachments();
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            store.compact();
+            garbageCollectAttachments();
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -333,8 +362,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPullReplication(URL remote) {
-        return new Replication(this, remote, Replication.Direction.PULL, null);
-
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return new Replication(this, remote, Replication.Direction.PULL, null);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -345,7 +379,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPushReplication(URL remote) {
-        return new Replication(this, remote, Replication.Direction.PUSH, null);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return new Replication(this, remote, Replication.Direction.PUSH, null);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -376,6 +416,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public boolean deleteLocalDocument(String localDocID) throws CouchbaseLiteException {
+        // putLocalDocument() does isOpen() check and reference management
         return putLocalDocument(localDocID, null);
     }
 
@@ -389,18 +430,22 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Document getDocument(String documentId) {
-        if (documentId == null || documentId.length() == 0) {
-            return null;
-        }
-        Document doc = docCache.get(documentId);
-        if (doc == null) {
-            doc = new Document(this, documentId);
-            if (doc == null) {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            if (documentId == null || documentId.length() == 0)
                 return null;
+            Document doc = docCache.get(documentId);
+            if (doc == null) {
+                doc = new Document(this, documentId);
+                if (doc == null)
+                    return null;
+                docCache.put(documentId, doc);
             }
-            docCache.put(documentId, doc);
+            return doc;
+        } finally {
+            storeRef.release();
         }
-        return doc;
     }
 
     /**
@@ -408,6 +453,8 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Document getExistingDocument(String docID) {
+        // getDocument(docID) and getDocument(docID, ...) do isOpen() check and reference management
+
         // TODO: Needs to review this implementation
         if (docID == null || docID.length() == 0) {
             return null;
@@ -424,6 +471,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Map<String, Object> getExistingLocalDocument(String documentId) {
+        // getLocalDocument() does isOpen() check and reference management
         RevisionInternal revInt = getLocalDocument(makeLocalDocumentId(documentId), null);
         if (revInt == null) {
             return null;
@@ -436,17 +484,22 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public View getExistingView(String name) {
-        synchronized (lockViews) {
-            View view = views != null ? views.get(name) : null;
-            if (view != null)
-                return view;
-
-            try {
-                return registerView(new View(this, name, false));
-            } catch (CouchbaseLiteException e) {
-                // View is not exist.
-                return null;
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            synchronized (lockViews) {
+                View view = views != null ? views.get(name) : null;
+                if (view != null)
+                    return view;
+                try {
+                    return registerView(new View(this, name, false));
+                } catch (CouchbaseLiteException e) {
+                    // View is not exist.
+                    return null;
+                }
             }
+        } finally {
+            storeRef.release();
         }
     }
 
@@ -503,20 +556,26 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public View getView(String name) {
-        synchronized (lockViews) {
-            View view = null;
-            if (views != null) {
-                view = views.get(name);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            synchronized (lockViews) {
+                View view = null;
+                if (views != null) {
+                    view = views.get(name);
+                }
+                if (view != null) {
+                    return view;
+                }
+                try {
+                    return registerView(new View(this, name, true));
+                } catch (CouchbaseLiteException e) {
+                    Log.w(TAG, "Error in registerView: error=" + e.getLocalizedMessage(), e);
+                    return null;
+                }
             }
-            if (view != null) {
-                return view;
-            }
-            try {
-                return registerView(new View(this, name, true));
-            } catch (CouchbaseLiteException e) {
-                Log.w(TAG, "Error in registerView: error=" + e.getLocalizedMessage(), e);
-                return null;
-            }
+        } finally {
+            storeRef.release();
         }
     }
 
@@ -528,11 +587,17 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Public
     public boolean putLocalDocument(String localDocID, Map<String, Object> properties)
             throws CouchbaseLiteException {
-        localDocID = makeLocalDocumentId(localDocID);
-        RevisionInternal rev = new RevisionInternal(localDocID, null, properties == null);
-        if (properties != null)
-            rev.setProperties(properties);
-        return store.putLocalRevision(rev, null, false) != null;
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            localDocID = makeLocalDocumentId(localDocID);
+            RevisionInternal rev = new RevisionInternal(localDocID, null, properties == null);
+            if (properties != null)
+                rev.setProperties(properties);
+            return store.putLocalRevision(rev, null, false) != null;
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -567,7 +632,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public boolean runInTransaction(TransactionalTask task) {
-        return store.runInTransaction(task);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.runInTransaction(task);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -611,8 +682,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public void setMaxRevTreeDepth(int maxRevTreeDepth) {
-        if (store != null)
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
             store.setMaxRevTreeDepth(maxRevTreeDepth);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -622,7 +698,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public int getMaxRevTreeDepth() {
-        return store.getMaxRevTreeDepth();
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getMaxRevTreeDepth();
+        } finally {
+            storeRef.release();
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -728,7 +810,7 @@ public class Database implements StoreDelegate {
     public void databaseStorageChanged(DocumentChange change) {
         if (change.getRevisionId() != null)
             Log.v(Log.TAG, "---> Added: %s as seq %d",
-                change.getAddedRevision(), change.getAddedRevision().getSequence());
+                    change.getAddedRevision(), change.getAddedRevision().getSequence());
         else
             Log.v(Log.TAG, "---> Purged: docID=%s", change.getDocumentId());
 
@@ -900,62 +982,62 @@ public class Database implements StoreDelegate {
                                      final boolean allowFollows,
                                      final boolean decodeAttachments,
                                      final Status outStatus) {
-        outStatus.setCode(Status.OK);
-
-        rev.mutateAttachments(new Functor<Map<String, Object>, Map<String, Object>>() {
-            public Map<String, Object> invoke(Map<String, Object> attachment) {
-
-                String name = (String) attachment.get("name");
-
-                int revPos = (Integer) attachment.get("revpos");
-                if (revPos < minRevPos && revPos != 0) {
-                    Map<String, Object> map = new HashMap<String, Object>();
-                    map.put("stub", true);
-                    map.put("revpos", revPos);
-                    return map;
-                } else {
-                    Map<String, Object> expanded = new HashMap<String, Object>();
-                    expanded.putAll(attachment);
-                    expanded.remove("stub");
-                    if (decodeAttachments) {
-                        expanded.remove("encoding");
-                        expanded.remove("encoded_length");
-                    }
-
-                    if (allowFollows && smallestLength(expanded) >= kBigAttachmentLength) {
-                        // Data will follow (multipart):
-                        expanded.put("follows", true);
-                        expanded.remove("data");
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            outStatus.setCode(Status.OK);
+            rev.mutateAttachments(new Functor<Map<String, Object>, Map<String, Object>>() {
+                public Map<String, Object> invoke(Map<String, Object> attachment) {
+                    String name = (String) attachment.get("name");
+                    int revPos = (Integer) attachment.get("revpos");
+                    if (revPos < minRevPos && revPos != 0) {
+                        Map<String, Object> map = new HashMap<String, Object>();
+                        map.put("stub", true);
+                        map.put("revpos", revPos);
+                        return map;
                     } else {
-                        // Put data inline:
-                        expanded.remove("follows");
-                        AttachmentInternal attachObj = null;
-                        try {
-                            attachObj = getAttachment(attachment, name);
-                        } catch (CouchbaseLiteException e) {
-                            outStatus.setCode(e.getCBLStatus().getCode());
+                        Map<String, Object> expanded = new HashMap<String, Object>();
+                        expanded.putAll(attachment);
+                        expanded.remove("stub");
+                        if (decodeAttachments) {
+                            expanded.remove("encoding");
+                            expanded.remove("encoded_length");
                         }
-
-                        if (attachObj == null) {
-                            Log.w(TAG, "Can't get attachment '%s' of %s (status %d)",
-                                    name, rev, outStatus.getCode());
-                            return attachment;
+                        if (allowFollows && smallestLength(expanded) >= kBigAttachmentLength) {
+                            // Data will follow (multipart):
+                            expanded.put("follows", true);
+                            expanded.remove("data");
+                        } else {
+                            // Put data inline:
+                            expanded.remove("follows");
+                            AttachmentInternal attachObj = null;
+                            try {
+                                attachObj = getAttachment(attachment, name);
+                            } catch (CouchbaseLiteException e) {
+                                outStatus.setCode(e.getCBLStatus().getCode());
+                            }
+                            if (attachObj == null) {
+                                Log.w(TAG, "Can't get attachment '%s' of %s (status %d)",
+                                        name, rev, outStatus.getCode());
+                                return attachment;
+                            }
+                            byte[] data = decodeAttachments ? attachObj.getContent() :
+                                    attachObj.getEncodedContent();
+                            if (data == null) {
+                                Log.w(TAG, "Can't get binary data of attachment '%s' of %s", name, rev);
+                                outStatus.setCode(Status.NOT_FOUND);
+                                return attachment;
+                            }
+                            expanded.put("data", Base64.encodeBytes(data));
                         }
-                        byte[] data = decodeAttachments ? attachObj.getContent() :
-                                attachObj.getEncodedContent();
-                        if (data == null) {
-                            Log.w(TAG, "Can't get binary data of attachment '%s' of %s", name, rev);
-                            outStatus.setCode(Status.NOT_FOUND);
-                            return attachment;
-                        }
-                        expanded.put("data", Base64.encodeBytes(data));
+                        return expanded;
                     }
-                    return expanded;
                 }
-            }
-        });
-
-        return outStatus.getCode() == Status.OK;
+            });
+            return outStatus.getCode() == Status.OK;
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -971,7 +1053,6 @@ public class Database implements StoreDelegate {
                                                   final List<String> ancestry,
                                                   final Status outStatus) {
         outStatus.setCode(Status.OK);
-
         Map<String, Object> revAttachments = rev.getAttachments();
         if (revAttachments == null)
             return true;  // no-op: no attachments
@@ -990,9 +1071,7 @@ public class Database implements StoreDelegate {
 
         rev.mutateAttachments(new Functor<Map<String, Object>, Map<String, Object>>() {
             public Map<String, Object> invoke(Map<String, Object> attachInfo) {
-
                 String name = (String) attachInfo.get("name");
-
                 AttachmentInternal attachment;
                 try {
                     attachment = new AttachmentInternal(name, attachInfo);
@@ -1250,6 +1329,8 @@ public class Database implements StoreDelegate {
 
         store.open();
 
+        open.set(true);
+
         // First-time setup:
         if (privateUUID() == null) {
             if (store.setInfo("privateUUID", Misc.CreateUUID()) != Status.OK)
@@ -1274,7 +1355,7 @@ public class Database implements StoreDelegate {
                 if (!success) {
                     Log.e(Database.TAG, "Could not rename attachment store path");
                     store.close();
-                    store = null;
+                    //store = null;
                     throw new CouchbaseLiteException("Could not rename attachment store path",
                             Status.INTERNAL_SERVER_ERROR);
                 }
@@ -1302,12 +1383,10 @@ public class Database implements StoreDelegate {
         } catch (IllegalArgumentException e) {
             Log.e(Database.TAG, "Could not initialize attachment store", e);
             store.close();
-            store = null;
+            //store = null;
             throw new CouchbaseLiteException("Could not initialize attachment store", e,
                     Status.INTERNAL_SERVER_ERROR);
         }
-
-        open.set(true);
 
         if (upgrade) {
             Log.i(TAG, "Upgrading to %s ...", storageType);
@@ -1361,68 +1440,76 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Public
-    public boolean close() {
-        if (!open.get()) {
-            // Ensure that the database is forgotten:
-            manager.forgetDatabase(this);
-            return false;
-        }
+    public synchronized boolean close() {
+        storeRef.await();
+        try {
+            closing.set(true);
 
-        synchronized (databaseListeners) {
-            for (DatabaseListener listener : databaseListeners)
-                listener.databaseClosing();
-        }
-
-        if (views != null) {
-            for (View view : views.values())
-                view.close();
-        }
-        views = null;
-
-        // Make all replicators stop and wait:
-        boolean stopping = false;
-        synchronized (activeReplicators) {
-            for (Replication replicator : activeReplicators) {
-                if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
-                    continue;
-                replicator.stop();
-                stopping = true;
+            if (!open.get()) {
+                // Ensure that the database is forgotten:
+                manager.forgetDatabase(this);
+                return false;
             }
 
-            // maximum wait time per replicator is 60 sec.
-            // total maximum wait time for all replicators is between 60sec and 119 sec.
-            long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
-            long startTime = System.currentTimeMillis();
-            while (activeReplicators.size() > 0 && stopping &&
-                    (System.currentTimeMillis() - startTime) < timeout) {
-                try {
-                    activeReplicators.wait(timeout);
-                } catch (InterruptedException e) {
+            synchronized (databaseListeners) {
+                for (DatabaseListener listener : databaseListeners)
+                    listener.databaseClosing();
+            }
+
+            synchronized (lockViews) {
+                if (views != null) {
+                    for (View view : views.values())
+                        view.close();
                 }
+                views = null;
             }
-            // clear active replicators:
-            activeReplicators.clear();
+
+            // Make all replicators stop and wait:
+            boolean stopping = false;
+            synchronized (activeReplicators) {
+                for (Replication replicator : activeReplicators) {
+                    if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
+                        continue;
+                    replicator.stop();
+                    stopping = true;
+                }
+
+                // maximum wait time per replicator is 60 sec.
+                // total maximum wait time for all replicators is between 60sec and 119 sec.
+                long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
+                long startTime = System.currentTimeMillis();
+                while (activeReplicators.size() > 0 && stopping &&
+                        (System.currentTimeMillis() - startTime) < timeout) {
+                    try {
+                        activeReplicators.wait(timeout);
+                    } catch (InterruptedException e) {
+                    }
+                }
+                // clear active replicators:
+                activeReplicators.clear();
+            }
+
+            // Clear all replicators:
+            allReplicators.clear();
+
+            // cancel purge timer
+            cancelPurgeTimer();
+
+            // Close Store:
+            if (store != null)
+                store.close();
+
+            // Clear document cache:
+            clearDocumentCache();
+
+            // Forget database:
+            manager.forgetDatabase(this);
+
+            open.set(false);
+            return true;
+        } finally {
+            closing.set(false);
         }
-
-        // Clear all replicators:
-        allReplicators.clear();
-
-        // cancel purge timer
-        cancelPurgeTimer();
-
-        // Close Store:
-        if (store != null)
-            store.close();
-        store = null;
-
-        // Clear document cache:
-        clearDocumentCache();
-
-        // Forget database:
-        manager.forgetDatabase(this);
-
-        open.set(false);
-        return true;
     }
 
     @InterfaceAudience.Private
@@ -1441,24 +1528,48 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public String privateUUID() {
-        return store.getInfo("privateUUID");
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getInfo("privateUUID");
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
     public String publicUUID() {
-        return store.getInfo("publicUUID");
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getInfo("publicUUID");
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
     public RevisionInternal getDocument(String docID, String revID, boolean withBody) {
-        return store == null ? null : store.getDocument(docID, revID, withBody);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getDocument(docID, revID, withBody);
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
     public RevisionInternal loadRevisionBody(RevisionInternal rev) throws CouchbaseLiteException {
-        // NOTE: loadRevisionBoy() is thread safe. It is read operation to database as storage
-        //       layer is thread-safe, and also not access to instance variables.
-        return store.loadRevisionBody(rev);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            // NOTE: loadRevisionBoy() is thread safe. It is read operation to database as storage
+            //       layer is thread-safe, and also not access to instance variables.
+            return store.loadRevisionBody(rev);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -1467,7 +1578,13 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev, int limit,
                                                        AtomicBoolean hasAttachment) {
-        return store.getPossibleAncestorRevisionIDs(rev, limit, hasAttachment);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getPossibleAncestorRevisionIDs(rev, limit, hasAttachment);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -1495,7 +1612,13 @@ public class Database implements StoreDelegate {
                                      ChangesOptions options,
                                      ReplicationFilter filter,
                                      Map<String, Object> filterParams) {
-        return store.changesSince(lastSeq, options, filter, filterParams);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.changesSince(lastSeq, options, filter, filterParams);
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
@@ -1513,60 +1636,66 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public Map<String, Object> getAllDocs(QueryOptions options) throws CouchbaseLiteException {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            // For regular all-docs, let storage do it all:
+            if (options == null || options.getAllDocsMode() != Query.AllDocsMode.BY_SEQUENCE)
+                return store.getAllDocs(options);
 
-        // For regular all-docs, let storage do it all:
-        if (options == null || options.getAllDocsMode() != Query.AllDocsMode.BY_SEQUENCE)
-            return store.getAllDocs(options);
-
-        // For changes feed mode (kCBLBySequence) do more work here:
-        if (options.isDescending()) {
-            throw new CouchbaseLiteException(Status.NOT_IMPLEMENTED); //FIX: Implement descending order
-        }
-
-        ChangesOptions changesOpts = new ChangesOptions(
-                options.getLimit(),
-                options.isIncludeDocs(),
-                true, true);
-
-        long startSeq = keyToSequence(options.getStartKey(), 1);
-        long endSeq = keyToSequence(options.getEndKey(), Long.MAX_VALUE);
-        if (!options.isInclusiveStart())
-            ++startSeq;
-        if (!options.isInclusiveEnd())
-            --endSeq;
-        long minSeq = startSeq;
-        long maxSeq = endSeq;
-        if (minSeq > maxSeq) {
-            return null; // empty result
-        }
-
-        RevisionList revs = store.changesSince(minSeq - 1, changesOpts, null, null);
-        if (revs == null)
-            return null;
-
-        Map<String, Object> result = new HashMap<String, Object>();
-        List<QueryRow> rows = new ArrayList<QueryRow>();
-
-        Predicate<QueryRow> filter = options.getPostFilter();
-
-        // reverse order
-        if (options.isDescending()) {
-            for (int i = revs.size() - 1; i >= 0; i--) {
-                QueryRow row = getQueryRow(revs.get(i), minSeq, maxSeq, options.getPostFilter());
-                if (row != null)
-                    rows.add(row);
+            // For changes feed mode (kCBLBySequence) do more work here:
+            if (options.isDescending()) {
+                throw new CouchbaseLiteException(Status.NOT_IMPLEMENTED);
+                //FIX: Implement descending order
             }
-        } else {
-            for (int i = 0; i < revs.size(); i++) {
-                QueryRow row = getQueryRow(revs.get(i), minSeq, maxSeq, options.getPostFilter());
-                if (row != null)
-                    rows.add(row);
+
+            ChangesOptions changesOpts = new ChangesOptions(
+                    options.getLimit(),
+                    options.isIncludeDocs(),
+                    true, true);
+
+            long startSeq = keyToSequence(options.getStartKey(), 1);
+            long endSeq = keyToSequence(options.getEndKey(), Long.MAX_VALUE);
+            if (!options.isInclusiveStart())
+                ++startSeq;
+            if (!options.isInclusiveEnd())
+                --endSeq;
+            long minSeq = startSeq;
+            long maxSeq = endSeq;
+            if (minSeq > maxSeq) {
+                return null; // empty result
             }
+
+            RevisionList revs = store.changesSince(minSeq - 1, changesOpts, null, null);
+            if (revs == null)
+                return null;
+
+            Map<String, Object> result = new HashMap<String, Object>();
+            List<QueryRow> rows = new ArrayList<QueryRow>();
+
+            Predicate<QueryRow> filter = options.getPostFilter();
+
+            // reverse order
+            if (options.isDescending()) {
+                for (int i = revs.size() - 1; i >= 0; i--) {
+                    QueryRow row = getQueryRow(revs.get(i), minSeq, maxSeq, options.getPostFilter());
+                    if (row != null)
+                        rows.add(row);
+                }
+            } else {
+                for (int i = 0; i < revs.size(); i++) {
+                    QueryRow row = getQueryRow(revs.get(i), minSeq, maxSeq, options.getPostFilter());
+                    if (row != null)
+                        rows.add(row);
+                }
+            }
+            result.put("rows", rows);
+            result.put("total_rows", rows.size());
+            result.put("offset", options.getSkip());
+            return result;
+        } finally {
+            storeRef.release();
         }
-        result.put("rows", rows);
-        result.put("total_rows", rows.size());
-        result.put("offset", options.getSkip());
-        return result;
     }
 
     private QueryRow getQueryRow(RevisionInternal rev, long minSeq, long maxSeq, Predicate<QueryRow> filter) {
@@ -1802,53 +1931,59 @@ public class Database implements StoreDelegate {
                                 URL source,
                                 Status outStatus) throws CouchbaseLiteException {
 
-        boolean deleting = properties == null ||
-                (properties.containsKey("_deleted") &&
-                        ((Boolean) properties.get("_deleted")).booleanValue());
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            boolean deleting = properties == null ||
+                    (properties.containsKey("_deleted") &&
+                            ((Boolean) properties.get("_deleted")).booleanValue());
 
-        Log.v(TAG, "%s _id=%s, _rev=%s (allowConflict=%b)", (deleting ? "DELETE" : "PUT"),
-                docID, prevRevID, allowConflict);
+            Log.v(TAG, "%s _id=%s, _rev=%s (allowConflict=%b)", (deleting ? "DELETE" : "PUT"),
+                    docID, prevRevID, allowConflict);
 
-        // Attachments
-        if (properties != null && properties.containsKey("_attachments")) {
-            // Add any new attachment data to the blob-store, and turn all of them into stubs:
-            //FIX: Optimize this to avoid creating a revision object
-            RevisionInternal tmpRev = new RevisionInternal(docID, prevRevID, deleting);
-            tmpRev.setProperties(properties);
-            List<String> ancestry = new ArrayList<String>();
-            if (prevRevID != null)
-                ancestry.add(prevRevID);
-            if (!processAttachmentsForRevision(tmpRev, ancestry, outStatus)) {
-                return null;
-            }
-            properties = tmpRev.getProperties();
-        }
-
-        // TODO: Need to implement Shared (Manager.shared)
-        StorageValidation validationBlock = null;
-        if (validations != null && validations.size() > 0) {
-            validationBlock = new StorageValidation() {
-                @Override
-                public Status validate(RevisionInternal newRev, RevisionInternal prevRev,
-                                       String parentRevID) {
-                    try {
-                        validateRevision(newRev, prevRev, parentRevID);
-                    } catch (CouchbaseLiteException e) {
-                        return new Status(Status.FORBIDDEN);
-                    }
-                    return new Status(Status.OK);
+            // Attachments
+            if (properties != null && properties.containsKey("_attachments")) {
+                // Add any new attachment data to the blob-store, and turn all of them into stubs:
+                //FIX: Optimize this to avoid creating a revision object
+                RevisionInternal tmpRev = new RevisionInternal(docID, prevRevID, deleting);
+                tmpRev.setProperties(properties);
+                List<String> ancestry = new ArrayList<String>();
+                if (prevRevID != null)
+                    ancestry.add(prevRevID);
+                if (!processAttachmentsForRevision(tmpRev, ancestry, outStatus)) {
+                    return null;
                 }
-            };
-        }
+                properties = tmpRev.getProperties();
+            }
 
-        return store.add(
-                docID,
-                prevRevID,
-                properties,
-                deleting,
-                allowConflict,
-                validationBlock,
-                outStatus);
+            // TODO: Need to implement Shared (Manager.shared)
+            StorageValidation validationBlock = null;
+            if (validations != null && validations.size() > 0) {
+                validationBlock = new StorageValidation() {
+                    @Override
+                    public Status validate(RevisionInternal newRev, RevisionInternal prevRev,
+                                           String parentRevID) {
+                        try {
+                            validateRevision(newRev, prevRev, parentRevID);
+                        } catch (CouchbaseLiteException e) {
+                            return new Status(Status.FORBIDDEN);
+                        }
+                        return new Status(Status.OK);
+                    }
+                };
+            }
+
+            return store.add(
+                    docID,
+                    prevRevID,
+                    properties,
+                    deleting,
+                    allowConflict,
+                    validationBlock,
+                    outStatus);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -1866,65 +2001,83 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public void forceInsert(RevisionInternal inRev, List<String> history, URL source)
             throws CouchbaseLiteException {
-        Log.v(TAG, "INSERT %s, history[%d]", inRev, history == null ? 0 : history.size());
-        String docID = inRev.getDocID();
-        String revID = inRev.getRevID();
-        if (!Document.isValidDocumentId(docID) || (revID == null))
-            throw new CouchbaseLiteException(Status.BAD_ID);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            Log.v(TAG, "INSERT %s, history[%d]", inRev, history == null ? 0 : history.size());
+            String docID = inRev.getDocID();
+            String revID = inRev.getRevID();
+            if (!Document.isValidDocumentId(docID) || (revID == null))
+                throw new CouchbaseLiteException(Status.BAD_ID);
 
-        int historyCount = 0;
-        if (history != null)
-            historyCount = history.size();
+            int historyCount = 0;
+            if (history != null)
+                historyCount = history.size();
 
-        if (historyCount == 0) {
-            history = new ArrayList<String>();
-            history.add(revID);
-        } else if (!history.get(0).equals(revID)) {
-            // If inRev's revID doesn't appear in history, add it at the start:
-            List<String> nuHistory = new ArrayList<String>(history);
-            nuHistory.add(0, revID);
-            history = nuHistory;
-        }
-
-        // Attachments
-        Map<String, Object> attachments = inRev.getAttachments();
-        if (attachments != null) {
-            RevisionInternal updatedRev = inRev.copy();
-            List<String> ancestry = history.subList(1, history.size());
-            Status status = new Status(Status.OK);
-            if (!processAttachmentsForRevision(updatedRev, ancestry, status)) {
-                throw new CouchbaseLiteException(status);
+            if (historyCount == 0) {
+                history = new ArrayList<String>();
+                history.add(revID);
+            } else if (!history.get(0).equals(revID)) {
+                // If inRev's revID doesn't appear in history, add it at the start:
+                List<String> nuHistory = new ArrayList<String>(history);
+                nuHistory.add(0, revID);
+                history = nuHistory;
             }
-            inRev = updatedRev;
-        }
 
-        // TODO: Need to implement Shared (Manager.shared)
-        StorageValidation validationBlock = null;
-        if (validations != null && validations.size() > 0) {
-            validationBlock = new StorageValidation() {
-                @Override
-                public Status validate(RevisionInternal newRev, RevisionInternal prevRev, String parentRevID) {
-                    try {
-                        validateRevision(newRev, prevRev, parentRevID);
-                    } catch (CouchbaseLiteException e) {
-                        return new Status(Status.FORBIDDEN);
-                    }
-                    return new Status(Status.OK);
+            // Attachments
+            Map<String, Object> attachments = inRev.getAttachments();
+            if (attachments != null) {
+                RevisionInternal updatedRev = inRev.copy();
+                List<String> ancestry = history.subList(1, history.size());
+                Status status = new Status(Status.OK);
+                if (!processAttachmentsForRevision(updatedRev, ancestry, status)) {
+                    throw new CouchbaseLiteException(status);
                 }
-            };
-        }
+                inRev = updatedRev;
+            }
 
-        store.forceInsert(inRev, history, validationBlock, source);
+            // TODO: Need to implement Shared (Manager.shared)
+            StorageValidation validationBlock = null;
+            if (validations != null && validations.size() > 0) {
+                validationBlock = new StorageValidation() {
+                    @Override
+                    public Status validate(RevisionInternal newRev, RevisionInternal prevRev, String parentRevID) {
+                        try {
+                            validateRevision(newRev, prevRev, parentRevID);
+                        } catch (CouchbaseLiteException e) {
+                            return new Status(Status.FORBIDDEN);
+                        }
+                        return new Status(Status.OK);
+                    }
+                };
+            }
+
+            store.forceInsert(inRev, history, validationBlock, source);
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
     public String lastSequenceWithCheckpointId(String checkpointId) {
-        return store.getInfo(checkpointInfoKey(checkpointId));
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getInfo(checkpointInfoKey(checkpointId));
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
     public boolean setLastSequence(String lastSequence, String checkpointId) {
-        return store.setInfo(checkpointInfoKey(checkpointId), lastSequence) != -1;
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.setInfo(checkpointInfoKey(checkpointId), lastSequence) != -1;
+        } finally {
+            storeRef.release();
+        }
     }
 
     private static String checkpointInfoKey(String checkpointID) {
@@ -1933,7 +2086,13 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public int findMissingRevisions(RevisionList touchRevs) throws SQLException {
-        return store.findMissingRevisions(touchRevs);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.findMissingRevisions(touchRevs);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -1947,12 +2106,24 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public Map<String, Object> purgeRevisions(final Map<String, List<String>> docsToRevs) {
-        return store.purgeRevisions(docsToRevs);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.purgeRevisions(docsToRevs);
+        } finally {
+            storeRef.release();
+        }
     }
 
     @InterfaceAudience.Private
     public RevisionInternal getLocalDocument(String docID, String revID) {
-        return store.getLocalDocument(docID, revID);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getLocalDocument(docID, revID);
+        } finally {
+            storeRef.release();
+        }
     }
 
     // NOTE: router-only
@@ -1966,7 +2137,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public boolean isOpen() {
-        return open.get();
+        return (open.get() && !closing.get());
     }
 
     @InterfaceAudience.Private
@@ -1997,7 +2168,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public PersistentCookieJar getPersistentCookieStore() {
-        if(persistentCookieStore == null)
+        if (persistentCookieStore == null)
             persistentCookieStore = new PersistentCookieJar(this);
         return persistentCookieStore;
     }
@@ -2070,8 +2241,88 @@ public class Database implements StoreDelegate {
         return path;
     }
 
-    public Store getStore() {
+    // Only for Unit Test
+    @InterfaceAudience.Private
+    protected Store getStore() {
         return store;
+    }
+
+    @InterfaceAudience.Private
+    protected ViewStore getViewStorage(String name, boolean create) throws CouchbaseLiteException {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getViewStorage(name, create);
+        } finally {
+            storeRef.release();
+        }
+    }
+
+    @InterfaceAudience.Private
+    protected long setInfo(String key, String info) {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.setInfo(key, info);
+        } finally {
+            storeRef.release();
+        }
+    }
+
+    @InterfaceAudience.Private
+    protected String getInfo(String key) {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getInfo(key);
+        } finally {
+            storeRef.release();
+        }
+    }
+
+    @InterfaceAudience.Private
+    protected long expirationOfDocument(String docID) {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.expirationOfDocument(docID);
+        } finally {
+            storeRef.release();
+        }
+    }
+
+    @InterfaceAudience.Private
+    public RevisionList getAllRevisions(String docID, boolean onlyCurrent) {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getAllRevisions(docID, onlyCurrent);
+        } finally {
+            storeRef.release();
+        }
+    }
+
+    @InterfaceAudience.Private
+    public String findCommonAncestorOf(RevisionInternal rev, List<String> revIDs) {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.findCommonAncestorOf(rev, revIDs);
+        } finally {
+            storeRef.release();
+        }
+    }
+
+    @InterfaceAudience.Private
+    public RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID, boolean obeyMVCC)
+            throws CouchbaseLiteException {
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.putLocalRevision(revision, prevRevID, obeyMVCC);
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -2079,9 +2330,15 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public List<RevisionInternal> getRevisionHistory(RevisionInternal rev) {
-        // NOTE: getRevisionHistory() is thread safe. It is read operation to database as storage
-        //       layer is thread-safe, and also not access to instance variables.
-        return store.getRevisionHistory(rev);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            // NOTE: getRevisionHistory() is thread safe. It is read operation to database as storage
+            //       layer is thread-safe, and also not access to instance variables.
+            return store.getRevisionHistory(rev);
+        } finally {
+            storeRef.release();
+        }
     }
 
     private String getDesignDocFunction(String fnName, String key, List<String> outLanguageList) {
@@ -2162,9 +2419,9 @@ public class Database implements StoreDelegate {
     /**
      * Reference: In CBLQuery.m
      * - (CBLQueryEnumerator*) queryViewNamed: (NSString*)viewName
-     *                                options: (CBLQueryOptions*)options
-     *                         ifChangedSince: (SequenceNumber)ifChangedSince
-     *                                 status: (CBLStatus*)outStatus
+     * options: (CBLQueryOptions*)options
+     * ifChangedSince: (SequenceNumber)ifChangedSince
+     * status: (CBLStatus*)outStatus
      */
     protected List<QueryRow> queryViewNamed(String viewName,
                                             QueryOptions options,
@@ -2234,16 +2491,22 @@ public class Database implements StoreDelegate {
      * NOTE: Only used by Unit Tests
      */
     protected List<View> getAllViews() {
-        List<String> names = store.getAllViewNames();
-        if (names == null)
-            return null;
-        List<View> views = new ArrayList<View>();
-        for (String name : names) {
-            View view = getExistingView(name);
-            if (view != null)
-                views.add(view);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            List<String> names = store.getAllViewNames();
+            if (names == null)
+                return null;
+            List<View> views = new ArrayList<View>();
+            for (String name : names) {
+                View view = getExistingView(name);
+                if (view != null)
+                    views.add(view);
+            }
+            return views;
+        } finally {
+            storeRef.release();
         }
-        return views;
     }
 
     /**
@@ -2286,36 +2549,52 @@ public class Database implements StoreDelegate {
     // #pragma mark - EXPIRATION:
 
     /* package */void setExpirationDate(Date date, String docID) {
-        long unixTime = date != null ? date.getTime() / 1000 : 0;
-        store.setExpirationOfDocument(unixTime, docID);
-        scheduleDocumentExpiration(0);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            long unixTime = date != null ? date.getTime() / 1000 : 0;
+            store.setExpirationOfDocument(unixTime, docID);
+            scheduleDocumentExpiration(0);
+        } finally {
+            storeRef.release();
+        }
     }
 
     private void scheduleDocumentExpiration(long minimumDelay) {
-        if (store == null) return;
-
-        long nextExpiration = store.nextDocumentExpiry();
-        if (nextExpiration > 0) {
-            long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
-            Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
-            cancelPurgeTimer();
-            purgeTimer = new Timer();
-            purgeTimer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    if (isOpen())
-                        purgeExpiredDocuments();
-                }
-            }, delay * 1000);
-        } else
-            Log.v(TAG, "No pending doc expirations");
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            long nextExpiration = store.nextDocumentExpiry();
+            if (nextExpiration > 0) {
+                long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
+                Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
+                cancelPurgeTimer();
+                purgeTimer = new Timer();
+                purgeTimer.schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        if (isOpen())
+                            purgeExpiredDocuments();
+                    }
+                }, delay * 1000);
+            } else
+                Log.v(TAG, "No pending doc expirations");
+        } finally {
+            storeRef.release();
+        }
     }
 
     private void purgeExpiredDocuments() {
-        if (store == null) return;
-        int nPurged = store.purgeExpiredDocuments();
-        Log.v(TAG, "Purged %d expired documents", nPurged);
-        scheduleDocumentExpiration(1);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            if (store == null) return;
+            int nPurged = store.purgeExpiredDocuments();
+            Log.v(TAG, "Purged %d expired documents", nPurged);
+            scheduleDocumentExpiration(1);
+        } finally {
+            storeRef.release();
+        }
     }
 
     private void cancelPurgeTimer() {
@@ -2465,15 +2744,27 @@ public class Database implements StoreDelegate {
     }
 
     protected RevisionInternal getParentRevision(RevisionInternal rev) {
-        return store.getParentRevision(rev);
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            return store.getParentRevision(rev);
+        } finally {
+            storeRef.release();
+        }
     }
 
     protected boolean replaceUUIDs() {
-        if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1)
-            return false;
-        if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1)
-            return false;
-        return true;
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            if (store.setInfo("publicUUID", Misc.CreateUUID()) == -1)
+                return false;
+            if (store.setInfo("privateUUID", Misc.CreateUUID()) == -1)
+                return false;
+            return true;
+        } finally {
+            storeRef.release();
+        }
     }
 
     /**
@@ -2488,15 +2779,21 @@ public class Database implements StoreDelegate {
     }
 
     private boolean garbageCollectAttachments() throws CouchbaseLiteException {
-        Log.v(TAG, "Scanning database revisions for attachments...");
-        Set<BlobKey> keys = store.findAllAttachmentKeys();
-        if (keys == null)
-            return false;
-        Log.v(TAG, "    ...found %d attachments", keys.size());
-        List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
-        int deleted = attachments.deleteBlobsExceptWithKeys(keysToKeep);
-        Log.v(TAG, "    ... deleted %d obsolete attachment files.", deleted);
-        return deleted >= 0;
+        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+        storeRef.retain();
+        try {
+            Log.v(TAG, "Scanning database revisions for attachments...");
+            Set<BlobKey> keys = store.findAllAttachmentKeys();
+            if (keys == null)
+                return false;
+            Log.v(TAG, "    ...found %d attachments", keys.size());
+            List<BlobKey> keysToKeep = new ArrayList<BlobKey>(keys);
+            int deleted = attachments.deleteBlobsExceptWithKeys(keysToKeep);
+            Log.v(TAG, "    ... deleted %d obsolete attachment files.", deleted);
+            return deleted >= 0;
+        } finally {
+            storeRef.release();
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////

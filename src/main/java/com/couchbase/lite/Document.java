@@ -150,7 +150,7 @@ public class Document {
      * A date/time after which this document will be automatically purged.
      */
     public Date getExpirationDate() {
-        long timestamp = database.getStore().expirationOfDocument(documentId);
+        long timestamp = database.expirationOfDocument(documentId);
         if (timestamp == 0)
             return null;
         return new Date(timestamp);
@@ -465,7 +465,7 @@ public class Document {
     protected List<SavedRevision> getLeafRevisions(boolean includeDeleted)
             throws CouchbaseLiteException {
         List<SavedRevision> result = new ArrayList<SavedRevision>();
-        RevisionList revs = database.getStore().getAllRevisions(documentId, true);
+        RevisionList revs = database.getAllRevisions(documentId, true);
         if (revs != null) {
             for (RevisionInternal rev : revs) {
                 // add it to result, unless we are not supposed to include deleted and it's deleted
@@ -477,6 +477,7 @@ public class Document {
             }
         }
         return Collections.unmodifiableList(result);
+
     }
 
     protected Map<String, Object> propertiesToInsert(Map<String, Object> properties)

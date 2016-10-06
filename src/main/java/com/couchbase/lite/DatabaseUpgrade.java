@@ -421,18 +421,24 @@ public final class DatabaseUpgrade {
     }
 
     private void importInfo() {
-        // CREATE TABLE info (key TEXT PRIMARY KEY, value TEXT);
-        String sql = "SELECT key, value FROM info";
-        Cursor cursor = storageEngine.rawQuery(sql, null);
-        try {
-            cursor.moveToNext();
-            while (!cursor.isAfterLast()) {
-                db.getStore().setInfo(cursor.getString(0), cursor.getString(1));
-                cursor.moveToNext();
+        db.runInTransaction(new TransactionalTask() {
+            @Override
+            public boolean run() {
+                // CREATE TABLE info (key TEXT PRIMARY KEY, value TEXT);
+                String sql = "SELECT key, value FROM info";
+                Cursor cursor = storageEngine.rawQuery(sql, null);
+                try {
+                    cursor.moveToNext();
+                    while (!cursor.isAfterLast()) {
+                        db.setInfo(cursor.getString(0), cursor.getString(1));
+                        cursor.moveToNext();
+                    }
+                } finally {
+                    if (cursor != null)
+                        cursor.close();
+                }
+                return true;
             }
-        } finally {
-            if (cursor != null)
-                cursor.close();
-        }
+        });
     }
 }

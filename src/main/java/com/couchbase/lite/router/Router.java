@@ -45,7 +45,6 @@ import com.couchbase.lite.replicator.Replication.ChangeListener;
 import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
-import com.couchbase.lite.store.Store;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
@@ -1273,8 +1272,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             connection.setResponseBody(new Body(result));
             return new Status(Status.BAD_REQUEST);
         }
-
-
     }
 
     public Status do_POST_Document_bulk_docs(Database _db, String _docID, String _attachmentName) {
@@ -1294,7 +1291,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         final List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
         // Transaction provide synchronized feature by SQLiteDatabase.
         // In the transaction block, should not use `synchronized` block
-        boolean ret = db.getStore().runInTransaction(new TransactionalTask() {
+        boolean ret = db.runInTransaction(new TransactionalTask() {
             @Override
             public boolean run() {
                 boolean ok = false;
@@ -1356,7 +1353,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 }
             }
         });
-
         if (ret) {
             connection.setResponseBody(new Body(results));
             return new Status(Status.CREATED);
@@ -1970,7 +1966,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 if (!isLocalDoc && includeAttachments) {
                     int minRevPos = 1;
                     List<String> attsSince = parseJSONRevArrayQuery(getQuery("atts_since"));
-                    String ancestorID = db.getStore().findCommonAncestorOf(rev, attsSince);
+                    String ancestorID = db.findCommonAncestorOf(rev, attsSince);
                     if (ancestorID != null)
                         minRevPos = Revision.generationFromRevID(ancestorID) + 1;
                     RevisionInternal expandedRev = rev.copy();
@@ -1988,10 +1984,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 List<Map<String, Object>> result = null;
                 if ("all".equals(openRevsParam)) {
                     // Get all conflicting revisions:
-                    RevisionList allRevs = db.getStore().getAllRevisions(docID, true);
+                    RevisionList allRevs = db.getAllRevisions(docID, true);
                     result = new ArrayList<Map<String, Object>>(allRevs.size());
                     for (RevisionInternal rev : allRevs) {
-
                         try {
                             // loadRevisionBody is synchronized with store instance.
                             db.loadRevisionBody(rev);
@@ -2004,7 +1999,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                                 throw e;
                             }
                         }
-
                         Map<String, Object> dict = new HashMap<String, Object>();
                         dict.put("ok", rev.getProperties());
                         result.add(dict);
@@ -2060,8 +2054,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
             Map<String, Object> dst = new HashMap<String, Object>();
             dst.putAll(rev.getProperties());
-            Store store = db.getStore();
-
             if (options.contains(TDContentOptions.TDIncludeLocalSeq)) {
                 dst.put("_local_seq", rev.getSequence());
                 rev.setProperties(dst);
@@ -2092,7 +2084,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 rev.setProperties(dst);
             }
             if (options.contains(TDContentOptions.TDIncludeConflicts)) {
-                RevisionList revs = store.getAllRevisions(rev.getDocID(), true);
+                RevisionList revs = db.getAllRevisions(rev.getDocID(), true);
                 if (revs.size() > 1) {
                     List<String> conflicts = new ArrayList<String>();
                     for (RevisionInternal aRev : revs) {
@@ -2217,17 +2209,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             if (isLocalDoc) {
                 // NOTE: putLocalRevision() does not use transaction internally with obeyMVCC=true
-
                 final Database fDb = _db;
                 final RevisionInternal _rev = rev;
                 final String _prevRevID = prevRevID;
                 final List<RevisionInternal> _revs = new ArrayList<RevisionInternal>();
                 try {
-                    fDb.getStore().runInTransaction(new TransactionalTask() {
+                    fDb.runInTransaction(new TransactionalTask() {
                         @Override
                         public boolean run() {
                             try {
-                                RevisionInternal r = fDb.getStore().putLocalRevision(_rev, _prevRevID, true);
+                                RevisionInternal r = fDb.putLocalRevision(_rev, _prevRevID, true);
                                 _revs.add(r);
                                 return true;
                             } catch (CouchbaseLiteException e) {

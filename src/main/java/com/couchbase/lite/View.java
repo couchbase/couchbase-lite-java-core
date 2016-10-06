@@ -53,7 +53,7 @@ public final class View implements ViewStoreDelegate {
     protected View(Database database, String name, boolean create) throws CouchbaseLiteException {
         this.database = database;
         this.name = name;
-        this.viewStore = database.getStore().getViewStorage(name, create);
+        this.viewStore = database.getViewStorage(name, create);
         if (this.viewStore == null)
             throw new CouchbaseLiteException(Status.NOT_FOUND);
         this.viewStore.setDelegate(this);
