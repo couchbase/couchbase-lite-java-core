@@ -29,8 +29,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 /**
  * Created by hideki on 6/17/15.
@@ -134,10 +132,11 @@ public class RevisionUtils {
      */
     @InterfaceAudience.Private
     public static byte[] asCanonicalJSON(Map<String, Object> props) {
-        if (props == null)
+        if (props == null) {
             return null;
+        }
 
-        Map<String, Object> properties = new TreeMap<String, Object>();
+        Map<String, Object> properties = new HashMap<String, Object>(props.size());
         for (String key : props.keySet()) {
             boolean shouldAdd = false;
             if (!key.startsWith("_")) {
@@ -151,11 +150,7 @@ public class RevisionUtils {
                 return null;
             }
             if (shouldAdd) {
-                Object value = props.get(key);
-                if (value instanceof Map)
-                    properties.put(key, convert((Map) value));
-                else
-                    properties.put(key, value);
+                properties.put(key, props.get(key));
             }
         }
 
@@ -166,20 +161,6 @@ public class RevisionUtils {
             Log.e(Database.TAG, "Error serializing " + properties + " to JSON", e);
         }
         return json;
-    }
-
-    protected static SortedMap<String, Object> convert(Map<String, Object> map) {
-        SortedMap<String, Object> dest = new TreeMap<String, Object>();
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            if (value instanceof Map) {
-                dest.put(key, convert((Map<String, Object>) value));
-            } else {
-                dest.put(key, value);
-            }
-        }
-        return dest;
     }
 
     /**
