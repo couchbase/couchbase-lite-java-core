@@ -1612,15 +1612,17 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
 
             // Figure out what the new winning rev ID is:
-            winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), newRev);
+            winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), newRev, deleting ? wasConflicted : null);
+            // Note: In case of deleting and previously conflicting, there is possiblity
+            // no longer conflicted. Need to re-check if it is still conflicted.
+            if (deleting)
+                inConflict = inConflict && wasConflicted.get();
 
             // Success!
-            if (deleting) {
+            if (deleting)
                 outStatus.setCode(Status.OK);
-            } else {
+            else
                 outStatus.setCode(Status.CREATED);
-            }
-
         } finally {
             if (!endTransaction(outStatus.isSuccessful()))
                 throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
@@ -1800,7 +1802,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
             if (!success) {
                 // Figure out what the new winning rev ID is:
-                winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), rev);
+                winningRevID = winner(docNumericID, oldWinningRevID, oldWinnerWasDeletion.get(), rev, null);
                 success = true;
                 status.setCode(Status.CREATED);
             }
@@ -2264,14 +2266,12 @@ public class SQLiteStore implements Store, EncryptableStore {
                 revID = cursor.getString(0);
                 outIsDeleted.set(cursor.getInt(1) > 0);
                 // The document is in conflict if there are two+ result rows that are not deletions.
-                if (outIsConflict != null) {
+                if (outIsConflict != null)
                     outIsConflict.set(!outIsDeleted.get() && cursor.moveToNext() && !(cursor.getInt(1) > 0));
-                }
             } else {
                 outIsDeleted.set(false);
-                if (outIsConflict != null) {
+                if (outIsConflict != null)
                     outIsConflict.set(false);
-                }
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error", e);
@@ -2765,7 +2765,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     private String winner(long docNumericID,
                           String oldWinningRevID,
                           boolean oldWinnerWasDeletion,
-                          RevisionInternal newRev)
+                          RevisionInternal newRev,
+                          AtomicBoolean outIsConflict) // optional
             throws CouchbaseLiteException {
 
         String newRevID = newRev.getRevID();
@@ -2781,7 +2782,7 @@ public class SQLiteStore implements Store, EncryptableStore {
         } else {
             // Doc was alive. How does this deletion affect the winning rev ID?
             AtomicBoolean outIsDeleted = new AtomicBoolean(false);
-            String winningRevID = winningRevIDOfDocNumericID(docNumericID, outIsDeleted, null);
+            String winningRevID = winningRevIDOfDocNumericID(docNumericID, outIsDeleted, outIsConflict);
             if (!winningRevID.equals(oldWinningRevID))
                 return winningRevID;
         }
