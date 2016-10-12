@@ -783,13 +783,25 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    private void upgradeOldDatabaseFiles(File directory) {
+    private void upgradeOldDatabaseFiles(File directory) throws IOException {
+        if (directory == null ||
+                !directory.exists() ||
+                !directory.isDirectory() ||
+                !directory.canWrite())
+            throw new IllegalArgumentException("directory argument is invalid.");
+
         File[] files = directory.listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File file, String name) {
                 return name.endsWith(kV1DBExtension);
             }
         });
+
+        // https://docs.oracle.com/javase/7/docs/api/java/io/File.html#listFiles(java.io.FilenameFilter)
+        // returns: Returns null if this abstract pathname does not denote a directory, or if an I/O error occurs.
+        if (files == null)
+            throw new IOException(String.format(Locale.ENGLISH,
+                    "Error in File.listFiles(): directory=[%s]", directory.toString()));
 
         for (File file : files) {
             String filename = file.getName();
