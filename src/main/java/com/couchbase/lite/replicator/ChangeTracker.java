@@ -327,15 +327,19 @@ public class ChangeTracker implements Runnable {
             try {
                 String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
                 maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s", this, maskedRemoteWithoutCredentials);
+                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s [%s]", this, usePOST ? "POST" : "GET", maskedRemoteWithoutCredentials);
                 call = httpClient.newCall(request);
                 Response response = call.execute();
                 try {
                     // In case response status is Error, ChangeTracker stops here
                     if (isResponseFailed(response)) {
                         RequestUtils.closeResponseBody(response);
-                        if (retryIfFailedPost(response))
+                        if (retryIfFailedPost(response)) {
+                            // couchbase-lite-android #992
+                            // reset error if Failed with POST /_changes against CouchDB or Cloudant.
+                            error = null;
                             continue;
+                        }
                         break;
                     }
 
