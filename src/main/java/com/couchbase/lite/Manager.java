@@ -110,8 +110,7 @@ public final class Manager {
      */
     @InterfaceAudience.Public
     public Manager(Context context, ManagerOptions options) throws IOException {
-
-        Log.d(Database.TAG, "Starting Manager version: %s", Manager.VERSION);
+        Log.i(Database.TAG, "### %s ###", getFullVersionInfo());
 
         this.context = context;
         this.directoryFile = context.getFilesDir();
@@ -1050,5 +1049,11 @@ public final class Manager {
                     Version.getCommitHash());
         }
         return USER_AGENT;
+    }
+
+    public static String getFullVersionInfo() {
+        return String.format(Locale.ENGLISH, "Couchbase Lite %s (%s)",
+                Version.getVersionName(),
+                Version.getCommitHash());
     }
 }
