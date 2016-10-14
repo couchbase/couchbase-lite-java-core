@@ -782,14 +782,13 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    private void upgradeOldDatabaseFiles(File directory) throws IOException {
-        if (directory == null ||
-                !directory.exists() ||
-                !directory.isDirectory() ||
-                !directory.canWrite())
-            throw new IllegalArgumentException("directory argument is invalid.");
+    private void upgradeOldDatabaseFiles(File dir) throws IOException {
+        if (dir == null) throw new IllegalArgumentException("dir argument is null.");
+        if (!dir.exists() || !dir.isDirectory() || !dir.canRead() || !dir.canWrite())
+            throw new IllegalArgumentException(String.format(Locale.ENGLISH,
+                    "dir[%s] might not exist, not be a directory, or not have read/write permission.", dir));
 
-        File[] files = directory.listFiles(new FilenameFilter() {
+        File[] files = dir.listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File file, String name) {
                 return name.endsWith(kV1DBExtension);
@@ -800,12 +799,12 @@ public final class Manager {
         // returns: Returns null if this abstract pathname does not denote a directory, or if an I/O error occurs.
         if (files == null)
             throw new IOException(String.format(Locale.ENGLISH,
-                    "Error in File.listFiles(): directory=[%s]", directory.toString()));
+                    "Error in File.listFiles(): dir[%s]: dir might not be directory, or i/o error occurs.", dir));
 
         for (File file : files) {
             String filename = file.getName();
             String name = nameOfDatabaseAtPath(filename);
-            String oldDbPath = new File(directory, filename).getAbsolutePath();
+            String oldDbPath = new File(dir, filename).getAbsolutePath();
             if (!upgradeDatabase(name, oldDbPath, true))
                 throw new RuntimeException("Database upgrade failed for: " + name);
         }
