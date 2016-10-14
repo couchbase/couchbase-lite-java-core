@@ -68,8 +68,11 @@ public class Utils {
         }
     }
 
-    public static boolean isPermanentError(int code) {
+    public static boolean isPermanentError(Response response) {
+        return isPermanentError(response.code());
+    }
 
+    public static boolean isPermanentError(int code) {
         if (code == RemoteRequestResponseException.BAD_URL
                 || code == RemoteRequestResponseException.USER_DENIED_AUTH)
             return true;
@@ -79,6 +82,14 @@ public class Utils {
         //       GET /{db}/_all_docs or POST /{db}/_all_docs
         // 408 - Listener might encounter SocketTimeout under weak network connectivity
         return (code >= 400 && code <= 405) || (code == 407) || (code >= 409 && code <= 499);
+    }
+
+    public static boolean isTransientErrorWithSpecialCases(Response response) {
+        return isTransientErrorWithSpecialCases(response.code());
+    }
+
+    public static boolean isTransientErrorWithSpecialCases(int code) {
+        return code == 406 || code == 408 || isTransientError(code);
     }
 
     /**
@@ -112,9 +123,9 @@ public class Utils {
         return isTransientError(response.code());
     }
 
-    public static boolean isTransientError(int statusCode) {
-        if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504 ||
-                statusCode == Status.REQUEST_TIMEOUT) {
+    public static boolean isTransientError(int code) {
+        if (code == 500 || code == 502 || code == 503 || code == 504 ||
+                code == Status.REQUEST_TIMEOUT) {
             return true;
         }
         return false;
