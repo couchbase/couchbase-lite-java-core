@@ -1023,7 +1023,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 status = "Offline";  // nonstandard
             }
         }
-        int progress = (total > 0) ? Math.round(100 * processed / (float) total) : 0;
+        int progress = (total > 0) ? (int) 100 * processed / total : 0;
 
         activity.put("type", "Replication");
         activity.put("task", replicator.getSessionID());
