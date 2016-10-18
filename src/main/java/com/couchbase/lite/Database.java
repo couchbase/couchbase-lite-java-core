@@ -628,7 +628,6 @@ public class Database implements StoreDelegate {
      * <p/>
      * Does not commit the transaction if the code throws an Exception.
      * <p/>
-     * TODO: the iOS version has a retry loop, so there should be one here too
      */
     @InterfaceAudience.Public
     public boolean runInTransaction(TransactionalTask task) {
