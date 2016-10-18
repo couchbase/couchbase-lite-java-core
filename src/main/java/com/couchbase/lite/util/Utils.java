@@ -68,17 +68,17 @@ public class Utils {
         }
     }
 
-    public static boolean isPermanentError(int code) {
+    public static boolean isPermanentError(Response response) {
+        return isPermanentError(response.code());
+    }
 
+    public static boolean isPermanentError(int code) {
         if (code == RemoteRequestResponseException.BAD_URL
                 || code == RemoteRequestResponseException.USER_DENIED_AUTH)
             return true;
 
-        // 406 - in Test cases, server return 406 because of CouchDB API
-        //       http://docs.couchdb.org/en/latest/api/database/bulk-api.html
-        //       GET /{db}/_all_docs or POST /{db}/_all_docs
-        // 408 - Listener might encounter SocketTimeout under weak network connectivity
-        return (code >= 400 && code <= 405) || (code == 407) || (code >= 409 && code <= 499);
+        // 408 - Java Listener might encounter SocketTimeout under weak network connectivity.
+        return (code >= 400 && code <= 407) || (code >= 409 && code <= 499);
     }
 
     /**
@@ -112,12 +112,9 @@ public class Utils {
         return isTransientError(response.code());
     }
 
-    public static boolean isTransientError(int statusCode) {
-        if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504 ||
-                statusCode == Status.REQUEST_TIMEOUT) {
-            return true;
-        }
-        return false;
+    public static boolean isTransientError(int code) {
+        // Note: Status.REQUEST_TIMEOUT = 408
+        return code == 408 || code == 500 || code == 502 || code == 503 || code == 504;
     }
 
     public static boolean isDocumentError(Throwable throwable) {

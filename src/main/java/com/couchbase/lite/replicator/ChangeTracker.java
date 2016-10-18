@@ -250,17 +250,20 @@ public class ChangeTracker implements Runnable {
         }
     }
 
-    private boolean isResponseFailed(Response response) {
-        //StatusLine status = response.getStatusLine();
-        if (response.code() >= 300 &&
-                ((mode == ChangeTrackerMode.LongPoll && !Utils.isTransientError(response.code())) ||
-                        mode != ChangeTrackerMode.LongPoll)) {
-            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d",
-                    this, response.code());
-            error = new RemoteRequestResponseException(response.code(), response.message());
+    private boolean isResponseFailed(Response resp) {
+        if (resp.code() < 300)
+            return false;
+
+        // If the error may be transient (flaky network, server glitch), retry:
+        // condition: non-permanent error && (continuous or transient)
+        if (!Utils.isPermanentError(resp) &&
+                (mode == ChangeTrackerMode.LongPoll || Utils.isTransientError(resp))) {
+            return false;
+        } else {
+            Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, resp.code());
+            error = new RemoteRequestResponseException(resp.code(), resp.message());
             return true;
         }
-        return false;
     }
 
     private boolean retryIfFailedPost(Response response) {
@@ -277,6 +280,7 @@ public class ChangeTracker implements Runnable {
     private boolean isCloudantAuthError(Response response) {
         String server = response.header("Server");
         // Cloudant could send `CouchDB/ad97a06 (Erlang OTP/17)` as Server header value
+        // Another cloudant server value example: `CouchDB/1.0.2`
         if (server == null || server.indexOf("CouchDB/") == -1)// (Accurate as of 5/2016)
             return false;
         // Note: 401 (UNAUTHORIZED) might not be caused by Cloudant
