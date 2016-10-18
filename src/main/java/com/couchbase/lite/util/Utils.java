@@ -84,14 +84,6 @@ public class Utils {
         return (code >= 400 && code <= 405) || (code == 407) || (code >= 409 && code <= 499);
     }
 
-    public static boolean isTransientErrorWithSpecialCases(Response response) {
-        return isTransientErrorWithSpecialCases(response.code());
-    }
-
-    public static boolean isTransientErrorWithSpecialCases(int code) {
-        return code == 406 || code == 408 || isTransientError(code);
-    }
-
     /**
      * in CBLMisc.m
      * BOOL CBLMayBeTransientError( NSError* error )
@@ -124,11 +116,8 @@ public class Utils {
     }
 
     public static boolean isTransientError(int code) {
-        if (code == 500 || code == 502 || code == 503 || code == 504 ||
-                code == Status.REQUEST_TIMEOUT) {
-            return true;
-        }
-        return false;
+        // Note: Status.NOT_ACCEPTABLE = 406, Status.REQUEST_TIMEOUT = 408
+        return code == 406 || code == 408 || code == 500 || code == 502 || code == 503 || code == 504;
     }
 
     public static boolean isDocumentError(Throwable throwable) {

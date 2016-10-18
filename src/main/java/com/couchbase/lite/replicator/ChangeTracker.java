@@ -257,7 +257,7 @@ public class ChangeTracker implements Runnable {
         // If the error may be transient (flaky network, server glitch), retry:
         // condition: non-permanent error && (continuous or transient)
         if (!Utils.isPermanentError(resp) &&
-                (mode == ChangeTrackerMode.LongPoll || Utils.isTransientErrorWithSpecialCases(resp))) {
+                (mode == ChangeTrackerMode.LongPoll || Utils.isTransientError(resp))) {
             return false;
         } else {
             Log.w(Log.TAG_CHANGE_TRACKER, "%s: Change tracker got error %d", this, resp.code());
