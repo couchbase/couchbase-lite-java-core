@@ -67,7 +67,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public static final int MAX_REVS_TO_GET_IN_BULK = 50;
 
     // Maximum number of revision IDs to pass in an "?atts_since=" query param
-    public static final int MAX_NUMBER_OF_ATTS_SINCE = 50;
+    public static final int MAX_NUMBER_OF_ATTS_SINCE = 10;
 
     // Tune this parameter based on application needs.
     public static int CHANGE_TRACKER_RESTART_DELAY_MS = 10 * 1000;
@@ -656,17 +656,30 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // See: http://wiki.apache.org/couchdb/HTTP_Document_API#Getting_Attachments_With_a_Document
         StringBuilder path = new StringBuilder(encodeDocumentId(rev.getDocID()));
         path.append("?rev=").append(URIUtils.encode(rev.getRevID()));
-        path.append("&revs=true&attachments=true");
+        path.append("&revs=true");
 
-        // If the document has attachments, add an 'atts_since' param with a list of
-        // already-known revisions, so the server can skip sending the bodies of any
-        // attachments we already have locally:
-        AtomicBoolean hasAttachment = new AtomicBoolean(false);
-        List<String> knownRevs = db.getPossibleAncestorRevisionIDs(rev,
-                PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
-        if (hasAttachment.get() && knownRevs != null && knownRevs.size() > 0) {
-            path.append("&atts_since=");
-            path.append(joinQuotedEscaped(knownRevs));
+        // TODO: CBL Java does not have implementation of _settings yet. Till then, attachments always true
+        boolean attachments = true;
+        if(attachments)
+            path.append("&attachments=true");
+
+        // Include atts_since with a list of possible ancestor revisions of rev. If getting attachments,
+        // this allows the server to skip the bodies of attachments that have not changed since the
+        // local ancestor. The server can also trim the revision history it returns, to not extend past
+        // the local ancestor (not implemented yet in SG but will be soon.)
+        AtomicBoolean haveBodies = new AtomicBoolean(false);
+        List<String> possibleAncestors = null;
+        possibleAncestors = db.getPossibleAncestorRevisionIDs(rev,
+                PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, attachments ? haveBodies : null);
+        if (possibleAncestors != null) {
+            path.append(haveBodies.get() ? "&atts_since=" : "&revs_from=");
+            path.append(joinQuotedEscaped(possibleAncestors));
+        } else {
+            int maxRevTreeDepth = getLocalDatabase().getMaxRevTreeDepth();
+            if (rev.getGeneration() > maxRevTreeDepth) {
+                path.append("&revs_limit=");
+                path.append(maxRevTreeDepth);
+            }
         }
 
         //create a final version of this variable for the log statement inside

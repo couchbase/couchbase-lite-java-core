@@ -235,22 +235,25 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
     // Protected or Private Methods
     ////////////////////////////////////////////////////////////
 
-    private static Map<String, Object> buildJSONBody(List<RevisionInternal> revs,
-                                                     final Database db) {
+    private static Map<String, Object> buildJSONBody(List<RevisionInternal> revs, final Database db) {
         // Build up a JSON body describing what revisions we want:
+        final int maxRevTreeDepth = db.getMaxRevTreeDepth();
         Collection<Map<String, Object>> keys = CollectionUtils.transform(
                 revs, new CollectionUtils.Functor<RevisionInternal, Map<String, Object>>() {
-                    public Map<String, Object> invoke(RevisionInternal source) {
-                        AtomicBoolean hasAttachment = new AtomicBoolean(false);
-                        List<String> attsSince = db.getPossibleAncestorRevisionIDs(
-                                source, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, hasAttachment);
-                        if (!hasAttachment.get() || attsSince.size() == 0)
-                            attsSince = null;
-                        Map<String, Object> mapped = new HashMap<String, Object>();
-                        mapped.put("id", source.getDocID());
-                        mapped.put("rev", source.getRevID());
-                        mapped.put("atts_since", attsSince);
-                        return mapped;
+                    public Map<String, Object> invoke(RevisionInternal rev) {
+                        AtomicBoolean haveBodies = new AtomicBoolean(false);
+                        List<String> possibleAncestors = db.getPossibleAncestorRevisionIDs(
+                                rev, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, haveBodies);
+                        Map<String, Object> key = new HashMap<String, Object>();
+                        key.put("id", rev.getDocID());
+                        key.put("rev", rev.getRevID());
+                        if (possibleAncestors != null) {
+                            key.put(haveBodies.get() ? "atts_since" : "revs_from", possibleAncestors);
+                        } else {
+                            if (rev.getGeneration() > maxRevTreeDepth)
+                                key.put("revs_limit", maxRevTreeDepth);
+                        }
+                        return key;
                     }
                 });
         Map<String, Object> retval = new HashMap<String, Object>();

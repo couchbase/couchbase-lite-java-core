@@ -986,7 +986,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     @Override
     public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev,
                                                        int limit,
-                                                       AtomicBoolean onlyAttachments) {
+                                                       AtomicBoolean outHaveBodies) {
         int generation = rev.getGeneration();
         if (generation <= 1)
             return null;
@@ -997,31 +997,39 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         List<String> revIDs = new ArrayList<String>();
 
-        int sqlLimit = limit > 0 ? (int) limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
-        StringBuilder sql = new StringBuilder("SELECT revid, sequence FROM revs WHERE doc_id=? and revid < ?");
-        sql.append(" and deleted=0 and json not null");
-        sql.append(" and no_attachments=0");
-        sql.append(" ORDER BY sequence DESC LIMIT ?");
-        String[] args = {Long.toString(docNumericID), generation + "-", Integer.toString(sqlLimit)};
+        int sqlLimit = limit > 0 ? limit : -1;     // SQL uses -1, not 0, to denote 'no limit'
+        if (outHaveBodies != null) outHaveBodies.set(true);
 
-        Cursor cursor = null;
-        try {
-            cursor = storageEngine.rawQuery(sql.toString(), args);
-            cursor.moveToNext();
-            while (!cursor.isAfterLast()) {
-                if (onlyAttachments != null && revIDs.size() == 0)
-                    onlyAttachments.set(sequenceHasAttachments(cursor.getLong(1)));
-                    revIDs.add(cursor.getString(0));
+        // First look only for current revisions; if none match, go to non-current ones.
+        for (int current = 1; current >= 0; current--) {
+            StringBuilder sql = new StringBuilder("SELECT revid, json is not null FROM revs ");
+            sql.append("WHERE doc_id=? and current=? and revid < ? ");
+            sql.append("ORDER BY revid DESC LIMIT ?");
+            String[] args = {
+                    Long.toString(docNumericID),
+                    Integer.toString(current),
+                    String.format(Locale.ENGLISH, "%d-", generation),
+                    Integer.toString(sqlLimit)};
+            Cursor cursor = null;
+            try {
+                cursor = storageEngine.rawQuery(sql.toString(), args);
                 cursor.moveToNext();
+                while (!cursor.isAfterLast()) {
+                    revIDs.add(cursor.getString(0));
+                    if (outHaveBodies != null && cursor.getLong(1) == 0)
+                        outHaveBodies.set(false);
+                    cursor.moveToNext();
+                }
+            } catch (SQLException e) {
+                Log.e(TAG, "Error in a query: [%s]", e, sql);
+            } finally {
+                if (cursor != null)
+                    cursor.close();
             }
-        } catch (SQLException e) {
-            Log.e(TAG, "Error getting all revisions of document", e);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
+            if (revIDs.size() > 0)
+                return revIDs;
         }
-        return revIDs;
+        return null;
     }
 
     /**
