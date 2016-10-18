@@ -77,11 +77,8 @@ public class Utils {
                 || code == RemoteRequestResponseException.USER_DENIED_AUTH)
             return true;
 
-        // 406 - in Test cases, server return 406 because of CouchDB API
-        //       http://docs.couchdb.org/en/latest/api/database/bulk-api.html
-        //       GET /{db}/_all_docs or POST /{db}/_all_docs
-        // 408 - Listener might encounter SocketTimeout under weak network connectivity
-        return (code >= 400 && code <= 405) || (code == 407) || (code >= 409 && code <= 499);
+        // 408 - Java Listener might encounter SocketTimeout under weak network connectivity.
+        return (code >= 400 && code <= 407) || (code >= 409 && code <= 499);
     }
 
     /**
@@ -116,8 +113,8 @@ public class Utils {
     }
 
     public static boolean isTransientError(int code) {
-        // Note: Status.NOT_ACCEPTABLE = 406, Status.REQUEST_TIMEOUT = 408
-        return code == 406 || code == 408 || code == 500 || code == 502 || code == 503 || code == 504;
+        // Note: Status.REQUEST_TIMEOUT = 408
+        return code == 408 || code == 500 || code == 502 || code == 503 || code == 504;
     }
 
     public static boolean isDocumentError(Throwable throwable) {
