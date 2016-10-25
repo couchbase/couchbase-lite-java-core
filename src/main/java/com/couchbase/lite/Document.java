@@ -15,6 +15,7 @@ package com.couchbase.lite;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
+import com.couchbase.lite.util.DeepClone;
 import com.couchbase.lite.util.Log;
 
 import java.net.URL;
@@ -489,7 +490,7 @@ public class Document {
         if (idProp != null && !idProp.equalsIgnoreCase(getId()))
             Log.w(TAG, "Trying to put wrong _id to this: %s properties: %s", this, properties);
 
-        Map<String, Object> nuProperties = new HashMap<String, Object>(properties);
+        Map<String, Object> nuProperties = DeepClone.deepClone(properties);
 
         // Process _attachments dict, converting CBLAttachments to dicts:
         Map<String, Object> attachments = null;
