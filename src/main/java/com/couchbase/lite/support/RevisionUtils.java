@@ -163,8 +163,10 @@ public class RevisionUtils {
             // serialization or not: if enabled, additional sorting step is performed if necessary
             // (not necessary for SortedMaps), if disabled, no additional sorting is needed.
             // Feature is disabled by default.
+            //
+            // Currently ORDER_MAP_ENTRIES_BY_KEYS is not applied here. This is covered by DeepClone.java
+            // `.writer(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)`
             json = Manager.getObjectMapper()
-                    .writer(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
                     .writeValueAsBytes(properties);
         } catch (Exception e) {
             Log.e(Database.TAG, "Error serializing " + properties + " to JSON", e);

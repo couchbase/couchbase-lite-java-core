@@ -65,7 +65,9 @@ public final class DeepClone {
 
     private static <E> Collection<E> deepCloneCollection(final Collection<E> input) {
         Collection<E> clone;
-        if (input instanceof LinkedList<?>)
+        if (input instanceof ArrayList<?>)
+            clone = new ArrayList<E>();
+        else if (input instanceof LinkedList<?>)
             clone = new LinkedList<E>();
         else if (input instanceof SortedSet<?>)
             clone = new TreeSet<E>();
@@ -80,16 +82,10 @@ public final class DeepClone {
     }
 
     private static <K, V> Map<K, V> deepCloneMap(final Map<K, V> map) {
-        Map<K, V> clone;
-        if (map instanceof LinkedHashMap<?, ?>)
-            clone = new LinkedHashMap<K, V>();
-        else if (map instanceof TreeMap<?, ?>)
-            clone = new TreeMap<K, V>();
-        else
-            clone = new HashMap<K, V>();
-
+        // Force to use TreeMap to generate canonical JSON.
+        Map<K, V> clone = new TreeMap<K, V>();
         for (Map.Entry<K, V> entry : map.entrySet())
-            clone.put(deepClone(entry.getKey()), deepClone(entry.getValue()));
+            clone.put(entry.getKey(), deepClone(entry.getValue()));
         return clone;
     }
 }
