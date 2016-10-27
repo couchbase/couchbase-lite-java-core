@@ -43,8 +43,6 @@ public final class DeepClone {
             return (T) deepCloneCollection((Collection<?>) input);
         } else if (input instanceof Object[]) {
             return (T) deepCloneObjectArray((Object[]) input);
-        } else if (input.getClass().isArray()) {
-            return (T) clonePrimitiveArray(input);
         }
         return input;
     }
