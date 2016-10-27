@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Created by hideki on 6/17/15.
@@ -137,7 +138,7 @@ public class RevisionUtils {
             return null;
         }
 
-        Map<String, Object> properties = new HashMap<String, Object>(props.size());
+        Map<String, Object> properties = new TreeMap<String, Object>();
         for (String key : props.keySet()) {
             boolean shouldAdd = false;
             if (!key.startsWith("_")) {
