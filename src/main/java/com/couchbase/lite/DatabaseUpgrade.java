@@ -175,11 +175,20 @@ public final class DatabaseUpgrade {
     private boolean moveAttachmentsDir() {
         // v1.1.x or v1.2.x
         File oldAttachmentsPath = new File(FileDirUtils.getPathWithoutExt(path) + " attachments");
-        if (!oldAttachmentsPath.exists() || !oldAttachmentsPath.canRead()) {
+        if (!oldAttachmentsPath.exists()) {
             // v1.0.x
             oldAttachmentsPath = new File(FileDirUtils.getPathWithoutExt(path), "attachments");
-            if (!oldAttachmentsPath.exists() || !oldAttachmentsPath.canRead())
+            if (!oldAttachmentsPath.exists()) {
+                // In case of not existing the old version attachment directory,
+                // return true, and go through
+                return true;
+            } else if (!oldAttachmentsPath.canRead()) {
+                Log.e(TAG, "Attachment directory (%s) is not readable.", oldAttachmentsPath);
                 return false;
+            }
+        } else if (!oldAttachmentsPath.canRead()) {
+            Log.e(TAG, "Attachment directory (%s) is not readable.", oldAttachmentsPath);
+            return false;
         }
         File newAttachmentsPath = new File(db.getAttachmentStorePath());
         Log.i(TAG, "Upgrade: Moving '%s' to '%s'",
