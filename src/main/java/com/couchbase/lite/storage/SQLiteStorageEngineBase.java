@@ -74,7 +74,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
             Log.v(Log.TAG_DATABASE, "%s: Opened Android sqlite db", this);
         } catch(SQLiteDatabaseCorruptException e) {
             hasError = true;
-            Log.e(Log.TAG_DATABASE, "Unauthorize to open the SQLite database", e);
+            Log.e(Log.TAG_DATABASE, "Unauthorized to open the SQLite database", e);
             throw new SQLException(SQLException.SQLITE_ENCRYPTION_UNAUTHORIZED,
                     "Cannot decrypt or access the database");
         } catch(com.couchbase.lite.internal.database.SQLException e) {
