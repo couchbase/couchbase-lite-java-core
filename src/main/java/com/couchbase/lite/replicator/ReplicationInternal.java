@@ -151,7 +151,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         HttpClientFactory clientFactory,
                         Replication.Lifecycle lifecycle,
                         Replication parentReplication) {
-
+        if (remote == null) throw new IllegalArgumentException("remote is null");
         Utils.assertNotNull(lifecycle, "Must pass in a non-null lifecycle");
 
         this.parentReplication = parentReplication;
