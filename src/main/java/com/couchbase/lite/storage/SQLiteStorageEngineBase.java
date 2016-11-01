@@ -82,7 +82,10 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
             }
             // Standard SQLite or SQLCipher without encryption
             else {
-                Log.e(Log.TAG_DATABASE, "The SQLite database file has been corrupted", e);
+                Log.e(Log.TAG_DATABASE,
+                        "Application might try to open the encrypted database "
+                                + "with the standard SQLite library or no password provided. "
+                                + "Otherwise, the SQLite database file has been corrupted. ", e);
                 throw new SQLException(SQLException.SQLITE_CORRUPT, e);
             }
         } catch (com.couchbase.lite.internal.database.SQLException e) {
