@@ -362,6 +362,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPullReplication(URL remote) {
+        if (remote == null) throw new IllegalArgumentException("remote is null");
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
@@ -379,6 +380,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPushReplication(URL remote) {
+        if (remote == null) throw new IllegalArgumentException("remote is null");
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
