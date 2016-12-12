@@ -240,7 +240,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // check if content-type is `application/json`
         String contentType = getRequestHeaderContentType();
         if (contentType != null && !contentType.equals(CONTENT_TYPE_JSON))
-            throw new CouchbaseLiteException(Status.NOT_ACCEPTABLE);
+            throw new CouchbaseLiteException(Status.UNSUPPORTED_TYPE);
 
         // parse body text
         InputStream contentStream = connection.getRequestInputStream();
