@@ -53,8 +53,7 @@ public class RemoteRequest implements CancellableRunnable {
     // Don't compress data shorter than this (not worth the CPU time, plus it might not shrink)
     public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-    public static final MediaType TEXT = MediaType.parse("text/plain; charset=utf-8");
-
+    
     ////////////////////////////////////////////////////////////
     // Member variables
     ////////////////////////////////////////////////////////////
