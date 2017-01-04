@@ -53,7 +53,7 @@ public class RemoteRequest implements CancellableRunnable {
     // Don't compress data shorter than this (not worth the CPU time, plus it might not shrink)
     public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-
+    
     ////////////////////////////////////////////////////////////
     // Member variables
     ////////////////////////////////////////////////////////////
@@ -201,6 +201,7 @@ public class RemoteRequest implements CancellableRunnable {
      * set request body
      */
     protected Request.Builder setBody(Request.Builder builder) {
+        // NOTE: default Builder is GET
         if (body != null) {
             byte[] bodyBytes = null;
             try {
@@ -216,6 +217,16 @@ public class RemoteRequest implements CancellableRunnable {
             }
             if (requestBody == null)
                 requestBody = RequestBody.create(JSON, bodyBytes);
+            if ("PUT".equalsIgnoreCase(method))
+                builder.put(requestBody);
+            else if ("POST".equalsIgnoreCase(method))
+                builder.post(requestBody);
+        }
+        // body is null -> create db (PUT /{db})
+        // http://docs.couchdb.org/en/2.0.0/api/database/common.html#put--db
+        else if ("PUT".equalsIgnoreCase(method) || "POST".equalsIgnoreCase(method)) {
+            // create empty json
+            RequestBody requestBody = RequestBody.create(JSON, "");
             if ("PUT".equalsIgnoreCase(method))
                 builder.put(requestBody);
             else if ("POST".equalsIgnoreCase(method))
