@@ -809,6 +809,13 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public void databaseStorageChanged(DocumentChange change) {
+
+        // reduce memory usage by releasing body.object, body.json remains.
+        if (change != null &&
+                change.getAddedRevision() != null &&
+                change.getAddedRevision().getBody() != null)
+            change.getAddedRevision().getBody().compact();
+
         if (change.getRevisionId() != null)
             Log.v(Log.TAG, "---> Added: %s as seq %d",
                     change.getAddedRevision(), change.getAddedRevision().getSequence());
