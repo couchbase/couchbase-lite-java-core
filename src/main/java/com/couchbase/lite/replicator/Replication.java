@@ -115,7 +115,8 @@ public class Replication
         REQUEST_HEADERS,
         AUTHENTICATOR,
         CREATE_TARGET,
-        REMOTE_UUID
+        REMOTE_UUID,
+        CHANNELS
     }
 
     /**
@@ -760,6 +761,7 @@ public class Replication
     @InterfaceAudience.Public
     public void setCookie(String name, String value, String path,
                           long maxAge, boolean secure, boolean httpOnly) {
+        // note: cookie is stored in the database. not necessary to be stored in the properties.
         replicationInternal.setCookie(name, value, path, maxAge, secure, httpOnly);
     }
 
@@ -777,6 +779,7 @@ public class Replication
     @InterfaceAudience.Public
     public void setCookie(String name, String value, String path,
                           Date expirationDate, boolean secure, boolean httpOnly) {
+        // note: cookie is stored in the database. not necessary to be stored in the properties.
         replicationInternal.setCookie(name, value, path, expirationDate, secure, httpOnly);
     }
 
@@ -858,6 +861,7 @@ public class Replication
      */
     @InterfaceAudience.Public
     public void setChannels(List<String> channels) {
+        properties.put(ReplicationField.CHANNELS, channels);
         replicationInternal.setChannels(channels);
     }
 
@@ -974,6 +978,10 @@ public class Replication
                     break;
                 case REMOTE_UUID:
                     replicationInternal.setRemoteUUID((String) value);
+                    break;
+                case CHANNELS:
+                    replicationInternal.setChannels((List<String>)value);
+                    break;
             }
         }
     }
