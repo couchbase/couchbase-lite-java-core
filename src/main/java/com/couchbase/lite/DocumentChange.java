@@ -96,6 +96,14 @@ public class DocumentChange {
         return source;
     }
 
+    /**
+     * YES if the document is deleted
+     */
+    @InterfaceAudience.Public
+    public boolean isDeletion() {
+        return addedRevision != null ? addedRevision.isDeleted() : false;
+    }
+
     @InterfaceAudience.Public
     public String toString() {
         return String.format(Locale.ENGLISH, "%s[%s]", this.getClass().getName(), addedRevision);
