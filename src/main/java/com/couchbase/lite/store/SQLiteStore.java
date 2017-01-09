@@ -1420,15 +1420,6 @@ public class SQLiteStore implements Store, EncryptableStore {
             Status outStatus)
             throws CouchbaseLiteException {
 
-        byte[] json;
-        if (properties != null && properties.size() > 0) {
-            json = RevisionUtils.asCanonicalJSON(properties);
-            if (json == null)
-                throw new CouchbaseLiteException(Status.BAD_JSON);
-        } else {
-            json = "{}".getBytes();
-        }
-
         RevisionInternal newRev = null;
         String winningRevID = null;
         boolean inConflict = false;
@@ -1515,6 +1506,33 @@ public class SQLiteStore implements Store, EncryptableStore {
                             !prevRevID.equals(oldWinningRevID));
 
             //// PART II: In which we prepare for insertion...
+
+            // https://github.com/couchbase/couchbase-lite-net/issues/749
+            // Need to ensure revpos is correct for a revision inserted on top of a deletion
+            if (oldWinnerWasDeletion.get()) {
+                if (properties != null && properties.containsKey("_attachments")) {
+                    Map<String, Object> attachments = (Map<String, Object>) properties.get("_attachments");
+                    if (attachments != null) {
+                        Iterator<String> itr = attachments.keySet().iterator();
+                        while (itr.hasNext()) {
+                            String name = itr.next();
+                            Map<String, Object> metadata = (Map<String, Object>) attachments.get(name);
+                            if (metadata != null) {
+                                metadata.put("revpos", Revision.generationFromRevID(prevRevID) + 1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            byte[] json;
+            if (properties != null && properties.size() > 0) {
+                json = RevisionUtils.asCanonicalJSON(properties);
+                if (json == null)
+                    throw new CouchbaseLiteException(Status.BAD_JSON);
+            } else {
+                json = "{}".getBytes();
+            }
 
             // Bump the revID and update the JSON:
             String newRevId = delegate.generateRevID(json, deleting, prevRevID);
