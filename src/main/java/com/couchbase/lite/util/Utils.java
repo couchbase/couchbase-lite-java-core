@@ -174,6 +174,18 @@ public class Utils {
         return Status.UNKNOWN;
     }
 
+    @InterfaceAudience.Private
+    public static String getErrorMessageFromError(Throwable t) {
+        if (t instanceof CouchbaseLiteException) {
+            CouchbaseLiteException couchbaseLiteException = (CouchbaseLiteException) t;
+            return couchbaseLiteException.getCBLStatus().getHTTPMessage();
+        } else if (t instanceof RemoteRequestResponseException) {
+            RemoteRequestResponseException responseException = (RemoteRequestResponseException) t;
+            return responseException.getMessage();
+        }
+        return t.getMessage();
+    }
+
     public static String shortenString(String orig, int maxLength) {
         if (orig == null || orig.length() <= maxLength) {
             return orig;
