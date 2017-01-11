@@ -384,16 +384,29 @@ public class Replication
      */
     @InterfaceAudience.Public
     public ReplicationStatus getStatus() {
-        if (replicationInternal == null) {
+        return getStatus(replicationInternal);
+    }
+
+    private static ReplicationStatus getStatus(ReplicationInternal internal) {
+        // null -> STOPPED
+        if (internal == null) {
             return ReplicationStatus.REPLICATION_STOPPED;
-        } else if (replicationInternal.stateMachine.isInState(ReplicationState.OFFLINE)) {
+        }
+        // OFFLINE -> OFFLINE
+        else if (internal.stateMachine.isInState(ReplicationState.OFFLINE)) {
             return ReplicationStatus.REPLICATION_OFFLINE;
-        } else if (replicationInternal.stateMachine.isInState(ReplicationState.IDLE)) {
+        }
+        // IDLE -> IDLE
+        else if (internal.stateMachine.isInState(ReplicationState.IDLE)) {
             return ReplicationStatus.REPLICATION_IDLE;
-        } else if (replicationInternal.stateMachine.isInState(ReplicationState.INITIAL) ||
-                replicationInternal.stateMachine.isInState(ReplicationState.STOPPED)) {
+        }
+        // INITIAL, STOPPED -> STOPPED
+        else if (internal.stateMachine.isInState(ReplicationState.INITIAL) ||
+                internal.stateMachine.isInState(ReplicationState.STOPPED)) {
             return ReplicationStatus.REPLICATION_STOPPED;
-        } else {
+        }
+        // RUNNING, STOPPING -> ACTIVE
+        else {
             return ReplicationStatus.REPLICATION_ACTIVE;
         }
     }
@@ -580,6 +593,7 @@ public class Replication
         private final Replication source;
         private final int changeCount;
         private final int completedChangeCount;
+        private final ReplicationStatus status;
         private final ReplicationStateTransition transition;
         private final Throwable error;
 
@@ -587,6 +601,7 @@ public class Replication
             this.source = replInternal.parentReplication;
             this.changeCount = replInternal.getChangesCount().get();
             this.completedChangeCount = replInternal.getCompletedChangesCount().get();
+            this.status = Replication.getStatus(replInternal);
             this.transition = null;
             this.error = null;
         }
@@ -595,6 +610,7 @@ public class Replication
             this.source = replInternal.parentReplication;
             this.changeCount = replInternal.getChangesCount().get();
             this.completedChangeCount = replInternal.getCompletedChangesCount().get();
+            this.status = Replication.getStatus(replInternal);
             this.transition = transition;
             this.error = null;
         }
@@ -603,6 +619,7 @@ public class Replication
             this.source = replInternal.parentReplication;
             this.changeCount = replInternal.getChangesCount().get();
             this.completedChangeCount = replInternal.getCompletedChangesCount().get();
+            this.status = Replication.getStatus(replInternal);
             this.transition = null;
             this.error = error;
         }
@@ -640,6 +657,15 @@ public class Replication
          */
         public int getCompletedChangeCount() {
             return completedChangeCount;
+        }
+
+        /**
+         * The replication's current state, one of {stopped, offline, idle, active}.
+         * <p/>
+         * This is not in our official public API, and is subject to change/removal.
+         */
+        public ReplicationStatus getStatus(){
+            return status;
         }
 
         /**
