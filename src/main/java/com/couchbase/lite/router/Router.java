@@ -49,6 +49,7 @@ import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
+import com.couchbase.lite.util.Utils;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -827,20 +828,35 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         }
                     });
 
+                    // one shot replicator
                     if (!replicator.isContinuous()) {
                         replicator.addChangeListener(new Replication.ChangeListener() {
                             @Override
                             public void changed(Replication.ChangeEvent event) {
                                 if (event.getTransition() != null &&
                                         event.getTransition().getDestination() == ReplicationState.STOPPED) {
-                                    Status status = new Status(Status.OK);
-                                    status = sendResponseHeaders(status);
-                                    connection.setResponseCode(status.getCode());
-
-                                    Map<String, Object> result = new HashMap<String, Object>();
-                                    result.put("session_id", event.getSource().getSessionID());
-                                    connection.setResponseBody(new Body(result));
-
+                                    Throwable error = event.getSource().getLastError();
+                                    // stopped with error
+                                    if (error != null) {
+                                        int statusCode = Utils.getStatusFromError(error);
+                                        String errorMessage = Utils.getErrorMessageFromError(error);
+                                        Status status = new Status(statusCode);
+                                        status = sendResponseHeaders(status);
+                                        connection.setResponseCode(statusCode);
+                                        Map<String, Object> result = new HashMap<String, Object>();
+                                        result.put("error", errorMessage);
+                                        connection.setResponseBody(new Body(result));
+                                    }
+                                    // succeeded
+                                    else {
+                                        Status status = new Status(Status.OK);
+                                        status = sendResponseHeaders(status);
+                                        connection.setResponseCode(status.getCode());
+                                        Map<String, Object> result = new HashMap<String, Object>();
+                                        result.put("session_id", event.getSource().getSessionID());
+                                        result.put("ok", true);
+                                        connection.setResponseBody(new Body(result));
+                                    }
                                     setResponse();
                                     sendResponse();
                                 }
@@ -861,6 +877,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 if (replicator.isContinuous()) {
                     Map<String, Object> result = new HashMap<String, Object>();
                     result.put("session_id", replicator.getSessionID());
+                    result.put("ok", true);
                     connection.setResponseBody(new Body(result));
                     return new Status(Status.OK);
                 } else {
