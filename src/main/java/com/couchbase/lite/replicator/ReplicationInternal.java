@@ -93,6 +93,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private static ReplicationStateTransition TRANS_IDLE_TO_RUNNING =
             new ReplicationStateTransition(ReplicationState.IDLE,
                     ReplicationState.RUNNING, ReplicationTrigger.RESUME);
+    private static ReplicationStateTransition TRANS_RUNNING_TO_STOPPING =
+            new ReplicationStateTransition(ReplicationState.RUNNING,
+                    ReplicationState.STOPPING, ReplicationTrigger.STOP_GRACEFUL);
 
     // Change listeners can be called back synchronously or asynchronously.
     protected enum ChangeListenerNotifyStyle {
@@ -1501,6 +1504,12 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         if ((TRANS_RUNNING_TO_IDLE.equals(replStateTrans)
                 || TRANS_IDLE_TO_RUNNING.equals(replStateTrans)) && authenticating) {
             Log.i(TAG, "During middle of authentication, not notify Replicator state change");
+            return;
+        }
+
+        // ignore RUNNING -> STOPPING as both are ACTIVE
+        if (TRANS_RUNNING_TO_STOPPING.equals(replStateTrans)) {
+            Log.v(TAG, "Both RUNNING and STOPPING are ACTIVE, not notify  Replicator state change");
             return;
         }
 
