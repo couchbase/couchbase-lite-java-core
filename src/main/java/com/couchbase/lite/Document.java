@@ -361,7 +361,7 @@ public class Document {
      * @param updater the callback DocumentUpdater implementation.  Will be called on each
      *                attempt to save. Should update the given revision's properties and then
      *                return YES, or just return NO to cancel.
-     * @return The new saved revision, or null on error or cancellation.
+     * @return The new saved revision, or null on cancellation.
      * @throws CouchbaseLiteException
      */
     @InterfaceAudience.Public
@@ -383,8 +383,9 @@ public class Document {
                 }
             } catch (CouchbaseLiteException e) {
                 lastErrorCode = e.getCBLStatus().getCode();
+                if (lastErrorCode != Status.CONFLICT)
+                    throw e;
             }
-
         } while (lastErrorCode == Status.CONFLICT);
         return null;
     }
