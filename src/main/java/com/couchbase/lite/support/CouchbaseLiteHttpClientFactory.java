@@ -184,7 +184,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
             }
 
             public X509Certificate[] getAcceptedIssuers() {
-                return null;
+                // https://github.com/square/okhttp/issues/2329#issuecomment-188325043
+                return new X509Certificate[0];
             }
         };
         SSLContext sslContext = SSLContext.getInstance("TLS");
