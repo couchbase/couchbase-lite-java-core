@@ -75,6 +75,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     public static final int MAX_PENDING_DOCS = 200;
 
     private static final int INSERTION_BATCHER_DELAY = 250; // 0.25 Seconds
+    private static final int INSERTION_BATCHER_CAPACITY = 100;
 
     private ChangeTracker changeTracker;
     protected SequenceMap pendingSequences;
@@ -119,9 +120,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     private void initDownloadsToInsert() {
         if (downloadsToInsert == null) {
-            int capacity = 200;
             downloadsToInsert = new Batcher<RevisionInternal>(executor,
-                    capacity, INSERTION_BATCHER_DELAY, new BatchProcessor<RevisionInternal>() {
+                    INSERTION_BATCHER_CAPACITY, INSERTION_BATCHER_DELAY, new BatchProcessor<RevisionInternal>() {
                 @Override
                 public void process(List<RevisionInternal> inbox) {
                     insertDownloads(inbox);
