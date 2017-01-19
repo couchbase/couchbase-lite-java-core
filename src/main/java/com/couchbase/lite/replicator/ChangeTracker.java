@@ -612,18 +612,28 @@ public class ChangeTracker implements Runnable {
             filterParams.put("doc_ids", docIDs);
         }
 
+        // NOTE: fieldname:null causes parasing problem at other end.
+        // TODO: {@"accept_encoding", @"gzip"}
         Map<String, Object> post = new HashMap<String, Object>();
         post.put("feed", getFeed());
         post.put("heartbeat", getHeartbeatMilliseconds());
-        post.put("style", includeConflicts ? "all_docs" : null);
-        post.put("active_only", activeOnly && !caughtUp ? true : null);
-        post.put("since", since);
+        if (includeConflicts)
+            post.put("style", "all_docs");
+        if (activeOnly && !caughtUp)
+            post.put("active_only", true);
+        if (since != null)
+            post.put("since", since);
         if (filterName != null)
             post.put("filter", filterName);
-        post.put("limit", limit > 0 ? limit : null);
-        // TODO: {@"accept_encoding", @"gzip"}
-        if (filterName != null && filterParams != null)
-            post.putAll(filterParams);
+        if (limit > 0)
+            post.put("limit", limit);
+        if (filterName != null && filterParams != null) {
+            for (String key : filterParams.keySet()) {
+                Object value = filterParams.get(key);
+                if (value != null)
+                    post.put(key, value);
+            }
+        }
         return post;
     }
 
