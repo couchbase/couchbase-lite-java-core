@@ -24,6 +24,7 @@ import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.StreamUtils;
 import com.couchbase.lite.util.Utils;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.File;
@@ -69,7 +70,10 @@ public final class Manager {
     public static final String FORESTDB_STORAGE = "ForestDB";
 
     // NOTE: Jackson is thread-safe http://wiki.fasterxml.com/JacksonFAQThreadSafety
-    private static final ObjectMapper mapper = new ObjectMapper();
+    // NOTE: Jackson automatically close input resource after parsing the conent.
+    //       Need to disable it. https://github.com/FasterXML/jackson-databind/issues/697
+    private static final ObjectMapper mapper = new ObjectMapper()
+            .disable(JsonParser.Feature.AUTO_CLOSE_SOURCE);
 
     private ManagerOptions options;
     private File directoryFile;

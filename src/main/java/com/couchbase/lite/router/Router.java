@@ -244,6 +244,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             throw new CouchbaseLiteException(Status.NOT_ACCEPTABLE);
 
         // parse body text
+        // NOTE: contentStream should not be close immediately. It will close Socket connection.
         InputStream contentStream = connection.getRequestInputStream();
         try {
             return Manager.getObjectMapper().readValue(contentStream, Map.class);
