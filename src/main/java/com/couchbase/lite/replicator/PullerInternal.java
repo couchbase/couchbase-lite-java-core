@@ -21,6 +21,7 @@ import com.couchbase.lite.Misc;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.TransactionalTask;
+import com.couchbase.lite.internal.Body;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.internal.RevisionInternal;
 import com.couchbase.lite.storage.SQLException;
@@ -68,6 +69,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
     // Maximum number of revision IDs to pass in an "?atts_since=" query param
     public static final int MAX_NUMBER_OF_ATTS_SINCE = 10;
+    public static final int MEGABYTE = 1024 * 1024;
 
     // Tune this parameter based on application needs.
     public static int CHANGE_TRACKER_RESTART_DELAY_MS = 10 * 1000;
@@ -419,6 +421,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         });
     }
 
+    static long globalMemorySize = 0;
     // This invokes the tranformation block if one is installed and queues the resulting CBL_Revision
     private void queueDownloadedRevision(RevisionInternal rev) {
 
@@ -456,10 +459,27 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             }
         }
 
-        if (rev != null && rev.getBody() != null)
-            rev.getBody().compact();
+        final Body body = rev.getBody();
+        if (rev != null && body != null)
+            body.compact();
+
+        synchronized (downloadsToInsert) {
+            globalMemorySize+=body.size();
+        }
 
         downloadsToInsert.queueObject(rev);
+        if (tooManyQueuedObjects()) {
+            Log.d(TAG, "Flushing queue global memory size at " + globalMemorySize);
+            downloadsToInsert.flushAll(false);
+            synchronized (downloadsToInsert) {
+                Log.d(TAG, "Resetting global memory size.");
+                globalMemorySize=0;
+            }
+        }
+    }
+
+    private boolean tooManyQueuedObjects() {
+        return globalMemorySize > MEGABYTE;
     }
 
 
