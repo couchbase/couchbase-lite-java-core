@@ -470,8 +470,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         downloadsToInsert.queueObject(rev);
         if (tooManyQueuedObjects()) {
             Log.d(TAG, "Flushing queue global memory size at " + globalMemorySize);
-            downloadsToInsert.flushAll(false);
             synchronized (downloadsToInsert) {
+                downloadsToInsert.flushAll(true);
                 Log.d(TAG, "Resetting global memory size.");
                 globalMemorySize=0;
             }
@@ -479,7 +479,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
     }
 
     private boolean tooManyQueuedObjects() {
-        return globalMemorySize > MEGABYTE;
+        return globalMemorySize > MEGABYTE * 0.5;
     }
 
 
