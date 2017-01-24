@@ -77,6 +77,7 @@ public final class Manager {
 
     private ManagerOptions options;
     private File directoryFile;
+    /*package*/ Object lockDatabases = new Object();
     private Map<String, Database> databases;
     private Map<String, Object> encryptionKeys;
     private List<Replication> replications;
@@ -262,24 +263,26 @@ public final class Manager {
      */
     @InterfaceAudience.Public
     public void close() {
-        Log.d(Database.TAG, "Closing " + this);
-        // Close all database:
-        // Snapshot of the current open database to avoid concurrent modification as
-        // the database will be forgotten (removed from the databases map) when it is closed:
-        Database[] openDbs = databases.values().toArray(new Database[databases.size()]);
-        for (Database database : openDbs) {
-            database.close();
-        }
-        databases.clear();
+        synchronized (lockDatabases) {
+            Log.d(Database.TAG, "Closing " + this);
 
-        // Stop reachability:
-        context.getNetworkReachabilityManager().stopListening();
+            // Close all database:
+            // Snapshot of the current open database to avoid concurrent modification as
+            // the database will be forgotten (removed from the databases map) when it is closed:
+            Database[] openDbs = databases.values().toArray(new Database[databases.size()]);
+            for (Database database : openDbs)
+                database.close();
+            databases.clear();
 
-        // Shutdown ScheduledExecutorService:
-        if (workExecutor != null && !workExecutor.isShutdown()) {
-            Utils.shutdownAndAwaitTermination(workExecutor);
+            // Stop reachability:
+            context.getNetworkReachabilityManager().stopListening();
+
+            // Shutdown ScheduledExecutorService:
+            if (workExecutor != null && !workExecutor.isShutdown())
+                Utils.shutdownAndAwaitTermination(workExecutor);
+
+            Log.d(Database.TAG, "Closed " + this);
         }
-        Log.d(Database.TAG, "Closed " + this);
     }
 
     /**
@@ -512,7 +515,9 @@ public final class Manager {
      */
     @InterfaceAudience.Private
     public Collection<Database> allOpenDatabases() {
-        return databases.values();
+        synchronized (lockDatabases) {
+            return databases.values();
+        }
     }
 
     /**
@@ -551,25 +556,28 @@ public final class Manager {
      * @exclude
      */
     @InterfaceAudience.Private
-    public synchronized Database getDatabase(String name, boolean mustExist) {
-        if (options.isReadOnly())
-            mustExist = true;
-        Database db = databases.get(name);
-        if (db == null) {
-            if (!isValidDatabaseName(name))
-                throw new IllegalArgumentException("Invalid database name: " + name);
-            String path = pathForDatabaseNamed(name);
-            if (path == null)
-                return null;
-            db = new Database(path, name, this, options.isReadOnly());
-            if (mustExist && !db.exists()) {
-                Log.i(Database.TAG, "mustExist is true and db (%s) does not exist", name);
-                return null;
+    public Database getDatabase(String name, boolean mustExist) {
+        synchronized (lockDatabases) {
+            if (options.isReadOnly())
+                mustExist = true;
+            Database db = databases.get(name);
+            if (db == null) {
+                if (!isValidDatabaseName(name))
+                    throw new IllegalArgumentException("Invalid database name: " + name);
+                String path = pathForDatabaseNamed(name);
+                if (path == null)
+                    return null;
+                db = new Database(path, name, this, options.isReadOnly());
+                if (mustExist && !db.exists()) {
+                    Log.i(Database.TAG, "mustExist is true and db (%s) does not exist", name);
+                    return null;
+                }
+                db.setName(name);
+                databases.put(name, db);
             }
-            db.setName(name);
-            databases.put(name, db);
+            Log.v(Log.TAG_DATABASE, "getDatabase() %s %s", this, db);
+            return db;
         }
-        return db;
     }
 
     /**
@@ -1003,21 +1011,27 @@ public final class Manager {
      */
     @InterfaceAudience.Private
     protected void forgetDatabase(Database db) {
-        // remove from cached list of dbs
-        databases.remove(db.getName());
+        synchronized (lockDatabases) {
+            Log.v(Log.TAG_DATABASE, "Fogetting forgetDatabase() %s %s", this, db);
 
-        // remove from list of replications
-        // TODO: should there be something that actually stops the replication(s) first?
-        Iterator<Replication> replicationIterator = this.replications.iterator();
-        while (replicationIterator.hasNext()) {
-            Replication replication = replicationIterator.next();
-            if (replication.getLocalDatabase().getName().equals(db.getName())) {
-                replicationIterator.remove();
+            // remove from cached list of dbs
+            databases.remove(db.getName());
+
+            // remove from list of replications
+            // TODO: should there be something that actually stops the replication(s) first?
+            Iterator<Replication> replicationIterator = this.replications.iterator();
+            while (replicationIterator.hasNext()) {
+                Replication replication = replicationIterator.next();
+                if (replication.getLocalDatabase().getName().equals(db.getName())) {
+                    replicationIterator.remove();
+                }
             }
-        }
 
-        // Remove registered encryption key if available:
-        encryptionKeys.remove(db.getName());
+            // Remove registered encryption key if available:
+            encryptionKeys.remove(db.getName());
+
+            Log.v(Log.TAG_DATABASE, "Forgot forgetDatabase() %s %s", this, db);
+        }
     }
 
     /**
