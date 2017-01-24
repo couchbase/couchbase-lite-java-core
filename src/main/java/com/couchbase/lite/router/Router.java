@@ -622,6 +622,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.getResponseBody() == null &&
                 connection.getHeaderField("Content-Type") == null &&
                 dontOverwriteBody == false) {
+                connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 

@@ -28,18 +28,13 @@ import java.nio.channels.FileChannel;
 
 public class FileDirUtils {
 
-    public static boolean removeItemIfExists(String path) {
-        File f = new File(path);
-        return f.delete() || !f.exists();
-    }
-
     public static boolean deleteRecursive(File fileOrDirectory) {
         if (fileOrDirectory.isDirectory()) {
             for (File child : fileOrDirectory.listFiles()) {
                 deleteRecursive(child);
             }
         }
-        return fileOrDirectory.delete() || !fileOrDirectory.exists();
+        return fileOrDirectory.delete();
     }
 
     public static boolean cleanDirectory(File dir) {
