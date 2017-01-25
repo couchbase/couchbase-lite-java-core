@@ -1457,73 +1457,78 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Public
     public synchronized boolean close() {
         storeRef.await();
-        try {
-            closing.set(true);
 
-            if (!open.get()) {
-                // Ensure that the database is forgotten:
-                manager.forgetDatabase(this);
-                return false;
-            }
+        // NOTE: synchronized Manager.lockDatabases to prevent Manager to give the deleting Database
+        //       instance. See also `Manager.getDatabase(String, boolean)`.
+        synchronized (manager.lockDatabases) {
+            try {
+                closing.set(true);
 
-            synchronized (databaseListeners) {
-                for (DatabaseListener listener : databaseListeners)
-                    listener.databaseClosing();
-            }
-
-            synchronized (lockViews) {
-                if (views != null) {
-                    for (View view : views.values())
-                        view.close();
-                }
-                views = null;
-            }
-
-            // Make all replicators stop and wait:
-            boolean stopping = false;
-            synchronized (activeReplicators) {
-                for (Replication replicator : activeReplicators) {
-                    if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
-                        continue;
-                    replicator.stop();
-                    stopping = true;
+                if (!open.get()) {
+                    // Ensure that the database is forgotten:
+                    manager.forgetDatabase(this);
+                    return false;
                 }
 
-                // maximum wait time per replicator is 60 sec.
-                // total maximum wait time for all replicators is between 60sec and 119 sec.
-                long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
-                long startTime = System.currentTimeMillis();
-                while (activeReplicators.size() > 0 && stopping &&
-                        (System.currentTimeMillis() - startTime) < timeout) {
-                    try {
-                        activeReplicators.wait(timeout);
-                    } catch (InterruptedException e) {
+                synchronized (databaseListeners) {
+                    for (DatabaseListener listener : databaseListeners)
+                        listener.databaseClosing();
+                }
+
+                synchronized (lockViews) {
+                    if (views != null) {
+                        for (View view : views.values())
+                            view.close();
                     }
+                    views = null;
                 }
-                // clear active replicators:
-                activeReplicators.clear();
+
+                // Make all replicators stop and wait:
+                boolean stopping = false;
+                synchronized (activeReplicators) {
+                    for (Replication replicator : activeReplicators) {
+                        if (replicator.getStatus() == Replication.ReplicationStatus.REPLICATION_STOPPED)
+                            continue;
+                        replicator.stop();
+                        stopping = true;
+                    }
+
+                    // maximum wait time per replicator is 60 sec.
+                    // total maximum wait time for all replicators is between 60sec and 119 sec.
+                    long timeout = Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN * 1000;
+                    long startTime = System.currentTimeMillis();
+                    while (activeReplicators.size() > 0 && stopping &&
+                            (System.currentTimeMillis() - startTime) < timeout) {
+                        try {
+                            activeReplicators.wait(timeout);
+                        } catch (InterruptedException e) {
+                        }
+                    }
+                    // clear active replicators:
+                    activeReplicators.clear();
+                }
+
+                // Clear all replicators:
+                allReplicators.clear();
+
+                // cancel purge timer
+                cancelPurgeTimer();
+
+                // Close Store:
+                if (store != null)
+                    store.close();
+
+                // Clear document cache:
+                clearDocumentCache();
+
+                // Forget database:
+                manager.forgetDatabase(this);
+
+                open.set(false);
+                return true;
+            } finally {
+                closing.set(false);
             }
-
-            // Clear all replicators:
-            allReplicators.clear();
-
-            // cancel purge timer
-            cancelPurgeTimer();
-
-            // Close Store:
-            if (store != null)
-                store.close();
-
-            // Clear document cache:
-            clearDocumentCache();
-
-            // Forget database:
-            manager.forgetDatabase(this);
-
-            open.set(false);
-            return true;
-        } finally {
-            closing.set(false);
         }
     }
 
