@@ -394,23 +394,30 @@ public class Database implements StoreDelegate {
      * Deletes the database.
      */
     @InterfaceAudience.Public
-    public void delete() throws CouchbaseLiteException {
-        if (open.get()) {
-            if (!close()) {
-                throw new CouchbaseLiteException("The database was open, and could not be closed",
-                        Status.INTERNAL_SERVER_ERROR);
+    public synchronized void delete() throws CouchbaseLiteException {
+        // NOTE: synchronized Manager.lockDatabases to prevent Manager to give the deleting Database
+        //       instance. See also `Manager.getDatabase(String, boolean)`.
+        synchronized (manager.lockDatabases) {
+            Log.v(TAG, "Deleting %s", this);
+
+            if (open.get()) {
+                if (!close())
+                    throw new CouchbaseLiteException("The database was open, and could not be closed",
+                            Status.INTERNAL_SERVER_ERROR);
             }
-        }
-        manager.forgetDatabase(this);
-        if (!exists()) {
-            return;
-        }
 
-        File dir = new File(path);
-        if (!FileDirUtils.deleteRecursive(dir))
-            throw new CouchbaseLiteException("Was not able to delete the database directory",
-                    Status.INTERNAL_SERVER_ERROR);
+            manager.forgetDatabase(this);
 
+            if (!exists())
+                return;
+
+            File dir = new File(path);
+            if (!FileDirUtils.deleteRecursive(dir))
+                throw new CouchbaseLiteException("Was not able to delete the database directory",
+                        Status.INTERNAL_SERVER_ERROR);
+
+            Log.v(TAG, "Deleted %s", this);
+        }
     }
 
     /**
@@ -1232,7 +1239,7 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    public boolean exists() {
+    public synchronized boolean exists() {
         return new File(path).exists();
     }
 
@@ -1268,7 +1275,7 @@ public class Database implements StoreDelegate {
     }
 
     @InterfaceAudience.Private
-    public synchronized void open() throws CouchbaseLiteException {
+    public void open() throws CouchbaseLiteException {
         open(manager.getDefaultOptions(name));
     }
 
