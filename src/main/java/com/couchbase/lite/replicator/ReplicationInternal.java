@@ -878,17 +878,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         Map<String, Object> response = (Map<String, Object>) result;
                         body.put("_rev", response.get("rev"));
                         remoteCheckpoint = body;
-                        boolean isOpen = false;
-                        try {
-                            if (db != null) {
-                                db.open();
-                                isOpen = true;
-                            }
-                        } catch (CouchbaseLiteException ex) {
-                            Log.w(Log.TAG_SYNC, "%s: Cannot open the database", ex, this);
-                        }
-
-                        if (isOpen) {
+                        if (db != null && db.isOpen()) {
                             Log.d(Log.TAG_SYNC,
                                     "%s: saved remote checkpoint, updating local checkpoint. RemoteCheckpoint: %s",
                                     this, remoteCheckpoint);

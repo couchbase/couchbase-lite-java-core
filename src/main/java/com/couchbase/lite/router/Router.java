@@ -622,6 +622,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 connection.getResponseBody() == null &&
                 connection.getHeaderField("Content-Type") == null &&
                 dontOverwriteBody == false) {
+                connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 
@@ -1141,13 +1142,17 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return new Status(Status.CREATED);
     }
 
-    public Status do_DELETE_Database(Database _db, String _docID, String _attachmentName)
-            throws CouchbaseLiteException {
+    public Status do_DELETE_Database(Database _db, String _docID, String _attachmentName) {
         if (getQuery("rev") != null) {
             return new Status(Status.BAD_REQUEST);
             // CouchDB checks for this; probably meant to be a document deletion
         }
-        db.delete();
+        try {
+            db.delete();
+        } catch (CouchbaseLiteException e) {
+            Log.w(TAG, "Failed to delete database: do_DELETE_Database()", e);
+            return e.getCBLStatus();
+        }
         return new Status(Status.OK);
     }
 
