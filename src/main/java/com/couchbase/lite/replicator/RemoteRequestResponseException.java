@@ -14,6 +14,7 @@
 package com.couchbase.lite.replicator;
 
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -45,5 +46,19 @@ public class RemoteRequestResponseException extends IOException {
 
     public Map getUserInfo() {
         return userInfo;
+    }
+
+    public String toString() {
+        String className = this.getClass().getName();
+        String message = this.getLocalizedMessage();
+        String strUserInfo = userInfo != null ? userInfo.toString() : null;
+        if (message != null && strUserInfo != null)
+            return String.format(Locale.ENGLISH, "%s: {code=%d, userInfo=%s, message=%s}", className, code, strUserInfo, message);
+        else if (message != null && strUserInfo == null)
+            return String.format(Locale.ENGLISH, "%s: {code=%d, message=%s}", className, code, message);
+        else if (message == null && strUserInfo != null)
+            return String.format(Locale.ENGLISH, "%s: {code=%d, userInfo=%s}", className, code, strUserInfo);
+        else
+            return String.format(Locale.ENGLISH, "%s: {code=%d}", className, code);
     }
 }
