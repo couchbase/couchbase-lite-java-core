@@ -171,4 +171,8 @@ public class Body {
     public Object getObject(String key) {
         return getProperties() != null ? getProperties().get(key) : null;
     }
+
+    public int size() {
+        return json.length;
+    }
 }
