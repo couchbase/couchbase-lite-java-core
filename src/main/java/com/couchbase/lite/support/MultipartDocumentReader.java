@@ -33,6 +33,7 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
     private CustomByteArrayOutputStream jsonBuffer;
     private boolean jsonCompressed;
     private Map<String, Object> document;
+    private long documentSize = 0; // original JSON document size
     private Database database;
     private Map<String, BlobStoreWriter> attachmentsByName;
     private Map<String, BlobStoreWriter> attachmentsByMd5Digest;
@@ -45,7 +46,14 @@ public class MultipartDocumentReader implements MultipartReaderDelegate {
         return document;
     }
 
+    public long getDocumentSize() {
+        return documentSize;
+    }
+
     public void parseJsonBuffer() {
+
+        documentSize = jsonBuffer.count();
+
         ByteArrayInputStream in = new ByteArrayInputStream(jsonBuffer.buf(), 0, jsonBuffer.count());
         try {
             try {

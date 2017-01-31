@@ -31,6 +31,7 @@ import java.util.Map;
  */
 public class Body {
     private byte[] json;
+    private long size = 0;
     private Object object;
 
     public Body(byte[] json) {
@@ -39,6 +40,16 @@ public class Body {
 
     public Body(Map<String, Object> properties) {
         this.object = properties;
+    }
+
+    public Body(byte[] json, long size) {
+        this.json = json;
+        this.size = size;
+    }
+
+    public Body(Map<String, Object> properties, long size) {
+        this.object = properties;
+        this.size = size;
     }
 
     public Body(List<?> array) {
@@ -170,5 +181,9 @@ public class Body {
 
     public Object getObject(String key) {
         return getProperties() != null ? getProperties().get(key) : null;
+    }
+
+    public long getSize() {
+        return size;
     }
 }
