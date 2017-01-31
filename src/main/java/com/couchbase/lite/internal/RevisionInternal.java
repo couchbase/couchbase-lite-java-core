@@ -64,6 +64,10 @@ public class RevisionInternal {
         this(new Body(properties));
     }
 
+    public RevisionInternal(Map<String, Object> properties, long size) {
+        this(new Body(properties, size));
+    }
+
     ////////////////////////////////////////////////////////////
     // Setter / Getter methods
     ////////////////////////////////////////////////////////////

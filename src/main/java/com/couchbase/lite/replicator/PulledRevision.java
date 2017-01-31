@@ -40,6 +40,10 @@ class PulledRevision extends RevisionInternal {
         super(properties);
     }
 
+    public PulledRevision(Map<String, Object> properties, long size) {
+        super(properties, size);
+    }
+
     public String getRemoteSequenceID() {
         return remoteSequenceID;
     }
