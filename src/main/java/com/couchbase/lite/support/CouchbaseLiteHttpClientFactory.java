@@ -23,7 +23,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -37,7 +39,7 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     private OkHttpClient client;
     private ClearableCookieJar cookieJar;
     private SSLSocketFactory sslSocketFactory;
-
+    private HostnameVerifier hostnameVerifier;
     private boolean followRedirects = true;
 
     // deprecated
@@ -63,9 +65,17 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     @InterfaceAudience.Private
     public void setSSLSocketFactory(SSLSocketFactory sslSocketFactory) {
         if (this.sslSocketFactory != null) {
-            throw new RuntimeException("SSLSocketFactory already set");
+            throw new RuntimeException("SSLSocketFactory is already set");
         }
         this.sslSocketFactory = sslSocketFactory;
+    }
+
+    @InterfaceAudience.Private
+    public void setHostnameVerifier(HostnameVerifier hostnameVerifier) {
+        if (this.hostnameVerifier != null) {
+            throw new RuntimeException("HostnameVerifier is already set");
+        }
+        this.hostnameVerifier = hostnameVerifier;
     }
 
     ////////////////////////////////////////////////////////////
@@ -85,6 +95,9 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
             if (sslSocketFactory != null)
                 builder.sslSocketFactory(sslSocketFactory);
+
+            if (hostnameVerifier != null)
+                builder.hostnameVerifier(hostnameVerifier);
 
             // synchronize access to the cookieStore in case there is another
             // thread in the middle of updating it.  wait until they are done so we get their changes.
@@ -193,6 +206,15 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         return sslContext.getSocketFactory();
     }
 
+    private static HostnameVerifier ignoreHostnameVerifier() {
+        return new HostnameVerifier() {
+            @Override
+            public boolean verify(String s, SSLSession sslSession) {
+                return true;
+            }
+        };
+    }
+
     /**
      * This is a convenience method to allow couchbase lite to connect to servers
      * that use self-signed SSL certs.
@@ -205,11 +227,15 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
      */
     @InterfaceAudience.Public
     public void allowSelfSignedSSLCertificates() {
+        // SSLSocketFactory that bypasses certificate verification.
         try {
             setSSLSocketFactory(selfSignedSSLSocketFactory());
         } catch (GeneralSecurityException e) {
             throw new RuntimeException(e);
         }
+
+        // HostnameVerifier that bypasses hotname verification
+        setHostnameVerifier(ignoreHostnameVerifier());
     }
 
     /**
