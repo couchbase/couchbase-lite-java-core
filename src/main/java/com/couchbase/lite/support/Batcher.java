@@ -53,6 +53,7 @@ public class Batcher<T> {
 
     private final Object mutex = new Object();
     private final Object processMutex = new Object();
+    private final Object flushAllMutext = new Object();
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructors
@@ -158,6 +159,12 @@ public class Batcher<T> {
                     processMutex.wait(5);
                 } catch (InterruptedException e) { }
             }
+        }
+    }
+
+    public void flushAllAndWait() {
+        synchronized (flushAllMutext) {
+            flushAll(true);
         }
     }
 
