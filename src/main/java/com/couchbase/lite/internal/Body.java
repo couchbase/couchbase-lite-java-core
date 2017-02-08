@@ -164,6 +164,12 @@ public class Body {
         return theProperties.get(key);
     }
 
+    public void compactEasy() {
+        if (this.json != null && this.object != null) {
+            this.object = null;
+        }
+    }
+
     public boolean compact() {
         try {
             getJson();
