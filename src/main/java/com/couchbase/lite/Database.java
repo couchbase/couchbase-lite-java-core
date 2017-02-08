@@ -821,7 +821,7 @@ public class Database implements StoreDelegate {
         if (change != null &&
                 change.getAddedRevision() != null &&
                 change.getAddedRevision().getBody() != null)
-            change.getAddedRevision().getBody().compact();
+            change.getAddedRevision().getBody().compactEasy();
 
         if (change.getRevisionId() != null)
             Log.v(Log.TAG, "---> Added: %s as seq %d",
