@@ -476,7 +476,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         // if queue memory size is more than maximum, force flush the queue.
         if (queuedMemorySize.get() > MAX_QUEUE_MEMORY_SIZE) {
             Log.d(TAG, "Flushing queued memory size at: " + queuedMemorySize);
-            downloadsToInsert.flushAll(true);
+            downloadsToInsert.flushAllAndWait();
         }
     }
 
@@ -744,7 +744,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // if queue memory size is more than maximum, force flush the queue.
                             if (queuedMemorySize.get() > MAX_QUEUE_MEMORY_SIZE) {
                                 Log.d(TAG, "Flushing  queued memory size at: " + queuedMemorySize);
-                                downloadsToInsert.flushAll(true);
+                                downloadsToInsert.flushAllAndWait();
                             }
                         }
 
