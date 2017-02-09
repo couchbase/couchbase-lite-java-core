@@ -1215,12 +1215,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         List<Object> keys = (List<Object>) body.get("keys");
         options.setKeys(keys);
 
-        Map<String, Object> result = null;
-        result = db.getAllDocs(options);
-        convertCBLQueryRowsToMaps(result);
-
+        Map<String, Object> result = db.getAllDocs(options);
         if (result == null) {
             return new Status(Status.INTERNAL_SERVER_ERROR);
+        } else {
+            convertCBLQueryRowsToMaps(result);
         }
         connection.setResponseBody(new Body(result));
         return new Status(Status.OK);
