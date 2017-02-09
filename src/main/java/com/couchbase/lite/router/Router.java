@@ -114,6 +114,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private URL source = null;
 
     // _changes request:
+    private long changesSince = 0;
+    private boolean filled = false;
+    private ChangesOptions changesOptions = null;
     private ReplicationFilter changesFilter;
     Map<String, Object> changesFilterParams = null;
     private boolean longpoll = false;
@@ -205,6 +208,19 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
         }
 
+        return result;
+    }
+
+    private long getLongQuery(String param, long defaultValue) {
+        long result = defaultValue;
+        String value = getQuery(param);
+        if (value != null) {
+            try {
+                result = Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                //ignore, will return default value
+            }
+        }
         return result;
     }
 
@@ -1559,19 +1575,22 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
         String lastDocID = null;
         Map<String, Object> lastEntry = null;
-        for (RevisionInternal rev : changes) {
-            String docID = rev.getDocID();
-            if (docID.equals(lastDocID)) {
-                Map<String, Object> changesDict = new HashMap<String, Object>();
-                changesDict.put("rev", rev.getRevID());
-                List<Map<String, Object>> inchanges = (List<Map<String, Object>>) lastEntry.get("changes");
-                inchanges.add(changesDict);
-            } else {
-                lastEntry = changesDictForRevision(rev);
-                entries.add(lastEntry);
-                lastDocID = docID;
+        if (changes != null && changes.size() > 0) {
+            for (RevisionInternal rev : changes) {
+                String docID = rev.getDocID();
+                if (docID.equals(lastDocID)) {
+                    Map<String, Object> changesDict = new HashMap<String, Object>();
+                    changesDict.put("rev", rev.getRevID());
+                    List<Map<String, Object>> inchanges = (List<Map<String, Object>>) lastEntry.get("changes");
+                    inchanges.add(changesDict);
+                } else {
+                    lastEntry = changesDictForRevision(rev);
+                    entries.add(lastEntry);
+                    lastDocID = docID;
+                }
             }
         }
+
         // After collecting revisions, sort by sequence:
         Collections.sort(entries, new Comparator<Map<String, Object>>() {
             public int compare(Map<String, Object> e1, Map<String, Object> e2) {
@@ -1644,18 +1663,19 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
-    private void sendLongpollChanges(List<RevisionInternal> revs) {
-        sendLongpollChanges(revs, 0);
-    }
-
-    private void sendLongpollChanges(List<RevisionInternal> revs, long since) {
+    private void sendLongpollChanges(List<RevisionInternal> revs, long since, ChangesOptions changesOptions) {
         // Ensure that the content type is application/json:
         connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
         sendResponse();
 
         OutputStream os = connection.getResponseOutputStream();
         try {
-            Map<String, Object> body = responseBodyForChanges(revs, since);
+            Map<String, Object> body;
+            if (changesOptions != null && changesOptions.isIncludeConflicts())
+                body = responseBodyForChangesWithConflicts(revs, since);
+            else
+                body = responseBodyForChanges(revs, since);
+
             if (callbackBlock != null) {
                 byte[] data = null;
                 try {
@@ -1700,6 +1720,16 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             // Stop timeout timer:
             stopTimeout();
 
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/1495
+            if (!filled) {
+                filled = true;
+                RevisionList changes = db.changesSince(changesSince, changesOptions, changesFilter, changesFilterParams);
+                if(changes.size() > 0) {
+                    sendLongpollChanges(changes, changesSince, changesOptions);
+                    return;
+                }
+            }
+
             List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
             List<DocumentChange> changes = event.getChanges();
             for (DocumentChange change : changes) {
@@ -1734,10 +1764,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 timeoutLastSeqence = rev.getSequence();
             }
 
+            // feed=longpoll
             if (longpoll) {
                 if (revs.size() > 0)
-                    sendLongpollChanges(revs);
-            } else {
+                    sendLongpollChanges(revs, changesSince, changesOptions);
+                else
+                    startTimeout();
+            }
+            // feed=continuous
+            else {
                 // Restart timeout timer for continuous feed request:
                 startTimeout();
             }
@@ -1771,6 +1806,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     }
 
     private Status doChanges(Database db) {
+        filled = false;
+
         // http://docs.couchdb.org/en/latest/api/database/changes.html
         // http://wiki.apache.org/couchdb/HTTP_database_API#Changes
         changesIncludesDocs = getBooleanQuery("include_docs");
@@ -1785,7 +1822,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         // TODO: descending option is not supported by ChangesOptions
         options.setLimit(getIntQuery("limit", options.getLimit()));
 
-        int since = getIntQuery("since", 0);
+        long since = getLongQuery("since", 0L);
         timeoutLastSeqence = since;
 
         String filterName = getQuery("filter");
@@ -1820,6 +1857,14 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     timeoutLastSeqence = rev.getSequence();
                 }
             }
+
+            // set following parameters to call Database.changesSince(...) in changed(...) callback
+            // to fill the gap between changesSince() and changed() callbacks.
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/1495
+            filled = false;
+            changesOptions = options;
+            changesSince = since;
+
             db.addChangeListener(this);
 
             //timeout
@@ -1917,7 +1962,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                         OutputStream os = connection.getResponseOutputStream();
                         if (os != null) {
                             if (longpoll)
-                                sendLongpollChanges(null, timeoutLastSeqence);
+                                sendLongpollChanges(null, timeoutLastSeqence, null);
                             else
                                 sendContinuousChangeLastSequenceAndFinish(timeoutLastSeqence);
                         }
