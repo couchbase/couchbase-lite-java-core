@@ -749,7 +749,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                     // Skip revisions that originally came from the database I'm syncing to:
                     URL source = change.getSource();
                     if (source != null && source.toURI().equals(remoteUri))
-                        return;
+                        continue;
                     RevisionInternal rev = change.getAddedRevision();
                     if (rev == null)
                         continue;
