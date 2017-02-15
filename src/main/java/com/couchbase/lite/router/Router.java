@@ -114,6 +114,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private URL source = null;
 
     // _changes request:
+    private boolean filled = false;
+    private long changesSince = 0;
+    private ChangesOptions changesOptions = null;
     private ReplicationFilter changesFilter;
     Map<String, Object> changesFilterParams = null;
     private boolean longpoll = false;
@@ -1644,10 +1647,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
     }
 
-    private void sendLongpollChanges(List<RevisionInternal> revs) {
-        sendLongpollChanges(revs, 0);
-    }
-
     private void sendLongpollChanges(List<RevisionInternal> revs, long since) {
         // Ensure that the content type is application/json:
         connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
@@ -1700,6 +1699,19 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             // Stop timeout timer:
             stopTimeout();
 
+            // In race condition, new doc or update doc is fired before starting to observe the
+            // DatabaseChangeEvent, it allows to skip few document changes with /_changes REST API.
+            // Make sure all document changes are tread by /_changes REST API.
+            if (!filled) {
+                filled = true;
+                RevisionList changes = db.changesSince(changesSince, changesOptions,
+                        changesFilter, changesFilterParams);
+                if (changes.size() > 0) {
+                    sendLongpollChanges(changes, changesSince);
+                    return;
+                }
+            }
+
             List<RevisionInternal> revs = new ArrayList<RevisionInternal>();
             List<DocumentChange> changes = event.getChanges();
             for (DocumentChange change : changes) {
@@ -1734,13 +1746,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 timeoutLastSeqence = rev.getSequence();
             }
 
-            if (longpoll) {
-                if (revs.size() > 0)
-                    sendLongpollChanges(revs);
-            } else {
+            if (longpoll && revs.size() > 0)
+                sendLongpollChanges(revs, changesSince);
+            else
                 // Restart timeout timer for continuous feed request:
                 startTimeout();
-            }
         }
     }
 
@@ -1820,6 +1830,15 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     timeoutLastSeqence = rev.getSequence();
                 }
             }
+
+            // set following parameters to call Database.changesSince(...) in changed(...) callback
+            // to fill the gap between changesSince() and changed() callbacks.
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/1495
+            filled = false;
+            changesSince = since;
+            changesOptions = options;
+
+            // To observe database change event
             db.addChangeListener(this);
 
             //timeout
