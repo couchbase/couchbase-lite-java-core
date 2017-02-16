@@ -14,7 +14,6 @@
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.AsyncTask;
-import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Misc;
 import com.couchbase.lite.ReplicationFilter;
@@ -112,6 +111,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private String username;
     protected String filterName;
     protected Map<String, Object> filterParams;
+    protected boolean usePOST;
     protected List<String> documentIDs;
     private String remoteUUID;
     protected Map<String, Object> requestHeaders;
@@ -1105,6 +1105,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     public void setFilter(String filterName) {
         this.filterName = filterName;
+    }
+
+    /**
+     * Set whether to use POST or GET // Cloudant
+     */
+    public void setUsePOST(boolean usePOST) {
+        this.usePOST = usePOST;
     }
 
     /**
