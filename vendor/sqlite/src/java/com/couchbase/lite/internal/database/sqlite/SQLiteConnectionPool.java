@@ -897,7 +897,7 @@ public final class SQLiteConnectionPool implements Closeable {
             mAcquiredConnections.put(connection, AcquiredConnectionStatus.NORMAL);
         } catch (RuntimeException ex) {
             DLog.e(TAG, "Failed to prepare acquired connection for session, closing it: "
-                    + connection +", connectionFlags=" + connectionFlags);
+                    + connection +", connectionFlags=" + connectionFlags, ex);
             closeConnectionAndLogExceptionsLocked(connection);
             throw ex; // rethrow!
         }

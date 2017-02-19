@@ -372,9 +372,9 @@ public class ChangeTracker implements Runnable {
                                         Log.v(Log.TAG_CHANGE_TRACKER, "%s: /readValue.  fullBody: %s", this, fullBody);
                                         responseOK = receivedPollResponse(fullBody);
                                     } catch (JsonParseException jpe) {
-                                        Log.w(Log.TAG_CHANGE_TRACKER, "%s: json parsing error; %s", this, jpe.toString());
+                                        Log.w(Log.TAG_CHANGE_TRACKER, "%s: json parsing error; %s", jpe, this, jpe.toString());
                                     } catch (JsonMappingException jme) {
-                                        Log.w(Log.TAG_CHANGE_TRACKER, "%s: json mapping error; %s", this, jme.toString());
+                                        Log.w(Log.TAG_CHANGE_TRACKER, "%s: json mapping error; %s", jme, this, jme.toString());
                                     }
                                 }
                                 Log.v(Log.TAG_CHANGE_TRACKER, "%s: responseOK: %s", this, responseOK);

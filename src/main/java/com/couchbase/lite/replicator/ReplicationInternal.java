@@ -488,7 +488,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         }
                     }
                 } catch (Exception e) {
-                    Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", this, e);
+                    Log.e(Log.TAG_SYNC, "%s Exception in checkSessionAtPath()", e, this);
                 }
             }
         });
@@ -571,7 +571,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         //    return;
 
         if (throwable != this.error) {
-            Log.w(Log.TAG_SYNC, "%s: Progress: set error = %s", this, throwable);
+            Log.w(Log.TAG_SYNC, "%s: Progress: set error = %s", throwable, this, throwable);
             parentReplication.setLastError(throwable);
             this.error = throwable;
 
@@ -1777,7 +1777,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             db = null;
 
         } catch (Exception e) {
-            Log.e(Log.TAG_SYNC, "Exception in clearDbRef(): %s", e);
+            Log.e(Log.TAG_SYNC, "Exception in clearDbRef(): %s", e, e);
         }
     }
 
@@ -1918,7 +1918,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         try {
             waitForAllTasksCompleted();
         } catch (Exception e) {
-            Log.e(TAG, "Exception waiting for pending futures: %s", e);
+            Log.e(TAG, "Exception waiting for pending futures: %s", e, e);
         }
 
         // continuous mode, make state IDLE
@@ -1980,7 +1980,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "Exception waiting for pending futures: %s", e);
+            Log.e(TAG, "Exception waiting for pending futures: %s", e, e);
         }
     }
 

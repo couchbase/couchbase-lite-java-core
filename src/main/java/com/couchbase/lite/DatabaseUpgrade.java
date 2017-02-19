@@ -160,7 +160,7 @@ public final class DatabaseUpgrade {
         try {
             db.delete();
         } catch (CouchbaseLiteException e) {
-            Log.w(TAG, "Failed to delete Database: %s: %s", db, e);
+            Log.w(TAG, "Failed to delete Database: %s: %s", e, db, e);
         }
     }
 
@@ -203,7 +203,7 @@ public final class DatabaseUpgrade {
                 FileDirUtils.copyFolder(oldAttachmentsPath, newAttachmentsPath);
             }
         } catch (IOException e) {
-            Log.w(TAG, "Upgrade failed: Couldn't move attachments: %s", e);
+            Log.w(TAG, "Upgrade failed: Couldn't move attachments: %s", e, e);
             return false;
         }
 
@@ -430,7 +430,7 @@ public final class DatabaseUpgrade {
                         Log.w(TAG, "Couldn't import local doc '%s'", docID);
                     }
                 } catch (Exception e) {
-                    Log.w(TAG, "Couldn't import local doc '%s': '%s'", docID, e);
+                    Log.w(TAG, "Couldn't import local doc '%s': '%s'", e, docID, e);
                 }
                 cursor.moveToNext();
             }

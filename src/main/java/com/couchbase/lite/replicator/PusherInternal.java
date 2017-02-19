@@ -239,7 +239,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         try {
             maxPendingSequence = Long.parseLong(lastSequence);
         } catch (NumberFormatException e) {
-            Log.w(TAG, "Error converting lastSequence: %s to long.  Using 0", lastSequence);
+            Log.w(TAG, "Error converting lastSequence: %s to long.  Using 0", e, lastSequence);
             maxPendingSequence = new Long(0);
         }
 
@@ -443,7 +443,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                             try {
                                 loadedRev = db.loadRevisionBody(rev);
                             } catch (CouchbaseLiteException e1) {
-                                Log.w(TAG, "%s Couldn't get local contents of %s", rev, PusherInternal.this);
+                                Log.w(TAG, "%s Couldn't get local contents of %s", e1,rev, PusherInternal.this);
                                 continue;
                             }
 

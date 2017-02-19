@@ -640,7 +640,7 @@ public final class Manager {
         try {
             remote = new URL(remoteStr);
         } catch (MalformedURLException e) {
-            throw new CouchbaseLiteException("Malformed remote url: " + remoteStr,
+            throw new CouchbaseLiteException("Malformed remote url: " + remoteStr, e,
                     new Status(Status.BAD_REQUEST));
         }
         if (remote == null) {
@@ -768,10 +768,10 @@ public final class Manager {
             db.replaceUUIDs();
         } catch (FileNotFoundException e) {
             Log.e(Database.TAG, "Error replacing the database: %s", e, databaseName);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } catch (IOException e) {
             Log.e(Database.TAG, "Error replacing the database: %s", e, databaseName);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         }
     }
 

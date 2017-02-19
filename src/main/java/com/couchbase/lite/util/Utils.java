@@ -250,7 +250,7 @@ public class Utils {
             }
             return out.toByteArray();
         } catch (IOException ex) {
-            Log.w(Log.TAG, "Failed to decompress gzipped data: " + ex.getMessage());
+            Log.w(Log.TAG, "Failed to decompress gzipped data: " + ex.getMessage(), ex);
             return null;
         } finally {
             try {
