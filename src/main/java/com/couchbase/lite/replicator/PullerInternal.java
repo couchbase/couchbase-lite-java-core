@@ -578,10 +578,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             db.forceInsert(rev, history, remote);
                         } catch (CouchbaseLiteException e) {
                             if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
-                                Log.i(TAG, "%s: Remote rev failed validation: %s", this, rev);
+                                Log.i(TAG, "%s: Remote rev failed validation: %s", e,this, rev);
                             } else {
                                 Log.w(TAG, "%s: failed to write %s: status=%s",
-                                        this, rev, e.getCBLStatus().getCode());
+                                        e, this, rev, e.getCBLStatus().getCode());
                                 setError(new RemoteRequestResponseException(e.getCBLStatus().getCode(), null));
                                 continue;
                             }

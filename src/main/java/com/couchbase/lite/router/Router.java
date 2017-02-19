@@ -249,11 +249,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             return Manager.getObjectMapper().readValue(contentStream, Map.class);
         } catch (JsonParseException jpe) {
-            throw new CouchbaseLiteException(Status.BAD_JSON);
+            throw new CouchbaseLiteException(jpe, Status.BAD_JSON);
         } catch (JsonMappingException jme) {
-            throw new CouchbaseLiteException(Status.BAD_JSON);
+            throw new CouchbaseLiteException(jme, Status.BAD_JSON);
         } catch (IOException ioe) {
-            throw new CouchbaseLiteException(Status.REQUEST_TIMEOUT);
+            throw new CouchbaseLiteException(ioe, Status.REQUEST_TIMEOUT);
         }
     }
 
@@ -2394,12 +2394,12 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 body.appendData(dataStream.toByteArray());
                 body.finish();
             } catch (Exception e) {
-                throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
+                throw new CouchbaseLiteException(e, Status.BAD_ATTACHMENT);
             } finally {
                 try {
                     dataStream.close();
                 } catch (IOException e) {
-                    throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
+                    throw new CouchbaseLiteException(e, Status.BAD_ATTACHMENT);
                 }
             }
         }

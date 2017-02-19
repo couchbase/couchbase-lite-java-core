@@ -207,7 +207,7 @@ public final class Attachment {
                     try {
                         writer = blobStoreWriterForBody(body, database);
                     } catch (Exception e) {
-                        throw new CouchbaseLiteException(e.getMessage(), Status.ATTACHMENT_ERROR);
+                        throw new CouchbaseLiteException(e, Status.ATTACHMENT_ERROR);
                     }
                     metadataMutable.put("length", writer.getLength());
                     metadataMutable.put("digest", writer.mD5DigestString());

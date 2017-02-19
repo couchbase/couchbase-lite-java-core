@@ -172,7 +172,7 @@ public class OpenIDConnectAuthorizer extends BaseAuthorizer
                     return; // don't call the continuation block yet
                 } catch (MalformedURLException e) {
                     Log.e(TAG, "Unknown Error", e);
-                    error = new CouchbaseLiteException(Status.UNKNOWN);
+                    error = new CouchbaseLiteException(e, Status.UNKNOWN);
                 }
             } else {
                 error = new CouchbaseLiteException("Server didn't provide an OpenID login URL",

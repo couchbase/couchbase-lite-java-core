@@ -1842,7 +1842,7 @@ public class Database implements StoreDelegate {
             } catch (CouchbaseLiteException e) {
                 if (e.getCBLStatus().getCode() == Status.NOT_FOUND &&
                         getDocument(docID, null, false) != null) {
-                    throw new CouchbaseLiteException(Status.CONFLICT);
+                    throw new CouchbaseLiteException(e, Status.CONFLICT);
                 }
                 throw e;
             }

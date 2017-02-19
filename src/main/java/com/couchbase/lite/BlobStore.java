@@ -98,7 +98,7 @@ public class BlobStore {
             try {
                 encryptionAlg = TextUtils.read(markerFile);
             } catch (IOException e) {
-                throw new CouchbaseLiteException(e.getCause(), Status.BAD_ATTACHMENT);
+                throw new CouchbaseLiteException(e, Status.BAD_ATTACHMENT);
             }
         }
 
@@ -139,7 +139,7 @@ public class BlobStore {
                 }
             } catch (IOException e) {
                 Log.w(Log.TAG_DATABASE, "BlobStore: Unable to save the encryption marker file into the blob store");
-                throw new CouchbaseLiteException(e.getCause(), Status.ATTACHMENT_ERROR);
+                throw new CouchbaseLiteException(e, Status.ATTACHMENT_ERROR);
             }
         } else {
             if (markerFile.exists()) {

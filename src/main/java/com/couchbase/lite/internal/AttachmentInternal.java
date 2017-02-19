@@ -102,7 +102,7 @@ public class AttachmentInternal {
                 try {
                     data = Base64.decode((String) newContentBase64, Base64.DONT_GUNZIP);
                 } catch (IOException e) {
-                    throw new CouchbaseLiteException(Status.BAD_ENCODING);
+                    throw new CouchbaseLiteException(e, Status.BAD_ENCODING);
                 }
             } else {
                 data = (byte[]) newContentBase64;

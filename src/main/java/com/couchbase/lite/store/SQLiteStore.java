@@ -415,7 +415,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             Log.w(TAG, "SQLiteStore: database is unreadable", e);
             if (e.getMessage() != null &&
                     e.getMessage().contains("file is encrypted or is not a database (code 26)")) {
-                throw new CouchbaseLiteException("Cannot decrypt or access the database",
+                throw new CouchbaseLiteException("Cannot decrypt or access the database", e,
                         Status.UNAUTHORIZED);
             } else {
                 throw new CouchbaseLiteException(e, Status.DB_ERROR);
@@ -686,7 +686,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                     Log.v(TAG, "... deleted %d revisions", changes);
                 } catch (SQLException e) {
                     Log.e(TAG, "Error compacting", e);
-                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                    throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
                 }
                 shouldCommit = true;
             } finally {
@@ -700,7 +700,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 storageEngine.execSQL("PRAGMA wal_checkpoint(RESTART)");
             } catch (SQLException e) {
                 Log.e(TAG, "Error PRAGMA wal_checkpoint(RESTART)", e);
-                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
             }
 
             Log.v(TAG, "Vacuuming SQLite database...");
@@ -708,7 +708,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 storageEngine.execSQL("VACUUM");
             } catch (SQLException e) {
                 Log.e(TAG, "Error vacuuming sqliteDb", e);
-                throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
             }
         }
         Log.v(TAG, "...Finished database compaction.");
@@ -829,7 +829,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error loading revision body", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1586,7 +1586,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 // insert call, then.
                 if (ex.getCode() != SQLException.SQLITE_CONSTRAINT) {
                     Log.e(TAG, "Error inserting revision: ", ex);
-                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                    throw new CouchbaseLiteException(ex, Status.INTERNAL_SERVER_ERROR);
                 }
                 Log.w(TAG, "Duplicate rev insertion: " + docID + " / " + newRevId);
                 newRev.setBody(null);
@@ -1797,7 +1797,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                     if (numRowsChanged == 0)
                         inConflict.set(true);  // local parent wasn't a leaf, ergo we just created a branch
                 } catch (SQLException e) {
-                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                    throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
                 }
             }
 
@@ -1834,7 +1834,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error inserting revisions", e);
-            throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            throw new CouchbaseLiteException(e, Status.INTERNAL_SERVER_ERROR);
         } finally {
             if (!endTransaction(success))
                 throw new CouchbaseLiteException("Error in endTransaction()", Status.DB_ERROR);
