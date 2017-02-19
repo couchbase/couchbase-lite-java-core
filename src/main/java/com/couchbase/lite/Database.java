@@ -2253,7 +2253,7 @@ public class Database implements StoreDelegate {
         try {
             putLocalDocument("_blobstore", props);
         } catch (CouchbaseLiteException e) {
-            Log.e(Log.TAG_DATABASE, e.getMessage());
+            Log.e(Log.TAG_DATABASE, e.getMessage(), e);
         }
     }
 
@@ -2637,7 +2637,7 @@ public class Database implements StoreDelegate {
             RevisionInternal rev = loadRevisionBody(mrev);
             return rev.getAttachments();
         } catch (CouchbaseLiteException e) {
-            Log.w(Log.TAG_DATABASE, "Failed to get attachments for " + mrev);
+            Log.w(Log.TAG_DATABASE, "Failed to get attachments for " + mrev, e);
             return null;
         }
     }

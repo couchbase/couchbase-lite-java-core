@@ -170,7 +170,7 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
                 }
             } catch (Exception e) {
                 // call.execute(), GZIPInputStream, or ObjectMapper.readValue()
-                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", this, e, url);
+                Log.w(TAG, "%s: executeRequest() Exception: %s.  url: %s", e,this, e, url);
                 error = e;
             }
             respondWithResult(fullBody, error, response);

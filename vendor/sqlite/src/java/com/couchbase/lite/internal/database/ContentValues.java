@@ -270,7 +270,7 @@ public final class ContentValues {
                 try {
                     return Long.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    DLog.e(TAG, "Cannot parse Long value for " + value + " at key " + key);
+                    DLog.e(TAG, "Cannot parse Long value for " + value + " at key " + key, e2);
                     return null;
                 }
             } else {
@@ -295,7 +295,7 @@ public final class ContentValues {
                 try {
                     return Integer.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    DLog.e(TAG, "Cannot parse Integer value for " + value + " at key " + key);
+                    DLog.e(TAG, "Cannot parse Integer value for " + value + " at key " + key, e2);
                     return null;
                 }
             } else {
@@ -320,7 +320,7 @@ public final class ContentValues {
                 try {
                     return Short.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    DLog.e(TAG, "Cannot parse Short value for " + value + " at key " + key);
+                    DLog.e(TAG, "Cannot parse Short value for " + value + " at key " + key, e2);
                     return null;
                 }
             } else {
@@ -345,7 +345,7 @@ public final class ContentValues {
                 try {
                     return Byte.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    DLog.e(TAG, "Cannot parse Byte value for " + value + " at key " + key);
+                    DLog.e(TAG, "Cannot parse Byte value for " + value + " at key " + key, e2);
                     return null;
                 }
             } else {
@@ -370,7 +370,7 @@ public final class ContentValues {
                 try {
                     return Double.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    DLog.e(TAG, "Cannot parse Double value for " + value + " at key " + key);
+                    DLog.e(TAG, "Cannot parse Double value for " + value + " at key " + key, e2);
                     return null;
                 }
             } else {
@@ -395,7 +395,7 @@ public final class ContentValues {
                 try {
                     return Float.valueOf(value.toString());
                 } catch (NumberFormatException e2) {
-                    DLog.e(TAG, "Cannot parse Float value for " + value + " at key " + key);
+                    DLog.e(TAG, "Cannot parse Float value for " + value + " at key " + key, e2);
                     return null;
                 }
             } else {

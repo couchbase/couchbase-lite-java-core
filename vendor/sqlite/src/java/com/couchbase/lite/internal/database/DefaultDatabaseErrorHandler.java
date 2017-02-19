@@ -107,7 +107,7 @@ public final class DefaultDatabaseErrorHandler implements DatabaseErrorHandler {
             SQLiteDatabase.deleteDatabase(new File(fileName));
         } catch (Exception e) {
             /* print warning and ignore exception */
-            DLog.w(TAG, "delete failed: " + e.getMessage());
+            DLog.w(TAG, "delete failed: " + e.getMessage(), e);
         }
     }
 }

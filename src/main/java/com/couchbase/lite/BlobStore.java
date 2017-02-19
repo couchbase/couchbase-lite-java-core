@@ -328,7 +328,7 @@ public class BlobStore {
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error, SHA-1 getDigest is unavailable.");
+            Log.e(Log.TAG_DATABASE, "BlobStore: Error, SHA-1 getDigest is unavailable.", e);
             return null;
         }
         byte[] sha1hash = new byte[40];
@@ -343,7 +343,7 @@ public class BlobStore {
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error, SHA-1 getDigest is unavailable.");
+            Log.e(Log.TAG_DATABASE, "BlobStore: Error, SHA-1 getDigest is unavailable.", e);
             return null;
         }
         byte[] sha1hash = new byte[40];
@@ -358,7 +358,7 @@ public class BlobStore {
             }
             fis.close();
         } catch (IOException e) {
-            Log.e(Log.TAG_DATABASE, "BlobStore: Error reading tmp file to compute key");
+            Log.e(Log.TAG_DATABASE, "BlobStore: Error reading tmp file to compute key", e);
         }
 
         sha1hash = md.digest();

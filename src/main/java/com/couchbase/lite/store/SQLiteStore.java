@@ -1588,7 +1588,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                     Log.e(TAG, "Error inserting revision: ", ex);
                     throw new CouchbaseLiteException(ex, Status.INTERNAL_SERVER_ERROR);
                 }
-                Log.w(TAG, "Duplicate rev insertion: " + docID + " / " + newRevId);
+                Log.w(TAG, "Duplicate rev insertion: " + docID + " / " + newRevId, ex);
                 newRev.setBody(null);
 
                 // The pre-existing revision may have a nulled-out parent link since its original
@@ -2364,7 +2364,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                         retry = false;
                     } catch (SQLiteDatabaseLockedException lockedException) {
                         if (++retries > kTransactionMaxRetries) {
-                            Log.e(TAG, "Db busy, too many retries, giving up");
+                            Log.e(TAG, "Db busy, too many retries, giving up", lockedException);
                             throw lockedException;
                         }
                         Log.i(TAG, "Db busy, retrying transaction (#%d)...", retries);

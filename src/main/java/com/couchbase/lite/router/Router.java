@@ -558,7 +558,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         } catch (NoSuchMethodException msme) {
             try {
                 String errorMessage = String.format(Locale.ENGLISH, "Router unable to route request to %s", message);
-                Log.w(TAG, errorMessage);
+                Log.w(TAG, errorMessage, msme);
                 // Check if there is an alternative method:
                 boolean hasAltMethod = false;
                 String curDoMethod = String.format(Locale.ENGLISH, "do_%s", method);
@@ -690,7 +690,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             try {
                 connection.getResponseOutputStream().close();
             } catch (IOException e) {
-                Log.e(TAG, "Error closing empty output stream");
+                Log.e(TAG, "Error closing empty output stream", e);
             }
         }
     }
@@ -760,7 +760,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         try {
             connection.getResponseOutputStream().close();
         } catch (IOException e) {
-            Log.e(TAG, "Error closing empty output stream");
+            Log.e(TAG, "Error closing empty output stream", e);
         }
         sendResponse();
     }
@@ -1639,7 +1639,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     if (os != null)
                         os.close();
                 } catch (IOException e) {
-                    Log.w(TAG, "Failed to close connection: " + e.getMessage());
+                    Log.w(TAG, "Failed to close connection: " + e.getMessage(), e);
                 }
             }
         }
@@ -1676,13 +1676,13 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             // So print warning message, and exit from method.
             // Stacktrace should not be printed, it confuses developer.
             // https://github.com/couchbase/couchbase-lite-java-core/issues/1043
-            Log.w(TAG, "IOException writing to internal streams: " + e.getMessage());
+            Log.w(TAG, "IOException writing to internal streams: " + e.getMessage(), e);
         } finally {
             try {
                 if (os != null)
                     os.close();
             } catch (IOException e) {
-                Log.w(TAG, "Failed to close connection: " + e.getMessage());
+                Log.w(TAG, "Failed to close connection: " + e.getMessage(), e);
             }
         }
     }
@@ -1885,7 +1885,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                             os.write("\r\n".getBytes());
                             os.flush();
                         } catch (IOException e) {
-                            Log.w(TAG, "IOException writing to internal streams: " + e.getMessage());
+                            Log.w(TAG, "IOException writing to internal streams: " + e.getMessage(), e);
                         } finally {
                             // no close outputstream, OutputStream might be re-used
                         }
@@ -2272,7 +2272,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         } catch (CouchbaseLiteException e) {
             if (e.getCBLStatus() != null && e.getCBLStatus().getCode() == Status.CONFLICT) {
                 // conflict is not critical error for replicators, not print stack trace
-                Log.w(TAG, "Error updating doc: %s", docID);
+                Log.w(TAG, "Error updating doc: %s", e, docID);
             } else {
                 Log.e(TAG, "Error updating doc: %s", e, docID);
             }
