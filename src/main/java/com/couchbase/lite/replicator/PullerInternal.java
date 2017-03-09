@@ -596,6 +596,10 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         } catch (CouchbaseLiteException e) {
                             if (e.getCBLStatus().getCode() == Status.FORBIDDEN) {
                                 Log.i(TAG, "%s: Remote rev failed validation: %s", this, rev);
+                            } else if (e.getCBLStatus().getCode() == Status.BAD_ATTACHMENT) {
+                                // Revision with broken _attachments metadata (i.e. bogus revpos)
+                                // should not stop replication. Warn and skip it. (iOS #1001)
+                                Log.w(TAG, "%s: Revision %s has invalid attachment metadata: %s", this, rev, rev.getAttachments());
                             } else {
                                 Log.w(TAG, "%s: failed to write %s: status=%s",
                                         this, rev, e.getCBLStatus().getCode());
