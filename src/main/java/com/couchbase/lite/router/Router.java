@@ -18,6 +18,7 @@ import com.couchbase.lite.BlobStoreWriter;
 import com.couchbase.lite.ChangesOptions;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
+import com.couchbase.lite.DatabaseOptions;
 import com.couchbase.lite.Document;
 import com.couchbase.lite.DocumentChange;
 import com.couchbase.lite.Manager;
@@ -1135,8 +1136,23 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
 
         try {
-            // note: synchronized
-            db.open();
+        	Map<String, Object> body = getBodyAsDictionary();
+			if (body == null) {
+				Log.i(TAG, "No body for do_PUT_Database");
+				db.open();
+			} else {
+				DatabaseOptions options = new DatabaseOptions();
+				// ForestDB || SQLite
+				if (body.containsKey("storageType")) {
+					String storageType = (String) body.get("storageType");
+					if (storageType.equals(Manager.SQLITE_STORAGE)
+							|| storageType.equals(Manager.FORESTDB_STORAGE)) {
+						Log.d(TAG, "Storage type: " + storageType);
+						options.setStorageType(storageType);
+					}
+				}
+				db.open(options);
+			}
         } catch (CouchbaseLiteException e) {
             return e.getCBLStatus();
         }
