@@ -54,7 +54,7 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
 
     @Override
     public boolean open(String path, SymmetricKey encryptionKey) throws SQLException {
-        if(database != null && database.isOpen())
+        if (database != null && database.isOpen())
             return true;
 
         boolean hasError = false;
@@ -72,12 +72,23 @@ public abstract class SQLiteStorageEngineBase implements SQLiteStorageEngine {
                     getWALConnectionPoolSize(),
                     null, new ConnectionListener());
             Log.v(Log.TAG_DATABASE, "%s: Opened Android sqlite db", this);
-        } catch(SQLiteDatabaseCorruptException e) {
+        } catch (SQLiteDatabaseCorruptException e) {
             hasError = true;
-            Log.e(Log.TAG_DATABASE, "Unauthorized to open the SQLite database", e);
-            throw new SQLException(SQLException.SQLITE_ENCRYPTION_UNAUTHORIZED,
-                    "Cannot decrypt or access the database");
-        } catch(com.couchbase.lite.internal.database.SQLException e) {
+            // SQLCipher with encryption
+            if (encryptionKey != null && supportEncryption()) {
+                Log.e(Log.TAG_DATABASE, "Unauthorized to open the SQLite database", e);
+                throw new SQLException(SQLException.SQLITE_ENCRYPTION_UNAUTHORIZED,
+                        "Cannot decrypt or access the database");
+            }
+            // Standard SQLite or SQLCipher without encryption
+            else {
+                Log.e(Log.TAG_DATABASE,
+                        "Application might try to open the encrypted database "
+                                + "with the standard SQLite library or no password provided. "
+                                + "Otherwise, the SQLite database file has been corrupted. ", e);
+                throw new SQLException(SQLException.SQLITE_CORRUPT, e);
+            }
+        } catch (com.couchbase.lite.internal.database.SQLException e) {
             hasError = true;
             Log.e(Log.TAG_DATABASE, "Unable to open the SQLite database", e);
             throw new SQLException(e);

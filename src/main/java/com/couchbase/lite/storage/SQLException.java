@@ -22,6 +22,7 @@ public class SQLException extends RuntimeException {
     // Note: needs to define other error code
     public static final int SQLITE_OK = 0;
     public static final int SQLITE_ERROR = 1;
+    public static final int SQLITE_CORRUPT = 11;
     public static final int SQLITE_CONSTRAINT = 19;
 
     // Extension codes for encryption errors:
