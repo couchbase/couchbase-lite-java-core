@@ -42,6 +42,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.Cookie;
+import okhttp3.HttpUrl;
+
 /**
  * The external facade for the Replication API
  */
@@ -845,6 +848,27 @@ public class Replication
     public void setHeaders(Map<String, Object> requestHeadersParam) {
         properties.put(ReplicationField.REQUEST_HEADERS, requestHeadersParam);
         replicationInternal.setHeaders(requestHeadersParam);
+
+        // NOTE:
+        storeSyncGatewaySesionIntoCookieJar(requestHeadersParam);
+    }
+
+    private void storeSyncGatewaySesionIntoCookieJar(Map<String, Object> requestHeadersParam) {
+        try {
+            if (requestHeadersParam.containsKey("Cookie") && requestHeadersParam.get("Cookie") instanceof String) {
+                String cookieString = (String) requestHeadersParam.get("Cookie");
+                if (cookieString.indexOf("SyncGatewaySession") != -1) {
+                    if (remote != null) {
+                        Cookie cookie = Cookie.parse(HttpUrl.get(remote), cookieString);
+                        if (cookie != null && replicationInternal != null) {
+                            replicationInternal.setCookie(cookie);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Failed to store SyncGatewaySession into the CookieJar.", e);
+        }
     }
 
     /**
