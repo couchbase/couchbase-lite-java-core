@@ -849,21 +849,19 @@ public class Replication
         properties.put(ReplicationField.REQUEST_HEADERS, requestHeadersParam);
         replicationInternal.setHeaders(requestHeadersParam);
         // Fix - https://github.com/couchbase/couchbase-lite-java-core/issues/1617
-        storeSyncGatewaySesionIntoCookieJar(requestHeadersParam);
+        storeCookiesIntoCookieJar(requestHeadersParam);
     }
 
-    private void storeSyncGatewaySesionIntoCookieJar(Map<String, Object> requestHeadersParam) {
+    private void storeCookiesIntoCookieJar(Map<String, Object> requestHeadersParam) {
         try {
             if (requestHeadersParam.containsKey("Cookie") && requestHeadersParam.get("Cookie") instanceof String) {
                 String cookieString = (String) requestHeadersParam.get("Cookie");
-                if (cookieString.indexOf("SyncGatewaySession") != -1) {
-                    if (remote != null) {
-                        // NOTE: In case that the path of URL is not end with `/`,
-                        //       last segment of a path is not stored as a path of Cookie.
-                        Cookie cookie = Cookie.parse(HttpUrl.get(remote), cookieString);
-                        if (cookie != null && replicationInternal != null) {
-                            replicationInternal.setCookie(cookie);
-                        }
+                if (remote != null) {
+                    // NOTE: In case that the path of URL is not end with `/`,
+                    //       last segment of a path is not stored as a path of Cookie.
+                    Cookie cookie = Cookie.parse(HttpUrl.get(remote), cookieString);
+                    if (cookie != null && replicationInternal != null) {
+                        replicationInternal.setCookie(cookie);
                     }
                 }
             }
