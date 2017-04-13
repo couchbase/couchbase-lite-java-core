@@ -846,10 +846,11 @@ public class Replication
      */
     @InterfaceAudience.Public
     public void setHeaders(Map<String, Object> requestHeadersParam) {
-        properties.put(ReplicationField.REQUEST_HEADERS, requestHeadersParam);
-        replicationInternal.setHeaders(requestHeadersParam);
         // Fix - https://github.com/couchbase/couchbase-lite-java-core/issues/1617
         storeCookiesIntoCookieJar(requestHeadersParam);
+
+        properties.put(ReplicationField.REQUEST_HEADERS, requestHeadersParam);
+        replicationInternal.setHeaders(requestHeadersParam);
     }
 
     private void storeCookiesIntoCookieJar(Map<String, Object> requestHeadersParam) {
@@ -860,8 +861,10 @@ public class Replication
                     // NOTE: In case that the path of URL is not end with `/`,
                     //       last segment of a path is not stored as a path of Cookie.
                     Cookie cookie = Cookie.parse(HttpUrl.get(remote), cookieString);
-                    if (cookie != null && replicationInternal != null) {
+                    if (cookie != null) {
                         replicationInternal.setCookie(cookie);
+                        // remove Cookie value from requestHeadersParam if cookie is successfully stored into the cookie jar.
+                        requestHeadersParam.remove("Cookie");
                     }
                 }
             }
