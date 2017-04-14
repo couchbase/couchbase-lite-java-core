@@ -855,7 +855,9 @@ public class Replication
 
     private void storeCookiesIntoCookieJar(Map<String, Object> requestHeadersParam) {
         try {
-            if (requestHeadersParam.containsKey("Cookie") && requestHeadersParam.get("Cookie") instanceof String) {
+            if (requestHeadersParam != null
+                    && requestHeadersParam.containsKey("Cookie")
+                    && requestHeadersParam.get("Cookie") instanceof String) {
                 String cookieString = (String) requestHeadersParam.get("Cookie");
                 if (remote != null) {
                     // NOTE: In case that the path of URL is not end with `/`,
