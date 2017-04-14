@@ -42,6 +42,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.Cookie;
+import okhttp3.HttpUrl;
+
 /**
  * The external facade for the Replication API
  */
@@ -916,8 +919,33 @@ public class Replication
      */
     @InterfaceAudience.Public
     public void setHeaders(Map<String, Object> requestHeadersParam) {
+        // Fix - https://github.com/couchbase/couchbase-lite-java-core/issues/1617
+        storeCookiesIntoCookieJar(requestHeadersParam);
+
         properties.put(ReplicationField.REQUEST_HEADERS, requestHeadersParam);
         replicationInternal.setHeaders(requestHeadersParam);
+    }
+
+    private void storeCookiesIntoCookieJar(Map<String, Object> requestHeadersParam) {
+        try {
+            if (requestHeadersParam != null
+                    && requestHeadersParam.containsKey("Cookie")
+                    && requestHeadersParam.get("Cookie") instanceof String) {
+                String cookieString = (String) requestHeadersParam.get("Cookie");
+                if (remote != null) {
+                    // NOTE: In case that the path of URL is not end with `/`,
+                    //       last segment of a path is not stored as a path of Cookie.
+                    Cookie cookie = Cookie.parse(HttpUrl.get(remote), cookieString);
+                    if (cookie != null) {
+                        replicationInternal.setCookie(cookie);
+                        // remove Cookie value from requestHeadersParam if cookie is successfully stored into the cookie jar.
+                        requestHeadersParam.remove("Cookie");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(Log.TAG_SYNC, "Failed to store SyncGatewaySession into the CookieJar.", e);
+        }
     }
 
     /**
