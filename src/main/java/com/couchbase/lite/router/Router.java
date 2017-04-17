@@ -618,9 +618,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             connection.setResponseCode(status.getCode());
 
             if (status.isSuccessful() &&
-                connection.getResponseBody() == null &&
-                connection.getHeaderField("Content-Type") == null &&
-                dontOverwriteBody == false) {
+                    connection.getResponseBody() == null &&
+                    connection.getHeaderField("Content-Type") == null &&
+                    dontOverwriteBody == false) {
+                connection.getResHeader().add("Content-Type", CONTENT_TYPE_JSON);
                 connection.setResponseBody(new Body("{\"ok\":true}".getBytes()));
             }
 
@@ -2146,8 +2147,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     attachment.getEncoding() == AttachmentInternal.AttachmentEncoding.AttachmentEncodingGZIP) {
                 connection.getResHeader().add("Content-Encoding", "gzip");
                 connection.setResponseInputStream(attachment.getEncodedContentInputStream());
-            }
-            else {
+            } else {
                 connection.setResponseInputStream(attachment.getContentInputStream());
             }
             dontOverwriteBody = true;
@@ -2448,8 +2448,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             }
         }
 
+        String version = Misc.HexSHA1Digest(viewProps.toString().getBytes());
+
         View view = db.getView(viewName);
-        view.setMapReduce(mapBlock, reduceBlock, "1");
+        view.setMapReduce(mapBlock, reduceBlock, version);
         String collation = (String) viewProps.get("collation");
         if ("raw".equals(collation)) {
             view.setCollation(View.TDViewCollation.TDViewCollationRaw);
@@ -2457,33 +2459,65 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return view;
     }
 
+    private View compileView(String designDoc, String viewName) throws CouchbaseLiteException {
+        // make sure only one view instance per same view.
+        synchronized (db) {
+
+            // First check if there's a CouchDB view definition we can compile:
+
+            String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
+
+            View view = db.getExistingView(tdViewName);
+
+            // Get design document
+            RevisionInternal rev = db.getDocument(String.format(Locale.ENGLISH, "_design/%s", designDoc), null, true);
+            if (rev == null) {
+                if (view != null)
+                    return view;
+                throw new CouchbaseLiteException(Status.NOT_FOUND);
+            }
+
+            // get views
+            Map<String, Object> views = (Map<String, Object>) rev.getProperties().get("views");
+            if (views == null) {
+                if (view != null)
+                    return view;
+                throw new CouchbaseLiteException(Status.NOT_FOUND);
+            }
+
+            // get view
+            Map<String, Object> viewProps = (Map<String, Object>) views.get(viewName);
+            if (viewProps == null) {
+                if (view != null)
+                    return view;
+                throw new CouchbaseLiteException(Status.NOT_FOUND);
+            }
+
+            // calc view version of stored view definition
+            String version = Misc.HexSHA1Digest(viewProps.toString().getBytes());
+
+            // No View is compiled, or new map functions are stored in the document,
+            // compile map/reduce function and assign it to the view.
+            // NOTE: // https://github.com/couchbase/couchbase-lite-android/issues/1139
+            if (view == null || view.getMapVersion() == null || !view.getMapVersion().equals(version)) {
+                view = compileView(tdViewName, viewProps);
+                if (view == null)
+                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+            }
+
+            return view;
+        }
+    }
+
     private Status queryDesignDoc(String designDoc, String viewName, List<Object> keys)
             throws CouchbaseLiteException {
 
         View view;
-
-        // make sure only one view instance per same view.
-        synchronized (db) {
-            String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
-            view = db.getExistingView(tdViewName);
-            if (view == null || view.getMap() == null) {
-                // No TouchDB view is defined, or it hasn't had a map block assigned;
-                // see if there's a CouchDB view definition we can compile:
-                RevisionInternal rev = db.getDocument(String.format(Locale.ENGLISH, "_design/%s", designDoc), null, true);
-                if (rev == null) {
-                    return new Status(Status.NOT_FOUND);
-                }
-                Map<String, Object> views = (Map<String, Object>) rev.getProperties().get("views");
-                Map<String, Object> viewProps = (Map<String, Object>) views.get(viewName);
-                if (viewProps == null) {
-                    return new Status(Status.NOT_FOUND);
-                }
-                // If there is a CouchDB view, see if it can be compiled from source:
-                view = compileView(tdViewName, viewProps);
-                if (view == null) {
-                    return new Status(Status.INTERNAL_SERVER_ERROR);
-                }
-            }
+        try {
+            // return value should not be null.
+            view = compileView(designDoc, viewName);
+        } catch (CouchbaseLiteException e) {
+            return e.getCBLStatus();
         }
 
         long lastSequenceIndexed;
