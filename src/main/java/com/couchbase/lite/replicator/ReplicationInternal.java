@@ -111,6 +111,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     private String username;
     protected String filterName;
     protected Map<String, Object> filterParams;
+    protected boolean usePOST;
     protected List<String> documentIDs;
     private String remoteUUID;
     protected Map<String, Object> requestHeaders;
@@ -1104,6 +1105,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     public void setFilter(String filterName) {
         this.filterName = filterName;
+    }
+
+    /**
+     * Set whether to use POST or GET // Cloudant
+     */
+    public void setUsePOST(boolean usePOST) {
+        this.usePOST = usePOST;
     }
 
     /**

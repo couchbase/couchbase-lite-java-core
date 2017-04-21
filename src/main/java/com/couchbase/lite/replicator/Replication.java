@@ -747,6 +747,13 @@ public class Replication
     }
 
     /**
+     * Set whether to use POST or GET // Cloudant
+     */
+    public void setUsePOST(boolean usePOST) {
+        replicationInternal.setUsePOST(usePOST);
+    }
+
+    /**
      * Sets the documents to specify as part of the replication.
      */
     @InterfaceAudience.Public
