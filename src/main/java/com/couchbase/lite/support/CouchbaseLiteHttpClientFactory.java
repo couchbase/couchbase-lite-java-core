@@ -28,6 +28,7 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import okhttp3.ConnectionPool;
 import okhttp3.Cookie;
 import okhttp3.CookieJar;
 import okhttp3.HttpUrl;
@@ -71,6 +72,16 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     ////////////////////////////////////////////////////////////
     // Implementations of HttpClientFactory
     ////////////////////////////////////////////////////////////
+
+    @Override
+    @InterfaceAudience.Private
+    public void evictAllConnectionsInPool() {
+        if (client != null) {
+            ConnectionPool pool = client.connectionPool();
+            if (pool != null)
+                pool.evictAll();
+        }
+    }
 
     @Override
     @InterfaceAudience.Private

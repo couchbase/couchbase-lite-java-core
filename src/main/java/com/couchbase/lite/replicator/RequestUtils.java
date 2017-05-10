@@ -74,6 +74,8 @@ public class RequestUtils {
             ResponseBody body = response.body();
             if (body != null)
                 body.close();
+            else
+                response.close();
         }
     }
 }
