@@ -333,8 +333,10 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                     Replication.DEFAULT_MAX_TIMEOUT_FOR_SHUTDOWN);
         }
 
-        // Close and remove all idle connections in the pool.
-        clientFactory.evictAllConnectionsInPool();
+        // Close and remove all idle connections in the pool,
+        // if HttpClientFactory is per a replicator.
+        if (db.getManager().getDefaultHttpClientFactory() == null)
+            clientFactory.evictAllConnectionsInPool();
     }
 
     protected void initAuthorizer() {
