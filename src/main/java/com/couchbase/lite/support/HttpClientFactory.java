@@ -32,4 +32,6 @@ public interface HttpClientFactory {
     void resetCookieStore();
 
     CookieJar getCookieStore();
+
+    void evictAllConnectionsInPool();
 }
