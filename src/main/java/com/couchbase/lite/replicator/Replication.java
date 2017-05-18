@@ -16,16 +16,13 @@ package com.couchbase.lite.replicator;
 import com.couchbase.lite.AsyncTask;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Document;
-import com.couchbase.lite.Manager;
 import com.couchbase.lite.NetworkReachabilityListener;
 import com.couchbase.lite.ReplicationFilter;
 import com.couchbase.lite.RevisionList;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.auth.Authorizer;
 import com.couchbase.lite.internal.InterfaceAudience;
-import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.HttpClientFactory;
-import com.couchbase.lite.support.PersistentCookieJar;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URLUtils;
 
@@ -637,24 +634,7 @@ public class Replication
      */
     @InterfaceAudience.Private
     protected void setClientFactory(HttpClientFactory factory) {
-        Manager manager = null;
-        if (this.db != null) {
-            manager = this.db.getManager();
-        }
-        HttpClientFactory managerClientFactory = null;
-        if (manager != null) {
-            managerClientFactory = manager.getDefaultHttpClientFactory();
-        }
-        if (factory != null) {
-            this.clientFactory = factory;
-        } else {
-            if (managerClientFactory != null) {
-                this.clientFactory = managerClientFactory;
-            } else {
-                PersistentCookieJar cookieStore = db.getPersistentCookieStore();
-                this.clientFactory = new CouchbaseLiteHttpClientFactory(cookieStore);
-            }
-        }
+        this.clientFactory = factory;
     }
 
     @InterfaceAudience.Private

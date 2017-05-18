@@ -654,7 +654,11 @@ public final class Manager {
             authorizer.setLocalUUID(db.publicUUID());
         }
 
-        Replication repl = db.createReplicator(remote, push, getDefaultHttpClientFactory());
+        Replication repl;
+        if (push)
+            repl = db.createPushReplication(remote);
+        else
+            repl = db.createPullReplication(remote);
 
         repl.setContinuous(continuous);
 

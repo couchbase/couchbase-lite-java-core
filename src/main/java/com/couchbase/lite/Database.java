@@ -30,6 +30,7 @@ import com.couchbase.lite.store.StorageValidation;
 import com.couchbase.lite.store.Store;
 import com.couchbase.lite.store.StoreDelegate;
 import com.couchbase.lite.support.Base64;
+import com.couchbase.lite.support.CouchbaseLiteHttpClientFactory;
 import com.couchbase.lite.support.FileDirUtils;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.PersistentCookieJar;
@@ -147,6 +148,7 @@ public class Database implements StoreDelegate {
      * REF: https://github.com/couchbase/couchbase-lite-android/issues/269
      */
     private PersistentCookieJar persistentCookieStore;
+    private HttpClientFactory httpClientFactory;
 
     /**
      * Constructor
@@ -333,8 +335,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPullReplication(URL remote) {
-        return new Replication(this, remote, Replication.Direction.PULL, null);
-
+        return new Replication(this, remote, Replication.Direction.PULL, getHttpClientFactory());
     }
 
     /**
@@ -345,7 +346,7 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Public
     public Replication createPushReplication(URL remote) {
-        return new Replication(this, remote, Replication.Direction.PUSH, null);
+        return new Replication(this, remote, Replication.Direction.PUSH, getHttpClientFactory());
     }
 
     /**
@@ -2429,15 +2430,6 @@ public class Database implements StoreDelegate {
         return null;
     }
 
-    protected Replication createReplicator(URL remote, boolean push, HttpClientFactory factory) {
-        Replication replicator;
-        if (push)
-            replicator = new Replication(this, remote, Replication.Direction.PUSH, factory);
-        else
-            replicator = new Replication(this, remote, Replication.Direction.PULL, factory);
-        return replicator;
-    }
-
     // Database+LocalDocs
 
     private static String makeLocalDocumentId(String documentId) {
@@ -2557,5 +2549,14 @@ public class Database implements StoreDelegate {
 
     private static long keyToSequence(Object key, long dflt) {
         return key instanceof Number ? ((Number) key).longValue() : dflt;
+    }
+
+    private HttpClientFactory getHttpClientFactory() {
+        if (httpClientFactory == null) {
+            httpClientFactory = manager.getDefaultHttpClientFactory();
+            if (httpClientFactory == null)
+                httpClientFactory = new CouchbaseLiteHttpClientFactory(this.getPersistentCookieStore());
+        }
+        return httpClientFactory;
     }
 }
