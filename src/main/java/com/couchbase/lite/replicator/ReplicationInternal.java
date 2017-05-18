@@ -336,9 +336,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
 
         // Close and remove all idle connections in the pool,
-        // if HttpClientFactory is per a replicator.
-        if (db.getManager().getDefaultHttpClientFactory() == null)
-            clientFactory.evictAllConnectionsInPool();
+        clientFactory.evictAllConnectionsInPool();
     }
 
     protected void initAuthorizer() {
