@@ -2740,15 +2740,6 @@ public class Database implements StoreDelegate {
         return null;
     }
 
-    protected Replication createReplicator(URL remote, boolean push, HttpClientFactory factory) {
-        Replication replicator;
-        if (push)
-            replicator = new Replication(this, remote, Replication.Direction.PUSH, factory);
-        else
-            replicator = new Replication(this, remote, Replication.Direction.PULL, factory);
-        return replicator;
-    }
-
     // Database+LocalDocs
 
     private static String makeLocalDocumentId(String documentId) {
