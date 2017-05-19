@@ -295,12 +295,25 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
     @InterfaceAudience.Private
     public void changed(Database.ChangeEvent event) {
         final List<DocumentChange> changes = event.getChanges();
-        supportExecutor.submit(new Runnable() {
-            @Override
-            public void run() {
-                submitRevisions(changes);
-            }
-        });
+
+        // NOTE: REST API client can send POST/PUT /{db}/{doc} request too faster than
+        // push replicator can handle. If request comes from listener thread, submitting revision
+        // to batcher synchronusly. Otherwise, asynchronously.
+        // ref: https://github.com/couchbase/couchbase-lite-java-core/issues/1481
+        if (calledFromListener()) {
+            submitRevisions(changes);
+        } else {
+            supportExecutor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    submitRevisions(changes);
+                }
+            });
+        }
+    }
+
+    private static boolean calledFromListener() {
+        return Thread.currentThread().getName().contains("Acme.Utils.ThreadPool");
     }
 
     /**
