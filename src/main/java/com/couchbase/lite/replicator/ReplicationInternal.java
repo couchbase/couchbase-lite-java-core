@@ -228,22 +228,20 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected void fireTrigger(final ReplicationTrigger trigger) {
         Log.d(Log.TAG_SYNC, "%s [fireTrigger()] => " + trigger, this);
         // All state machine triggers need to happen on the replicator thread
-        if (executor != null) {
-            synchronized (executor) {
-                if (!executor.isShutdown()) {
-                    executor.submit(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
-                                stateMachine.fire(trigger);
-                            } catch (Exception e) {
-                                Log.i(Log.TAG_SYNC, "Error in StateMachine.fire(trigger): %s", e.getMessage());
-                                throw new RuntimeException(e);
-                            }
+        synchronized (executor) {
+            if (!executor.isShutdown()) {
+                executor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
+                            stateMachine.fire(trigger);
+                        } catch (Exception e) {
+                            Log.i(Log.TAG_SYNC, "Error in StateMachine.fire(trigger): %s", e.getMessage());
+                            throw new RuntimeException(e);
                         }
-                    });
-                }
+                    }
+                });
             }
         }
     }
