@@ -324,12 +324,17 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
                         retryCount += 1;
                         // delay * 2 << retry
                         long delay = RETRY_DELAY_MS * (long) Math.pow((double) 2, (double) Math.min(retryCount - 1, MAX_RETRIES));
-                        retryFuture = workExecutor.schedule(new Runnable() {
-                            @Override
-                            public void run() {
-                                submit();
+                        synchronized (workExecutor) {
+                            if (!workExecutor.isShutdown()) {
+                                retryFuture = workExecutor.schedule(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        submit();
+                                    }
+                                }, delay, TimeUnit.MILLISECONDS); // delay init_delay * 2^retry ms
+
                             }
-                        }, delay, TimeUnit.MILLISECONDS); // delay init_delay * 2^retry ms
+                        }
                     }
                 } else {
                     Log.d(TAG, "%s: RemoteRequestRetry failed, non-transient error.  NOT retrying. url: %s", this, url);

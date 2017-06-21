@@ -229,20 +229,22 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected void fireTrigger(final ReplicationTrigger trigger) {
         Log.d(Log.TAG_SYNC, "%s [fireTrigger()] => " + trigger, this);
         // All state machine triggers need to happen on the replicator thread
-        synchronized (executor) {
-            if (!executor.isShutdown()) {
-                executor.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
-                            stateMachine.fire(trigger);
-                        } catch (Exception e) {
-                            Log.i(Log.TAG_SYNC, "Error in StateMachine.fire(trigger): %s", e.getMessage());
-                            throw new RuntimeException(e);
+        if (executor != null) {
+            synchronized (executor) {
+                if (!executor.isShutdown()) {
+                    executor.submit(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                Log.d(Log.TAG_SYNC, "firing trigger: %s", trigger);
+                                stateMachine.fire(trigger);
+                            } catch (Exception e) {
+                                Log.i(Log.TAG_SYNC, "Error in StateMachine.fire(trigger): %s", e.getMessage());
+                                throw new RuntimeException(e);
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }
         }
     }
@@ -341,7 +343,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     protected void initAuthorizer() {
         if (authenticator != null && authenticator instanceof Authorizer) {
-            Authorizer authorizer = (Authorizer)authenticator;
+            Authorizer authorizer = (Authorizer) authenticator;
             authorizer.setRemoteURL(remote);
             authorizer.setLocalUUID(db.publicUUID());
         }
@@ -904,13 +906,19 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
     protected void setLastSequenceFromWorkExecutor(final String lastSequence, final String checkpointId) {
         // write access to database from executor
-        executor.submit(new Runnable() {
-            @Override
-            public void run() {
-                if (db != null && db.isOpen())
-                    db.setLastSequence(lastSequence, checkpointId);
+        if (executor != null) {
+            synchronized (executor) {
+                if (!executor.isShutdown()) {
+                    executor.submit(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (db != null && db.isOpen())
+                                db.setLastSequence(lastSequence, checkpointId);
+                        }
+                    });
+                }
             }
-        });
+        }
         // no wait...
     }
 
@@ -1247,20 +1255,22 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             }
         } else {
             // ASYNC
-            synchronized (executor) {
-                if (!executor.isShutdown()) {
-                    executor.submit(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                for (ChangeListener changeListener : changeListeners)
-                                    changeListener.changed(changeEvent);
-                            } catch (Exception e) {
-                                Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e, this);
-                                throw new RuntimeException(e);
+            if (executor != null) {
+                synchronized (executor) {
+                    if (!executor.isShutdown()) {
+                        executor.submit(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    for (ChangeListener changeListener : changeListeners)
+                                        changeListener.changed(changeEvent);
+                                } catch (Exception e) {
+                                    Log.e(Log.TAG_SYNC, "Exception notifying replication listener: %s", e, this);
+                                    throw new RuntimeException(e);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
             }
         }
@@ -1475,8 +1485,13 @@ abstract class ReplicationInternal implements BlockingQueueListener {
 
                 // ask executor to shutdown. this does not force to shutdown.
                 // https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ExecutorService.html#shutdown()
-                if (executor != null && !executor.isShutdown())
-                    executor.shutdown();
+                if (executor != null) {
+                    synchronized (executor) {
+                        if (!executor.isShutdown()) {
+                            executor.shutdown();
+                        }
+                    }
+                }
             }
         });
     }
@@ -1589,11 +1604,17 @@ abstract class ReplicationInternal implements BlockingQueueListener {
      */
     private void scheduleRetryFuture() {
         Log.v(Log.TAG_SYNC, "%s: Failed to xfer; will retry in %d sec", this, RETRY_DELAY_SECONDS);
-        this.retryFuture = executor.schedule(new Runnable() {
-            public void run() {
-                retryIfReady();
+        if (executor != null) {
+            synchronized (executor) {
+                if (!executor.isShutdown()) {
+                    this.retryFuture = executor.schedule(new Runnable() {
+                        public void run() {
+                            retryIfReady();
+                        }
+                    }, RETRY_DELAY_SECONDS, TimeUnit.SECONDS);
+                }
             }
-        }, RETRY_DELAY_SECONDS, TimeUnit.SECONDS);
+        }
     }
 
     /**
@@ -1668,11 +1689,17 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             lastSequence = lastSequenceIn;
             if (!lastSequenceChanged) {
                 lastSequenceChanged = true;
-                executor.schedule(new Runnable() {
-                    public void run() {
-                        saveLastSequence();
+                if (executor != null) {
+                    synchronized (executor) {
+                        if (!executor.isShutdown()) {
+                            executor.schedule(new Runnable() {
+                                public void run() {
+                                    saveLastSequence();
+                                }
+                            }, SAVE_LAST_SEQUENCE_DELAY, TimeUnit.SECONDS);
+                        }
                     }
-                }, SAVE_LAST_SEQUENCE_DELAY, TimeUnit.SECONDS);
+                }
             }
         }
     }

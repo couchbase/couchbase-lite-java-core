@@ -157,7 +157,8 @@ public class Batcher<T> {
             synchronized (processMutex) {
                 try {
                     processMutex.wait(5);
-                } catch (InterruptedException e) { }
+                } catch (InterruptedException e) {
+                }
             }
         }
     }
@@ -186,7 +187,7 @@ public class Batcher<T> {
         }
 
         while (true) {
-            ScheduledFuture future;
+            ScheduledFuture future = null;
             synchronized (mutex) {
                 if (inbox.size() == 0)
                     break; // Nothing to do
@@ -194,16 +195,19 @@ public class Batcher<T> {
                 final List<T> toProcess = new ArrayList<T>(inbox);
                 inbox.clear();
                 mutex.notifyAll();
-
-                future = workExecutor.schedule(new Runnable() {
-                    @Override
-                    public void run() {
-                        processor.process(toProcess);
-                        synchronized (mutex) {
-                            lastProcessedTime = System.currentTimeMillis();
-                        }
+                synchronized (workExecutor) {
+                    if (!workExecutor.isShutdown()) {
+                        future = workExecutor.schedule(new Runnable() {
+                            @Override
+                            public void run() {
+                                processor.process(toProcess);
+                                synchronized (mutex) {
+                                    lastProcessedTime = System.currentTimeMillis();
+                                }
+                            }
+                        }, 0, TimeUnit.MILLISECONDS);
                     }
-                }, 0, TimeUnit.MILLISECONDS);
+                }
             }
 
             if (waitForAllToFinish) {
@@ -252,7 +256,8 @@ public class Batcher<T> {
                         Log.v(Log.TAG_BATCHER, "%s: waitForPendingFutures, inbox size: %d",
                                 this, inbox.size());
                         mutex.wait(300);
-                    } catch (InterruptedException e) {}
+                    } catch (InterruptedException e) {
+                    }
                 }
                 future = pendingFuture;
             }
@@ -330,14 +335,18 @@ public class Batcher<T> {
                 scheduled = true;
                 scheduledDelay = delay;
                 Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay %d ms, scheduled ...", this, delay);
-                pendingFuture = workExecutor.schedule(new Runnable() {
-                    @Override
-                    public void run() {
-                        Log.v(Log.TAG_BATCHER, "%s: call processNow ...", this);
-                        processNow();
-                        Log.v(Log.TAG_BATCHER, "%s: call processNow done", this);
+                synchronized (workExecutor) {
+                    if (!workExecutor.isShutdown()) {
+                        pendingFuture = workExecutor.schedule(new Runnable() {
+                            @Override
+                            public void run() {
+                                Log.v(Log.TAG_BATCHER, "%s: call processNow ...", this);
+                                processNow();
+                                Log.v(Log.TAG_BATCHER, "%s: call processNow done", this);
+                            }
+                        }, scheduledDelay, TimeUnit.MILLISECONDS);
                     }
-                }, scheduledDelay, TimeUnit.MILLISECONDS);
+                }
             } else
                 Log.v(Log.TAG_BATCHER, "%s: scheduleWithDelay %d ms, ignored", this, delay);
         }
