@@ -372,4 +372,7 @@ public interface Store {
      */
     RevisionInternal putLocalRevision(RevisionInternal revision, String prevRevID, boolean obeyMVCC)
             throws CouchbaseLiteException;
+
+
+    RevisionInternal getDocument(String docID, long sequence);
 }
