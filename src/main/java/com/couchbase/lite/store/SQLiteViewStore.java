@@ -243,7 +243,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
      */
     @Override
     @InterfaceAudience.Private
-    public Status updateIndexes(List<ViewStore>inputViews) throws CouchbaseLiteException {
+    public Status updateIndexes(List<ViewStore> inputViews) throws CouchbaseLiteException {
         Log.v(Log.TAG_VIEW, "Re-indexing view: %s", name);
         if (getViewID() <= 0) {
             String msg = "getViewID() < 0";
@@ -278,8 +278,8 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             final ArrayList<Mapper> mapBlocks = new ArrayList<Mapper>();
 
             for (ViewStore v : inputViews) {
-                assert(v != null);
-                SQLiteViewStore view = (SQLiteViewStore)v;
+                assert (v != null);
+                SQLiteViewStore view = (SQLiteViewStore) v;
                 ViewStoreDelegate delegate = view.getDelegate();
                 Mapper map = delegate != null ? delegate.getMap() : null;
                 if (map == null) {
@@ -335,7 +335,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                         store.optimizeSQLIndexes();
                         String[] args = {Long.toString(last), Long.toString(last)};
                         changes = store.getStorageEngine().delete(view.queryString("maps_#"),
-                                        "sequence IN (SELECT parent FROM revs " +
+                                "sequence IN (SELECT parent FROM revs " +
                                         "WHERE sequence>? AND +parent>0 AND +parent<=?)", args);
                     }
 
@@ -396,9 +396,11 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     "SELECT revs.doc_id, sequence, docid, revid, no_attachments, deleted ");
             if (checkDocTypes)
                 sql.append(", doc_type ");
-            sql.append("FROM revs, docs WHERE sequence>? AND current!=0 ");
+            sql.append("FROM revs ");
+            sql.append("JOIN docs ON docs.doc_id = revs.doc_id ");
+            sql.append("WHERE sequence>? AND +current>0 ");
             if (minLastSequence == 0) {
-                sql.append("AND deleted=0 ");
+                sql.append("AND +deleted=0 ");
             }
             if (!allDocTypes && docTypes.size() > 0) {
                 String docTypesString = getJoinedSQLQuotedStrings(
@@ -408,7 +410,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             // order result by deleted ASC so if multiple revs returned the non deleted are the first
             // NOTE: Views broken with concurrent update and delete
             // https://github.com/couchbase/couchbase-lite-java-core/issues/952
-            sql.append("AND revs.doc_id = docs.doc_id ORDER BY revs.doc_id, deleted ASC, revid DESC");
+            sql.append("ORDER BY +revs.doc_id, +deleted, +revid DESC");
             String[] selectArgs = {Long.toString(minLastSequence)};
             cursor = store.getStorageEngine().rawQuery(sql.toString(), selectArgs);
 
@@ -458,7 +460,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                         String[] selectArgs2 = {Long.toString(docID), Long.toString(minLastSequence)};
                         cursor2 = store.getStorageEngine().rawQuery(
                                 "SELECT revid, sequence FROM revs "
-                                        + "WHERE doc_id=? AND sequence<=? AND current!=0 AND deleted=0 "
+                                        + "WHERE doc_id=? AND sequence<=? AND current>0 AND deleted=0 "
                                         + "ORDER BY revID DESC ", selectArgs2);
 
                         if (cursor2.moveToNext()) {
@@ -613,7 +615,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
             // underlying query, so handle them specially:
             tmpLimit = options.getLimit();
             tmpSkip = options.getSkip();
-            if(tmpLimit == 0)
+            if (tmpLimit == 0)
                 return new ArrayList<QueryRow>(); // empty result set
             options.setLimit(QueryOptions.QUERY_OPTIONS_DEFAULT_LIMIT);
             options.setSkip(0);
@@ -666,7 +668,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     if (!postFilter.apply(row)) {
                         return new Status(Status.OK);
                     }
-                    if(skip.getCount() > 0){
+                    if (skip.getCount() > 0) {
                         skip.countDown();
                         return new Status(Status.OK);
                     }
@@ -674,19 +676,19 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                 }
                 rows.add(row);
 
-                if(limit.countDown() == 0)
+                if (limit.countDown() == 0)
                     return new Status(0); /// stops the iteration
                 return new Status(Status.OK);
             }
         });
 
         // If given keys, sort the output into that order, and add entries for missing keys:
-        if(options.getKeys() != null && options.getKeys().size() > 0){
+        if (options.getKeys() != null && options.getKeys().size() > 0) {
             // Group rows by key:
             Map<Object, List<QueryRow>> rowsByKey = new HashMap<Object, List<QueryRow>>();
-            for(QueryRow row:rows){
+            for (QueryRow row : rows) {
                 List<QueryRow> rs = rowsByKey.get(row.getKey());
-                if(rs == null) {
+                if (rs == null) {
                     rs = new ArrayList<QueryRow>();
                     rowsByKey.put(row.getKey(), rs);
                 }
@@ -695,16 +697,16 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
             // Now concatenate them in the order the keys are given in options:
             final List<QueryRow> sortedRows = new ArrayList<QueryRow>();
-            for(Object key : options.getKeys()){
+            for (Object key : options.getKeys()) {
                 JsonDocument jsonDoc = null;
                 try {
                     byte[] keyBytes = Manager.getObjectMapper().writeValueAsBytes(key);
                     jsonDoc = new JsonDocument(keyBytes);
                 } catch (JsonProcessingException e) {
-                    throw new  CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
+                    throw new CouchbaseLiteException(Status.INTERNAL_SERVER_ERROR);
                 }
                 List<QueryRow> rs = rowsByKey.get(jsonDoc.jsonObject());
-                if(rs != null)
+                if (rs != null)
                     sortedRows.addAll(rs);
             }
 
@@ -874,7 +876,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
         return viewID;
     }
 
-    private static String viewNames(List<SQLiteViewStore>views) {
+    private static String viewNames(List<SQLiteViewStore> views) {
         StringBuilder sb = new StringBuilder();
         boolean first = true;
         for (ViewStore view : views) {
@@ -1143,7 +1145,7 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
      * in CBL_SQLiteViewStorage.m
      * - (void) finishCreatingIndex
      */
-    private void finishCreatingIndex(){
+    private void finishCreatingIndex() {
         String sql = "CREATE INDEX IF NOT EXISTS 'maps_#_keys' on 'maps_#'(key COLLATE JSON);"
                 + "CREATE INDEX IF NOT EXISTS 'maps_#_sequence' ON 'maps_#'(sequence)";
         if (!runStatements(sql))

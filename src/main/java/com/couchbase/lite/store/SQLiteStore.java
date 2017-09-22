@@ -81,7 +81,6 @@ public class SQLiteStore implements Store, EncryptableStore {
             "CREATE TABLE docs ( " +
             "        doc_id INTEGER PRIMARY KEY, " +
             "        docid TEXT UNIQUE NOT NULL); " +
-            "    CREATE INDEX docs_docid ON docs(docid); " +
             // revs
             "    CREATE TABLE revs ( " +
             "        sequence INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -101,7 +100,6 @@ public class SQLiteStore implements Store, EncryptableStore {
             "        docid TEXT UNIQUE NOT NULL, " +
             "        revid TEXT NOT NULL COLLATE REVID, " +
             "        json BLOB); " +
-            "    CREATE INDEX localdocs_by_docid ON localdocs(docid); " +
             // views
             "    CREATE TABLE views ( " +
             "        view_id INTEGER PRIMARY KEY, " +
@@ -109,7 +107,6 @@ public class SQLiteStore implements Store, EncryptableStore {
             "        version TEXT, " +
             "        lastsequence INTEGER DEFAULT 0," +
             "        total_docs INTEGER DEFAULT -1); " +
-            "    CREATE INDEX views_by_name ON views(name); " +
             // info
             "    CREATE TABLE info (" +
             "        key TEXT PRIMARY KEY," +
@@ -1334,11 +1331,11 @@ public class SQLiteStore implements Store, EncryptableStore {
             additionalSelectColumns = ", json";
         }
 
-        String sql = "SELECT sequence, revs.doc_id, docid, revid, deleted" + additionalSelectColumns
-                + " FROM revs, docs "
-                + "WHERE sequence > ? AND current=1 "
-                + "AND revs.doc_id = docs.doc_id "
-                + "ORDER BY revs.doc_id, revid DESC";
+        String sql = "SELECT sequence, revs.doc_id, docid, revid, deleted " + additionalSelectColumns + " FROM revs "
+                + "JOIN docs ON docs.doc_id = revs.doc_id "
+                + "WHERE sequence > ? AND +current=1 "
+                + "ORDER BY +revs.doc_id, +deleted, revid DESC";
+
         String[] args = {Long.toString(lastSequence)};
         Cursor cursor = null;
         long lastDocId = 0;
@@ -1796,7 +1793,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                 String[] whereArgs = {Long.toString(localParentSequence)};
                 int numRowsChanged = 0;
                 try {
-                    numRowsChanged = storageEngine.update("revs", args, "sequence=? AND current!=0", whereArgs);
+                    numRowsChanged = storageEngine.update("revs", args, "sequence=? AND current>0", whereArgs);
                     if (numRowsChanged == 0)
                         inConflict.set(true);  // local parent wasn't a leaf, ergo we just created a branch
                 } catch (SQLException e) {
@@ -2670,11 +2667,11 @@ public class SQLiteStore implements Store, EncryptableStore {
         return row;
     }
 
-    private void invalidateDocNumericID(String docID){
+    private void invalidateDocNumericID(String docID) {
         // TODO: cache: https://github.com/couchbase/couchbase-lite-java-core/issues/1265
     }
 
-    private void invalidateDocNumericIDs(){
+    private void invalidateDocNumericIDs() {
         // TODO: cache: https://github.com/couchbase/couchbase-lite-java-core/issues/1265
     }
 
