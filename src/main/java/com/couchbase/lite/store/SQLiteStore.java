@@ -469,8 +469,11 @@ public class SQLiteStore implements Store, EncryptableStore {
                 new ActionBlock() {
                     @Override
                     public void execute() throws ActionException {
-                        String keyStr = newKey != null ? newKey.getHexData() : "";
-                        String sql = "ATTACH DATABASE ? AS rekeyed_db KEY \"x'" + keyStr + "'\"";
+                        String sql;
+                        if(newKey!=null)
+                            sql = "ATTACH DATABASE ? AS rekeyed_db KEY \"x'" + newKey.getHexData() + "'\"";
+                        else
+                            sql = "ATTACH DATABASE ? AS rekeyed_db KEY ''";
                         String[] args = {tempDbFile.getAbsolutePath()};
                         try {
                             storageEngine.execSQL(sql, args);
