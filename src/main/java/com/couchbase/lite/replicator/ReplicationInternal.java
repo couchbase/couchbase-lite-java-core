@@ -275,6 +275,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             initAuthorizer();
             // initialize request workers
             initializeRequestWorkers();
+            // reset lastSequence
+            // https://github.com/couchbase/couchbase-lite-java-core/issues/1623
+            this.lastSequence = null;
             // single-shot replication
             if (!isContinuous())
                 goOnline();
