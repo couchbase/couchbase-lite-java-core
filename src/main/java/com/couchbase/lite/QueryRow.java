@@ -177,12 +177,16 @@ public class QueryRow {
         if (documentRevision != null)
             rev = documentRevision.getRevID();
         if (rev == null) {
-            if (value instanceof Map) {
+            if (value != null && value instanceof Map) {
                 Map<String, Object> mapValue = (Map<String, Object>) value;
                 rev = (String) mapValue.get("_rev");
-                if (rev == null) {
+                if (rev == null)
                     rev = (String) mapValue.get("rev");
-                }
+            }
+            if (rev == null && sequence >= 0) {
+                documentRevision = database.getStore().getDocument(getDocumentId(), sequence);
+                if (documentRevision != null)
+                    rev = documentRevision.getRevID();
             }
         }
         return rev;

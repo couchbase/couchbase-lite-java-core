@@ -2745,7 +2745,7 @@ public class SQLiteStore implements Store, EncryptableStore {
     /**
      * Loads revision given its sequence. Assumes the given docID is valid.
      */
-    protected RevisionInternal getDocument(String docID, long sequence) {
+    public RevisionInternal getDocument(String docID, long sequence) {
         // Now get its revID and deletion status:
         RevisionInternal rev = null;
 
