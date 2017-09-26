@@ -49,6 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -467,7 +468,7 @@ public class SQLiteStore implements Store, EncryptableStore {
                     @Override
                     public void execute() throws ActionException {
                         String sql;
-                        if(newKey!=null)
+                        if (newKey != null)
                             sql = "ATTACH DATABASE ? AS rekeyed_db KEY \"x'" + newKey.getHexData() + "'\"";
                         else
                             sql = "ATTACH DATABASE ? AS rekeyed_db KEY ''";
@@ -1856,39 +1857,39 @@ public class SQLiteStore implements Store, EncryptableStore {
     @Override
     @InterfaceAudience.Private
     public Map<String, Object> purgeRevisions(final Map<String, List<String>> docsToRevs) {
-
         final Map<String, Object> result = new HashMap<String, Object>();
         runInTransaction(new TransactionalTask() {
             @Override
             public boolean run() {
                 for (String docID : docsToRevs.keySet()) {
                     long docNumericID = getDocNumericID(docID);
-                    if (docNumericID == -1) {
+                    if (docNumericID == -1)
                         continue; // no such document, skip it
-                    }
                     List<String> revsPurged = new ArrayList<String>();
-                    List<String> revIDs = (List<String>) docsToRevs.get(docID);
-                    if (revIDs == null) {
+                    List<String> revIDs = docsToRevs.get(docID);
+                    if (revIDs == null)
                         return false;
-                    } else if (revIDs.size() == 0) {
+                    else if (revIDs.size() == 0)
                         revsPurged = new ArrayList<String>();
-                    } else if (revIDs.contains("*")) {
-                        // Delete all revisions if magic "*" revision ID is given:
+                    else if (revIDs.contains("*")) {
+                        // Delete all revisions if magic "*" revision ID is given. Deleting the 'docs'
+                        // row will delete all 'revs' rows due to cascading.
+                        Log.v(TAG, "Purging doc '%s'", docID);
                         try {
                             String[] args = {Long.toString(docNumericID)};
-                            storageEngine.execSQL("DELETE FROM revs WHERE doc_id=?", args);
+                            storageEngine.execSQL("DELETE FROM docs WHERE doc_id=?", args);
                         } catch (SQLException e) {
                             Log.e(TAG, "Error deleting revisions", e);
                             return false;
                         }
-                        revsPurged = new ArrayList<String>();
-                        revsPurged.add("*");
+                        invalidateDocNumericID(docID);
+                        notifyPurgedDocument(docID);
+                        revsPurged = Arrays.asList("*");
                     } else {
                         // Iterate over all the revisions of the doc, in reverse sequence order.
                         // Keep track of all the sequences to delete, i.e. the given revs and ancestors,
                         // but not any non-given leaf revs or their ancestors.
                         Cursor cursor = null;
-
                         try {
                             String[] args = {Long.toString(docNumericID)};
                             String queryString = "SELECT revid, sequence, parent FROM revs WHERE doc_id=? ORDER BY sequence DESC";
