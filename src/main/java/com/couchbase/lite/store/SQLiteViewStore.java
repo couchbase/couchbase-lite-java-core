@@ -1123,9 +1123,10 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
 
         int end = Math.min(groupLevel, Math.min(key1List.size(), key2List.size()));
         for (int i = 0; i < end; ++i) {
-            if (!key1List.get(i).equals(key2List.get(i))) {
+            if (key1List.get(i) != null && !key1List.get(i).equals(key2List.get(i)))
                 return false;
-            }
+            else if (key1List.get(i) == null && key2List.get(i) != null)
+                return false;
         }
         return true;
     }
