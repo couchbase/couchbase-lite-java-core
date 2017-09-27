@@ -1572,10 +1572,15 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public RevisionInternal getDocument(String docID, String revID, boolean withBody) {
+       return getDocument(docID, revID, withBody, new Status());
+    }
+
+    @InterfaceAudience.Private
+    public RevisionInternal getDocument(String docID, String revID, boolean withBody, Status outStatus) {
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
-            return store.getDocument(docID, revID, withBody);
+            return store.getDocument(docID, revID, withBody, outStatus);
         } finally {
             storeRef.release();
         }

@@ -1,11 +1,11 @@
 /**
  * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software distributed under the
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions
@@ -717,7 +717,7 @@ public class SQLiteStore implements Store, EncryptableStore {
 
     /**
      * @note Throw RuntimeException if TransactionalTask throw Exception.
-     *       Otherwise return true or false
+     * Otherwise return true or false
      */
     @Override
     public boolean runInTransaction(TransactionalTask transactionalTask) {
@@ -751,52 +751,57 @@ public class SQLiteStore implements Store, EncryptableStore {
     ///////////////////////////////////////////////////////////////////////////
 
     @Override
-    public RevisionInternal getDocument(String docID, String revID, boolean withBody) {
-
+    public RevisionInternal getDocument(String docID, String revID, boolean withBody, Status outStatus) {
         long docNumericID = getDocNumericID(docID);
         if (docNumericID < 0) {
+            outStatus.setCode(Status.NOT_FOUND);
             return null;
         }
 
-        RevisionInternal result = null;
-        String sql;
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT revid, deleted, sequence");
+        if (withBody)
+            sql.append(", json");
+        else
+            sql.append(", json is not null");
+        if (revID != null)
+            sql.append(" FROM revs WHERE revs.doc_id=? AND revid=? LIMIT 1");
+        else {
+            sql.append(" FROM revs WHERE revs.doc_id=? and current=1 ");
+            sql.append("ORDER BY deleted ASC, revid DESC LIMIT 1");
+        }
 
+        RevisionInternal result = null;
         Cursor cursor = null;
         try {
-            String cols = "revid, deleted, sequence";
-            if (withBody) {
-                cols += ", json";
-            }
             if (revID != null) {
-                sql = "SELECT " + cols + " FROM revs WHERE revs.doc_id=? AND revid=? AND json notnull LIMIT 1";
                 String[] args = {Long.toString(docNumericID), revID};
-                cursor = storageEngine.rawQuery(sql, args);
+                cursor = storageEngine.rawQuery(sql.toString(), args);
             } else {
-                sql = "SELECT " + cols + " FROM revs WHERE revs.doc_id=? and current=1 and deleted=0 ORDER BY revid DESC LIMIT 1";
                 String[] args = {Long.toString(docNumericID)};
-                cursor = storageEngine.rawQuery(sql, args);
+                cursor = storageEngine.rawQuery(sql.toString(), args);
             }
 
             if (cursor.moveToNext()) {
-                if (revID == null) {
-                    revID = cursor.getString(0);
-                }
+                String actualRevID = revID != null ? revID : cursor.getString(0);
                 boolean deleted = (cursor.getInt(1) > 0);
-                result = new RevisionInternal(docID, revID, deleted);
-                result.setSequence(cursor.getLong(2));
-                if (withBody) {
-                    byte[] json = cursor.getBlob(3);
-                    result.setJSON(json);
+                if (revID != null || !deleted) {
+                    result = new RevisionInternal(docID, actualRevID, deleted);
+                    result.setSequence(cursor.getLong(2));
+                    if (withBody)
+                        result.setJSON(cursor.getBlob(3));
+                    else
+                        result.setMissing(cursor.getInt(3) == 0);
                 }
+                outStatus.setCode(deleted ? Status.DELETED : Status.OK);
             } else {
-                // revID != null?Status.NOT_FOUND:Status.DELTED
+                outStatus.setCode(Status.NOT_FOUND);
             }
         } catch (SQLException e) {
             Log.e(TAG, "Error getting document with id and rev", e);
         } finally {
-            if (cursor != null) {
+            if (cursor != null)
                 cursor.close();
-            }
         }
         return result;
     }
@@ -2235,7 +2240,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     }
 
     private boolean existsDocument(String docID, String revID) {
-        return getDocument(docID, revID, false) != null;
+        Status status = new Status();
+        return getDocument(docID, revID, false, status) != null;
     }
 
     private void deleteLocalDocument(String docID, String revID) throws CouchbaseLiteException {

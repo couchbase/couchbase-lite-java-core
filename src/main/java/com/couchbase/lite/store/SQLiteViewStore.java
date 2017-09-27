@@ -1,11 +1,11 @@
 /**
  * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software distributed under the
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions
@@ -641,7 +641,8 @@ public class SQLiteViewStore implements ViewStore, QueryRowStore {
                     if (linkedID != null) {
                         // Linked document: http://wiki.apache.org/couchdb/Introduction_to_CouchDB_views#Linked_documents
                         String linkedRev = (String) ((Map) valueObject).get("_rev");
-                        docRevision = store.getDocument(linkedID, linkedRev, true);
+                        Status linkedStatus = new Status();
+                        docRevision = store.getDocument(linkedID, linkedRev, true, linkedStatus);
                         sequence = docRevision.getSequence();
                     } else {
                         String revID = cursor.getString(4);

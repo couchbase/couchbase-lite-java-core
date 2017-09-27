@@ -181,15 +181,17 @@ public class RevisionInternal {
     }
 
     public byte[] getJson() {
-        byte[] result = null;
-        if (body != null) {
-            result = body.getJson();
-        }
-        return result;
+        return body != null ? body.getJson() : null;
     }
 
     public void setJSON(byte[] json) {
-        this.body = new Body(json, docID, revID, deleted);
+        if (json != null) {
+            setBody(new Body(json, docID, revID, deleted));
+            setMissing(false);
+        } else {
+            setBody(null);
+            setMissing(true);
+        }
     }
 
     public RevisionInternal copy() {
