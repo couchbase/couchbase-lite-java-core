@@ -265,7 +265,6 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 fireTrigger(ReplicationTrigger.STOP_IMMEDIATE);
                 return;
             }
-            db.addReplication(parentReplication);
             db.addActiveReplication(parentReplication);
             this.authenticating = false;
             initSessionId();

@@ -120,7 +120,6 @@ public class Database implements StoreDelegate {
     private Map<String, Object> pendingAttachmentsByDigest;
 
     private final Set<Replication> activeReplicators;
-    private final Set<Replication> allReplicators;
 
     private BlobStore attachments;
     private final Manager manager;
@@ -170,7 +169,6 @@ public class Database implements StoreDelegate {
         this.docCache = new Cache<String, Document>();
         this.changesToNotify = Collections.synchronizedList(new ArrayList<DocumentChange>());
         this.activeReplicators = Collections.synchronizedSet(new HashSet());
-        this.allReplicators = Collections.synchronizedSet(new HashSet());
         this.postingChangeNotifications = false;
         this.pendingAttachmentsByDigest = new HashMap<String, Object>();
     }
@@ -217,8 +215,8 @@ public class Database implements StoreDelegate {
         storeRef.retain();
         try {
             List<Replication> allReplicatorsList = new ArrayList<Replication>();
-            synchronized (allReplicators) {
-                allReplicatorsList.addAll(allReplicators);
+            synchronized (activeReplicators) {
+                allReplicatorsList.addAll(activeReplicators);
             }
             return allReplicatorsList;
         } finally {
@@ -1228,18 +1226,6 @@ public class Database implements StoreDelegate {
         databaseListeners.remove(listener);
     }
 
-    /**
-     * Get all the active replicators associated with this database.
-     */
-    @InterfaceAudience.Private
-    public List<Replication> getActiveReplications() {
-        List<Replication> replicators = new ArrayList<Replication>();
-        synchronized (activeReplicators) {
-            replicators.addAll(activeReplicators);
-        }
-        return replicators;
-    }
-
     @InterfaceAudience.Private
     public synchronized boolean exists() {
         return new File(path).exists();
@@ -1509,9 +1495,6 @@ public class Database implements StoreDelegate {
                     // clear active replicators:
                     activeReplicators.clear();
                 }
-
-                // Clear all replicators:
-                allReplicators.clear();
 
                 // cancel purge timer
                 cancelPurgeTimer();
@@ -2160,11 +2143,6 @@ public class Database implements StoreDelegate {
     @InterfaceAudience.Private
     public boolean isOpen() {
         return (open.get() && !closing.get());
-    }
-
-    @InterfaceAudience.Private
-    public void addReplication(Replication replication) {
-        allReplicators.add(replication);
     }
 
     @InterfaceAudience.Private

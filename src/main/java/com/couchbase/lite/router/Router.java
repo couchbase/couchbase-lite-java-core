@@ -970,7 +970,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
         List<Map<String, Object>> activities = new ArrayList<Map<String, Object>>();
         for (Database db : manager.allOpenDatabases()) {
-            List<Replication> activeReplicators = db.getActiveReplications();
+            List<Replication> activeReplicators = db.getAllReplications();
             if (activeReplicators != null) {
                 for (Replication replicator : activeReplicators) {
                     if (replicator.isRunning()) {
