@@ -64,7 +64,7 @@ public class Body {
         if (deleted)
             extra.put("_deleted", true);
 
-        if (json.length < 2) {
+        if (json == null || json.length < 2) {
             this.object = extra;
             return;
         }

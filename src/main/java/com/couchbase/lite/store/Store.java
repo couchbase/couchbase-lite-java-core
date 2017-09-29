@@ -130,14 +130,11 @@ public interface Store {
      * @param docID    The document ID
      * @param revID    The revision ID; may be nil, meaning "the current revision".
      * @param withBody If false, revision's body won't be loaded
+     * @param outStatus
      * @return The revision, or nil if not found.
-     * @throws CouchbaseLiteException
      */
-    RevisionInternal getDocument(String docID, String revID, boolean withBody);
-    // throws CouchbaseLiteException;
-    //RevisionInternal getDocument(String docID,
-    //                             String revID,
-    //                             EnumSet<Database.TDContentOptions> contentOptions);
+    RevisionInternal getDocument(String docID, String revID, boolean withBody, Status outStatus);
+
 
     /**
      * Loads the body of a revision.
