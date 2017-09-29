@@ -1998,23 +1998,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                     if (rev != null) {
                         rev = applyOptionsToRevision(options, rev);
                     }
-
-                    // #1629
-                    if (rev == null) {
-                        if (status.getCode() == Status.DELETED) {
-                            // Requested a deleted revision by ID
-                            if (revID != null) {
-                                Map<String, Object> result = new HashMap();
-                                result.put("_id", docID);
-                                result.put("_rev", revID);
-                                result.put("_deleted", true);
-                                connection.setResponseBody(new Body(result));
-                                return new Status(Status.OK);
-                            } else
-                                return new Status(Status.NOT_FOUND);
-                        } else
-                            return new Status(Status.NOT_FOUND);
-                    }
                 }
 
                 if (rev == null)
