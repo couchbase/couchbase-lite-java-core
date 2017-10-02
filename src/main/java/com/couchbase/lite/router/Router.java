@@ -88,6 +88,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private static final String CONTENT_TYPE_JSON = "application/json";
 
+    // Android cannot hold unlimited changes data.
+    // See ChangesOptions.limit default value (Integer.MAX_VALUE)
+    public static final int DEF_CHANGES_LIMIT = 10000;
+
     /**
      * Options for what metadata to include in document bodies
      */
@@ -1557,7 +1561,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return result;
     }
 
-    private Map<String, Object> responseBodyForChangesWithConflicts(List<RevisionInternal> changes, long since) {
+    private Map<String, Object> responseBodyForChangesWithConflicts(List<RevisionInternal> changes, long since, int limit) {
         // Assumes the changes are grouped by docID so that conflicts will be adjacent.
         List<Map<String, Object>> entries = new ArrayList<Map<String, Object>>();
         String lastDocID = null;
@@ -1581,6 +1585,9 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
                 return Misc.SequenceCompare((Long) e1.get("seq"), (Long) e2.get("seq"));
             }
         });
+
+        if (entries.size() > limit)
+            entries = entries.subList(0, limit);
 
         Long lastSeq;
         if (entries.size() == 0) {
@@ -1792,8 +1799,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         options.setIncludeDocs(changesIncludesDocs);
         options.setIncludeConflicts(changesIncludesConflicts);
         options.setSortBySequence(!options.isIncludeConflicts());
-        // TODO: descending option is not supported by ChangesOptions
-        options.setLimit(getIntQuery("limit", options.getLimit()));
+        options.setLimit(getIntQuery("limit", DEF_CHANGES_LIMIT)); // def value was options.getLimit().
+        // NOTE: descending option is not supported by ChangesOptions
 
         int since = getIntQuery("since", 0);
         timeoutLastSeqence = since;
@@ -1878,7 +1885,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             return new Status(0);
         } else {
             if (options.isIncludeConflicts()) {
-                connection.setResponseBody(new Body(responseBodyForChangesWithConflicts(changes, since)));
+                connection.setResponseBody(new Body(responseBodyForChangesWithConflicts(changes, since, options.getLimit())));
             } else {
                 connection.setResponseBody(new Body(responseBodyForChanges(changes, since)));
             }
