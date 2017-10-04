@@ -194,7 +194,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         Future future = sendAsyncRequest("PUT", "", null, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                 creatingTarget = false;
                 if (e != null && e instanceof RemoteRequestResponseException &&
                         ((RemoteRequestResponseException) e).getCode() != 412) {
@@ -214,7 +214,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
 
     /**
      * - (void) beginReplicating in CBL_Replicator.m
-     * 
+     * <p>
      * beginReplicating() method is called from GET /_local/{checkpoint id} or PUT /{db}
      */
     @Override
@@ -406,7 +406,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         CustomFuture future = sendAsyncRequest("POST", "_revs_diff", diffs, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(Response httpResponse, Object response, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object response, Throwable e) {
 
                 Log.v(TAG, "%s: got /_revs_diff response", this);
                 Map<String, Object> results = (Map<String, Object>) response;
@@ -539,7 +539,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         CustomFuture future = sendAsyncRequest("POST", "_bulk_docs", bulkDocsBody, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                 if (e == null) {
                     Set<String> failedIDs = new HashSet<String>();
                     // _bulk_docs response is really an array, not a dictionary!
@@ -603,7 +603,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         CustomFuture future = sendAsyncMultipartRequest("PUT", path, body, attachments,
                 new RemoteRequestCompletion() {
                     @Override
-                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
+                    public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                         try {
                             if (e != null) {
                                 if (e instanceof RemoteRequestResponseException) {
@@ -648,7 +648,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
                 path,
                 rev.getProperties(),
                 new RemoteRequestCompletion() {
-                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
+                    public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                         if (e != null) {
                             setError(e);
                         } else {
