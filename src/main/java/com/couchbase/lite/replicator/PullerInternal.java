@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2017 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.CouchbaseLiteException;
@@ -369,7 +369,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         }
                     },
                     new RemoteRequestCompletion() {
-
                         public void onCompletion(Response httpResponse, Object result, Throwable e) {
                             // The entire _bulk_get is finished:
                             if (e != null) {
@@ -379,6 +378,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             --httpConnectionCount;
                             // Start another task if there are still revisions waiting to be pulled:
                             pullRemoteRevisions();
+
+
                         }
                     }
             );
@@ -390,12 +391,14 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         dl.setAuthenticator(getAuthenticator());
         // set compressed request - gzip
         dl.setCompressedRequest(canSendCompressedRequests());
+        dl.setCancellableManager(this);
 
         synchronized (remoteRequestExecutor) {
             if (!remoteRequestExecutor.isShutdown()) {
                 Future future = remoteRequestExecutor.submit(dl);
                 pendingFutures.add(future);
-                runnables.put(future, dl);
+                cancellables.put(future, dl);
+                reverseCancellables.put(dl, future);
             }
         }
     }
@@ -683,7 +686,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         // TODO: CBL Java does not have implementation of _settings yet. Till then, attachments always true
         boolean attachments = true;
-        if(attachments)
+        if (attachments)
             path.append("&attachments=true");
 
         // Include atts_since with a list of possible ancestor revisions of rev. If getting attachments,
@@ -981,7 +984,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
      * <p/>
      * Note: Pull replication needs to send IDLE after PUT /{db}/_local.
      * However sending IDLE from Push replicator breaks few unit test cases.
-     * This is reason changed() method was override for pull replicatoin
+     * This is reason changed() method was override for pull replication
      */
     @Override
     public void changed(EventType type, Object o, BlockingQueue queue) {

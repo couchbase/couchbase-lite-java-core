@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016 Couchbase, Inc. All rights reserved.
+// Copyright (c) 2017 Couchbase, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
 // except in compliance with the License. You may obtain a copy of the License at
@@ -75,7 +75,7 @@ import okhttp3.Response;
  * @exclude
  */
 @InterfaceAudience.Private
-abstract class ReplicationInternal implements BlockingQueueListener {
+abstract class ReplicationInternal implements BlockingQueueListener, CancellableManager {
     private static final String TAG = Log.TAG_SYNC;
     public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
     public static final String CHANNELS_QUERY_PARAM = "channels";
@@ -127,7 +127,8 @@ abstract class ReplicationInternal implements BlockingQueueListener {
     protected CollectionUtils.Functor<RevisionInternal, RevisionInternal> revisionBodyTransformationBlock;
     protected String sessionID;
     protected BlockingQueue<Future> pendingFutures;
-    Map<Future, CancellableRunnable> runnables = new HashMap<Future, CancellableRunnable>();
+    Map<Future, CancellableRunnable> cancellables = new HashMap<Future, CancellableRunnable>();
+    Map<CancellableRunnable, Future> reverseCancellables = new HashMap<CancellableRunnable, Future>();
     private boolean lastSequenceChanged = false;
     private boolean savingCheckpoint;
     private boolean overdueForCheckpointSave;
@@ -321,10 +322,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         // cancel pending futures
         for (Future future : pendingFutures) {
             future.cancel(false);
-            CancellableRunnable runnable = runnables.get(future);
+            CancellableRunnable runnable = cancellables.get(future);
             if (runnable != null) {
                 runnable.cancel();
-                runnables.remove(future);
+                cancellables.remove(future);
+                reverseCancellables.remove(runnable);
             }
         }
 
@@ -1227,10 +1229,11 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             Future future = pendingFutures.poll();
             if (future != null && !future.isCancelled() && !future.isDone()) {
                 future.cancel(true);
-                CancellableRunnable runnable = runnables.get(future);
+                CancellableRunnable runnable = cancellables.get(future);
                 if (runnable != null) {
                     runnable.cancel();
-                    runnables.remove(future);
+                    cancellables.remove(future);
+                    reverseCancellables.remove(runnable);
                 }
             }
         }
@@ -1905,6 +1908,15 @@ abstract class ReplicationInternal implements BlockingQueueListener {
         }
     }
 
+    // implementation of CancellableRunnableManager
+    @Override
+    public void removeCancellable(CancellableRunnable cancellableRunnable) {
+        // remove Future and this from runnable and reverseCancellables
+        Future future = reverseCancellables.remove(cancellableRunnable);
+        if (future != null)
+            cancellables.remove(future);
+    }
+
     /**
      * Encodes the given document id for use in an URI.
      * <p/>
@@ -1997,7 +2009,9 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                 } catch (ExecutionException e) {
                     Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
                 } finally {
-                    runnables.remove(future);
+                    CancellableRunnable runnable = cancellables.remove(future);
+                    if (runnable != null)
+                        reverseCancellables.remove(runnable);
                 }
             }
         } catch (Exception e) {
