@@ -329,9 +329,9 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
 
         ++httpConnectionCount;
 
-        final RemoteBulkDownloaderRequest dl;
+        final RemoteBulkDownloaderRequest downloader;
         try {
-            dl = new RemoteBulkDownloaderRequest(
+            downloader = new RemoteBulkDownloaderRequest(
                     clientFactory,
                     remote,
                     true,
@@ -369,7 +369,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                         }
                     },
                     new RemoteRequestCompletion() {
-                        public void onCompletion(Response httpResponse, Object result, Throwable e) {
+                        public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                             // The entire _bulk_get is finished:
                             if (e != null) {
                                 setError(e);
@@ -379,7 +379,8 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                             // Start another task if there are still revisions waiting to be pulled:
                             pullRemoteRevisions();
 
-
+                            if (cancellables != null && cancellables.values() != null && remoteRequest != null)
+                                cancellables.values().remove(remoteRequest);
                         }
                     }
             );
@@ -388,17 +389,15 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
             return;
         }
 
-        dl.setAuthenticator(getAuthenticator());
+        downloader.setAuthenticator(getAuthenticator());
         // set compressed request - gzip
-        dl.setCompressedRequest(canSendCompressedRequests());
-        dl.setCancellableManager(this);
+        downloader.setCompressedRequest(canSendCompressedRequests());
 
         synchronized (remoteRequestExecutor) {
             if (!remoteRequestExecutor.isShutdown()) {
-                Future future = remoteRequestExecutor.submit(dl);
+                Future future = remoteRequestExecutor.submit(downloader);
                 pendingFutures.add(future);
-                cancellables.put(future, dl);
-                reverseCancellables.put(dl, future);
+                cancellables.put(future, downloader);
             }
         }
     }
@@ -508,7 +507,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 body,
                 new RemoteRequestCompletion() {
 
-                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
+                    public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
 
                         Map<String, Object> res = (Map<String, Object>) result;
 
@@ -715,7 +714,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 null, db, new RemoteRequestCompletion() {
 
                     @Override
-                    public void onCompletion(Response httpResponse, Object result, Throwable e) {
+                    public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                         if (e != null) {
                             Log.w(TAG, "Error pulling remote revision: %s", e, this);
                             if (Utils.isDocumentError(e)) {

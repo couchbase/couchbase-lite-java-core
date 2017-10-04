@@ -64,7 +64,6 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
     private MultipartReader _topReader;
     private MultipartDocumentReader _docReader;
     private BulkDownloaderDocument _onDocument;
-    private CancellableManager cancellableManager;
 
     ////////////////////////////////////////////////////////////
     // Constructors
@@ -175,9 +174,6 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
                 error = e;
             }
             respondWithResult(fullBody, error, response);
-
-            if (cancellableManager != null)
-                cancellableManager.removeCancellable(this);
         } finally {
             RequestUtils.closeResponseBody(response);
         }
@@ -238,10 +234,6 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
     ////////////////////////////////////////////////////////////
     // Protected or Private Methods
     ////////////////////////////////////////////////////////////
-
-    void setCancellableManager(CancellableManager cancellableManager) {
-        this.cancellableManager = cancellableManager;
-    }
 
     private static Map<String, Object> buildJSONBody(List<RevisionInternal> revs, final Database db) {
         // Build up a JSON body describing what revisions we want:

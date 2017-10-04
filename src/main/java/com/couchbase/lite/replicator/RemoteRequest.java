@@ -53,7 +53,7 @@ public class RemoteRequest implements CancellableRunnable {
     // Don't compress data shorter than this (not worth the CPU time, plus it might not shrink)
     public static final int MIN_JSON_LENGTH_TO_COMPRESS = 100;
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-    
+
     ////////////////////////////////////////////////////////////
     // Member variables
     ////////////////////////////////////////////////////////////
@@ -307,10 +307,10 @@ public class RemoteRequest implements CancellableRunnable {
                                      final Response response) {
         try {
             if (onPreCompletion != null)
-                onPreCompletion.onCompletion(response, null, error);
-            onCompletion.onCompletion(response, result, error);
+                onPreCompletion.onCompletion(this, response, null, error);
+            onCompletion.onCompletion(this, response, result, error);
             if (onPostCompletion != null)
-                onPostCompletion.onCompletion(response, null, error);
+                onPostCompletion.onCompletion(this, response, null, error);
         } catch (Exception e) {
             Log.e(TAG, "RemoteRequestCompletionBlock throw Exception", e);
         }

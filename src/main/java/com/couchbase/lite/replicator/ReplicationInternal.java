@@ -75,7 +75,7 @@ import okhttp3.Response;
  * @exclude
  */
 @InterfaceAudience.Private
-abstract class ReplicationInternal implements BlockingQueueListener, CancellableManager {
+abstract class ReplicationInternal implements BlockingQueueListener {
     private static final String TAG = Log.TAG_SYNC;
     public static final String BY_CHANNEL_FILTER_NAME = "sync_gateway/bychannel";
     public static final String CHANNELS_QUERY_PARAM = "channels";
@@ -127,8 +127,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
     protected CollectionUtils.Functor<RevisionInternal, RevisionInternal> revisionBodyTransformationBlock;
     protected String sessionID;
     protected BlockingQueue<Future> pendingFutures;
-    Map<Future, CancellableRunnable> cancellables = new HashMap<Future, CancellableRunnable>();
-    Map<CancellableRunnable, Future> reverseCancellables = new HashMap<CancellableRunnable, Future>();
+    protected Map<Future, CancellableRunnable> cancellables = new HashMap<Future, CancellableRunnable>();
     private boolean lastSequenceChanged = false;
     private boolean savingCheckpoint;
     private boolean overdueForCheckpointSave;
@@ -326,7 +325,6 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
             if (runnable != null) {
                 runnable.cancel();
                 cancellables.remove(future);
-                reverseCancellables.remove(runnable);
             }
         }
 
@@ -456,7 +454,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         Future future = sendAsyncRequest("GET", sessionPath, null, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(Response _response, Object result, Throwable err) {
+            public void onCompletion(RemoteRequest remoteRequest, Response _response, Object result, Throwable err) {
                 try {
                     if (err != null) {
                         // If not at /db/_session, try CouchDB location /_session
@@ -523,7 +521,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         boolean cancelable = false; // make sure not-canceled during login.
         Future future = sendAsyncRequest(method, loginPath, cancelable, loginParameters, new RemoteRequestCompletion() {
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable error) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable error) {
                 if (loginAuth != null && loginAuth.implementedLoginResponse()) {
                     loginAuth.loginResponse(result,
                             httpResponse != null ? httpResponse.headers() : null,
@@ -696,7 +694,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         request.setAuthenticator(getAuthenticator());
         request.setOnPreCompletionCaller(new RemoteRequestCompletion() {
             @Override
-            public void onCompletion(Response response, Object result, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response response, Object result, Throwable e) {
                 if (serverType == null && response != null) {
                     String serverVersion = response.header("Server");
                     if (serverVersion != null) {
@@ -850,7 +848,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         Future future = sendAsyncRequest("PUT", "_local/" + checkpointID, false, body, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
 
                 Log.d(Log.TAG_SYNC,
                         "%s: put remote _local document request finished.  checkpointID: %s body: %s",
@@ -928,7 +926,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         Log.i(Log.TAG_SYNC, "%s: Refreshing remote checkpoint to get its _rev...", this);
         Future future = sendAsyncRequest("GET", "_local/" + remoteCheckpointDocID(), null, new RemoteRequestCompletion() {
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                 if (db == null) {
                     Log.w(Log.TAG_SYNC, "%s: db == null while refreshing remote checkpoint.  aborting", this);
                     return;
@@ -1004,7 +1002,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         Future future = sendAsyncRequest("GET", "_local/" + checkpointId, null, dontLog404, new RemoteRequestCompletion() {
 
             @Override
-            public void onCompletion(Response httpResponse, Object result, Throwable e) {
+            public void onCompletion(RemoteRequest remoteRequest, Response httpResponse, Object result, Throwable e) {
                 if (e != null && !Utils.is404(e)) {
                     Log.w(Log.TAG_SYNC, "%s: error getting remote checkpoint", e, this);
                     setError(e);
@@ -1233,7 +1231,6 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
                 if (runnable != null) {
                     runnable.cancel();
                     cancellables.remove(future);
-                    reverseCancellables.remove(runnable);
                 }
             }
         }
@@ -1908,15 +1905,6 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
         }
     }
 
-    // implementation of CancellableRunnableManager
-    @Override
-    public void removeCancellable(CancellableRunnable cancellableRunnable) {
-        // remove Future and this from runnable and reverseCancellables
-        Future future = reverseCancellables.remove(cancellableRunnable);
-        if (future != null)
-            cancellables.remove(future);
-    }
-
     /**
      * Encodes the given document id for use in an URI.
      * <p/>
@@ -2009,9 +1997,7 @@ abstract class ReplicationInternal implements BlockingQueueListener, Cancellable
                 } catch (ExecutionException e) {
                     Log.e(Log.TAG_SYNC, "ExecutionException in Future.get()", e);
                 } finally {
-                    CancellableRunnable runnable = cancellables.remove(future);
-                    if (runnable != null)
-                        reverseCancellables.remove(runnable);
+                    cancellables.remove(future);
                 }
             }
         } catch (Exception e) {

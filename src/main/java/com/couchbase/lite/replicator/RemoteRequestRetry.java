@@ -1,16 +1,16 @@
-/**
- * Copyright (c) 2016 Couchbase, Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions
- * and limitations under the License.
- */
+//
+// Copyright (c) 2017 Couchbase, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+// either express or implied. See the License for the specific language governing permissions
+// and limitations under the License.
+//
 package com.couchbase.lite.replicator;
 
 import com.couchbase.lite.Database;
@@ -297,7 +297,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
 
     private RemoteRequestCompletion onCompletionInner = new RemoteRequestCompletion() {
         @Override
-        public void onCompletion(Response response, Object result, Throwable e) {
+        public void onCompletion(RemoteRequest remoteRequest, Response response, Object result, Throwable e) {
             Log.d(TAG, "%s: RemoteRequestRetry inner request finished, url: %s", this, url);
             if (e == null) {
                 Log.d(TAG, "%s: RemoteRequestRetry was successful, calling callback url: %s", this, url);
@@ -348,7 +348,7 @@ public class RemoteRequestRetry<T> implements CustomFuture<T> {
             requestHttpResponse = response;
             requestResult = result;
             requestThrowable = e;
-            onCompletionCaller.onCompletion(requestHttpResponse, requestResult, requestThrowable);
+            onCompletionCaller.onCompletion(null, requestHttpResponse, requestResult, requestThrowable);
             // release unnecessary references to reduce memory usage as soon as called onComplete().
             requestHttpResponse = null;
             requestResult = null;
