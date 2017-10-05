@@ -88,10 +88,6 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private static final String CONTENT_TYPE_JSON = "application/json";
 
-    // Android cannot hold unlimited changes data.
-    // See ChangesOptions.limit default value (Integer.MAX_VALUE)
-    public static final int DEF_CHANGES_LIMIT = 10000;
-
     /**
      * Options for what metadata to include in document bodies
      */
@@ -1799,7 +1795,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         options.setIncludeDocs(changesIncludesDocs);
         options.setIncludeConflicts(changesIncludesConflicts);
         options.setSortBySequence(!options.isIncludeConflicts());
-        options.setLimit(getIntQuery("limit", DEF_CHANGES_LIMIT)); // def value was options.getLimit().
+        options.setLimit(getIntQuery("limit", options.getLimit()));
         // NOTE: descending option is not supported by ChangesOptions
 
         int since = getIntQuery("since", 0);
