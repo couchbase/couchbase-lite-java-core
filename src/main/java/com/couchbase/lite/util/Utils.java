@@ -21,10 +21,13 @@ import com.couchbase.lite.replicator.RemoteRequestResponseException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -278,6 +281,25 @@ public class Utils {
         Map<String, String> map = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
         for (String name : headers.names()) {
             map.put(name, headers.get(name));
+        }
+        return map;
+    }
+
+    public static String join(List<String> list, String separator) {
+        StringBuilder sb = new StringBuilder();
+        for (String str : list) {
+            if (sb.length() != 0)
+                sb.append(separator);
+            sb.append(str);
+        }
+        return sb.toString();
+    }
+
+    public static Map<String, String> headersToMap(Map<String, List<String>> headers) {
+        List<String>a = new ArrayList<String>();
+        Map<String, String> map = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+        for (String name : headers.keySet()) {
+            map.put(name, join(headers.get(name), ", "));
         }
         return map;
     }
