@@ -296,7 +296,6 @@ public class Utils {
     }
 
     public static Map<String, String> headersToMap(Map<String, List<String>> headers) {
-        List<String>a = new ArrayList<String>();
         Map<String, String> map = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
         for (String name : headers.keySet()) {
             map.put(name, join(headers.get(name), ", "));
