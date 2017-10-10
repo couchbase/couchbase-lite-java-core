@@ -45,6 +45,7 @@ import com.couchbase.lite.replicator.Replication.ChangeListener;
 import com.couchbase.lite.replicator.Replication.ReplicationStatus;
 import com.couchbase.lite.replicator.ReplicationState;
 import com.couchbase.lite.storage.SQLException;
+import com.couchbase.lite.support.MultipartDocumentReader;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.support.Version;
 import com.couchbase.lite.util.Log;
@@ -86,7 +87,10 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
     private static final long MIN_CHANGES_HEARTBEAT = 5000;    // 5 seconds
     private static final long DEFAULT_CHANGES_TIMEOUT = 60000; // 60 seconds
 
+    private static final int BUF_LEN = 1024;
+
     private static final String CONTENT_TYPE_JSON = "application/json";
+    private static final String CONTENT_TYPE_MULTIPART = "multipart/";
 
     /**
      * Options for what metadata to include in document bodies
@@ -240,6 +244,32 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         return eTag.equals(requestIfNoneMatch);
     }
 
+    // content-type: multipart/json
+    private Map<String, Object> getMultipartBodyAsDictionary() throws CouchbaseLiteException {
+        MultipartDocumentReader reader = new MultipartDocumentReader(db);
+        reader.setHeaders(Utils.headersToMap(connection.getRequestProperties()));
+        byte[] buffer = new byte[BUF_LEN];
+        int numBytesRead;
+        InputStream contentStream = connection.getRequestInputStream();
+        try {
+            while ((numBytesRead = contentStream.read(buffer)) != -1)
+                reader.appendData(buffer, 0, numBytesRead);
+        } catch (IOException ioe) {
+            Log.e(Log.TAG_ROUTER, "Error in load data from stream.");
+            throw new CouchbaseLiteException(Status.BAD_REQUEST);
+        } finally {
+            if (contentStream != null) {
+                try {
+                    contentStream.close();
+                } catch (IOException ioe) {
+                }
+            }
+        }
+        reader.finish();
+        return reader.getDocumentProperties();
+    }
+
+    // content-type: application/json
     private Map<String, Object> getBodyAsDictionary() throws CouchbaseLiteException {
         // check if content-type is `application/json`
         String contentType = getRequestHeaderContentType();
@@ -2363,12 +2393,18 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     public Status do_PUT_Document(Database _db, String docID, String _attachmentName)
             throws CouchbaseLiteException {
-        Status status = new Status(Status.CREATED);
-        Map<String, Object> body = getBodyAsDictionary();
-        if (body == null) {
+        Map<String, Object> body;
+        String contentType = getRequestHeaderContentType();
+        // multipart
+        if (contentType != null && contentType.startsWith(CONTENT_TYPE_MULTIPART))
+            body = getMultipartBodyAsDictionary();
+            // application/json
+        else
+            body = getBodyAsDictionary();
+        if (body == null)
             throw new CouchbaseLiteException(Status.BAD_REQUEST);
-        }
 
+        Status status = new Status(Status.CREATED);
         if (getQuery("new_edits") == null ||
                 (getQuery("new_edits") != null && (Boolean.valueOf(getQuery("new_edits"))))) {
             // Regular PUT
