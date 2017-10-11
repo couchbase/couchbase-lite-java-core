@@ -243,7 +243,7 @@ public class RemoteBulkDownloaderRequest extends RemoteRequest implements Multip
                     public Map<String, Object> invoke(RevisionInternal rev) {
                         AtomicBoolean haveBodies = new AtomicBoolean(false);
                         List<String> possibleAncestors = db.getPossibleAncestorRevisionIDs(
-                                rev, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, haveBodies);
+                                rev, PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, haveBodies, true);
                         Map<String, Object> key = new HashMap<String, Object>();
                         key.put("id", rev.getDocID());
                         key.put("rev", rev.getRevID());

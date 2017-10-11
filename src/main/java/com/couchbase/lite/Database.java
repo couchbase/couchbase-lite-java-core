@@ -1555,7 +1555,7 @@ public class Database implements StoreDelegate {
 
     @InterfaceAudience.Private
     public RevisionInternal getDocument(String docID, String revID, boolean withBody) {
-       return getDocument(docID, revID, withBody, new Status());
+        return getDocument(docID, revID, withBody, new Status());
     }
 
     @InterfaceAudience.Private
@@ -1587,11 +1587,12 @@ public class Database implements StoreDelegate {
      */
     @InterfaceAudience.Private
     public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev, int limit,
-                                                       AtomicBoolean hasAttachment) {
+                                                       AtomicBoolean hasAttachment,
+                                                       boolean withBodiesOnly) {
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
-            return store.getPossibleAncestorRevisionIDs(rev, limit, hasAttachment);
+            return store.getPossibleAncestorRevisionIDs(rev, limit, hasAttachment, withBodiesOnly);
         } finally {
             storeRef.release();
         }

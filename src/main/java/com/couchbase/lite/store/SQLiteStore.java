@@ -992,7 +992,8 @@ public class SQLiteStore implements Store, EncryptableStore {
     @Override
     public List<String> getPossibleAncestorRevisionIDs(RevisionInternal rev,
                                                        int limit,
-                                                       AtomicBoolean outHaveBodies) {
+                                                       AtomicBoolean outHaveBodies,
+                                                       boolean withBodiesOnly) {
         int generation = rev.getGeneration();
         if (generation <= 1)
             return null;
@@ -1008,7 +1009,11 @@ public class SQLiteStore implements Store, EncryptableStore {
 
         // First look only for current revisions; if none match, go to non-current ones.
         for (int current = 1; current >= 0; current--) {
-            StringBuilder sql = new StringBuilder("SELECT revid, json is not null FROM revs ");
+            StringBuilder sql = new StringBuilder();
+            sql.append("SELECT revid, json is not null ");
+            if (withBodiesOnly)
+                sql.append(", json ");
+            sql.append("FROM revs ");
             sql.append("WHERE doc_id=? and current=? and revid < ? ");
             sql.append("ORDER BY revid DESC LIMIT ?");
             String[] args = {
@@ -1021,9 +1026,28 @@ public class SQLiteStore implements Store, EncryptableStore {
                 cursor = storageEngine.rawQuery(sql.toString(), args);
                 cursor.moveToNext();
                 while (!cursor.isAfterLast()) {
+                    if (cursor.getLong(1) == 0) {
+                        if (outHaveBodies != null)
+                            outHaveBodies.set(false);
+                        if (withBodiesOnly) {
+                            cursor.moveToNext();
+                            continue;
+                        }
+                    } else if (withBodiesOnly) {
+                        byte[] json = cursor.getBlob(2);
+                        if (json != null && json.length > 0) {
+                            try {
+                                Map<String, Object> body = Manager.getObjectMapper().readValue(json, Map.class);
+                                if (body != null && body.containsKey("_removed") && (Boolean) body.get("_removed") == true) {
+                                    cursor.moveToNext();
+                                    continue;
+                                }
+                            } catch (IOException e) {
+                                // if fail to parse json, it behave as withBodiesOnly = false
+                            }
+                        }
+                    }
                     revIDs.add(cursor.getString(0));
-                    if (outHaveBodies != null && cursor.getLong(1) == 0)
-                        outHaveBodies.set(false);
                     cursor.moveToNext();
                 }
             } catch (SQLException e) {

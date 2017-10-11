@@ -695,7 +695,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         AtomicBoolean haveBodies = new AtomicBoolean(false);
         List<String> possibleAncestors = null;
         possibleAncestors = db.getPossibleAncestorRevisionIDs(rev,
-                PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, attachments ? haveBodies : null);
+                PullerInternal.MAX_NUMBER_OF_ATTS_SINCE, attachments ? haveBodies : null, true);
         if (possibleAncestors != null) {
             path.append(haveBodies.get() ? "&atts_since=" : "&revs_from=");
             path.append(joinQuotedEscaped(possibleAncestors));
