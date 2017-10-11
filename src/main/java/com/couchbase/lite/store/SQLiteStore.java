@@ -1038,12 +1038,12 @@ public class SQLiteStore implements Store, EncryptableStore {
                         if (json != null && json.length > 0) {
                             try {
                                 Map<String, Object> body = Manager.getObjectMapper().readValue(json, Map.class);
-                                if (body.containsKey("_removed") && (Boolean) body.get("_removed") == true) {
+                                if (body != null && body.containsKey("_removed") && (Boolean) body.get("_removed") == true) {
                                     cursor.moveToNext();
                                     continue;
                                 }
                             } catch (IOException e) {
-                                Log.e(TAG, e.toString(), e);
+                                // if fail to parse json, it behave as withBodiesOnly = false
                             }
                         }
                     }
