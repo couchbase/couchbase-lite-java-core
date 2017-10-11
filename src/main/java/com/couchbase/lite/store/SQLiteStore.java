@@ -1013,7 +1013,7 @@ public class SQLiteStore implements Store, EncryptableStore {
             sql.append("SELECT revid, json is not null ");
             if (withBodiesOnly)
                 sql.append(", json ");
-            sql.append(" FROM revs ");
+            sql.append("FROM revs ");
             sql.append("WHERE doc_id=? and current=? and revid < ? ");
             sql.append("ORDER BY revid DESC LIMIT ?");
             String[] args = {
@@ -1034,18 +1034,16 @@ public class SQLiteStore implements Store, EncryptableStore {
                             continue;
                         }
                     } else if (withBodiesOnly) {
-                        byte[] json = cursor.getBlob(0);
+                        byte[] json = cursor.getBlob(2);
                         if (json != null && json.length > 0) {
-                            if (json != null && json.length > 0) {
-                                try {
-                                    Map<String, Object> body = Manager.getObjectMapper().readValue(json, Map.class);
-                                    if (body.containsKey("_removed")) {
-                                        cursor.moveToNext();
-                                        continue;
-                                    }
-                                } catch (IOException e) {
-                                    Log.e(TAG, e.toString(), e);
+                            try {
+                                Map<String, Object> body = Manager.getObjectMapper().readValue(json, Map.class);
+                                if (body.containsKey("_removed") && (Boolean) body.get("_removed") == true) {
+                                    cursor.moveToNext();
+                                    continue;
                                 }
+                            } catch (IOException e) {
+                                Log.e(TAG, e.toString(), e);
                             }
                         }
                     }
