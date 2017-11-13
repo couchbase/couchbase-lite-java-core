@@ -918,7 +918,6 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         pauseOrResume();
     }
 
-
     private void processChangeTrackerStopped(ChangeTracker tracker) {
         Log.d(TAG, "changeTrackerStopped.  lifecycle: %s", lifecycle);
         switch (lifecycle) {
@@ -940,11 +939,14 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 } else {
                     // otherwise, try to restart the change tracker, since it should
                     // always be running in continuous replications
-                    String msg = "Change tracker stopped during continuous replication";
-                    Log.w(TAG, msg);
-                    parentReplication.setLastError(new Exception(msg));
+                    Throwable error = tracker.getLastError();
+                    String msg = String.format(Locale.ENGLISH, "%s: Change tracker stopped during continuous replication; error = %s", this, error != null ? error : "no error");
+                    if (error != null) Log.w(TAG, msg, error);
+                    else Log.w(TAG, msg);
+                    if (error != null)
+                        setError(error);
+
                     fireTrigger(ReplicationTrigger.WAITING_FOR_CHANGES);
-                    Log.d(TAG, "Scheduling change tracker restart in %d ms", CHANGE_TRACKER_RESTART_DELAY_MS);
                     executor.schedule(new Runnable() {
                         @Override
                         public void run() {
@@ -965,8 +967,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
                 Log.e(TAG, "Unknown lifecycle: %s", lifecycle);
         }
     }
-
-
+    
     private void waitForPendingFuturesWithNewThread() {
         String threadName = String.format(Locale.ENGLISH, "Thread-waitForPendingFutures[%s]", toString());
         new Thread(new Runnable() {
