@@ -131,7 +131,7 @@ public class Database implements StoreDelegate {
     private final Object lockPostingChangeNotifications = new Object();
     private final long startTime;
     private Timer purgeTimer;
-    private final Object lockViews = new Object();
+    private final Object lock = new Object();
 
     /**
      * Each database can have an associated PersistentCookieStore,
@@ -496,7 +496,7 @@ public class Database implements StoreDelegate {
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
-            synchronized (lockViews) {
+            synchronized (lock) {
                 View view = views != null ? views.get(name) : null;
                 if (view != null)
                     return view;
@@ -568,7 +568,7 @@ public class Database implements StoreDelegate {
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
-            synchronized (lockViews) {
+            synchronized (lock) {
                 View view = null;
                 if (views != null) {
                     view = views.get(name);
@@ -1463,7 +1463,7 @@ public class Database implements StoreDelegate {
                         listener.databaseClosing();
                 }
 
-                synchronized (lockViews) {
+                synchronized (lock) {
                     if (views != null) {
                         for (View view : views.values())
                             view.close();
@@ -2567,27 +2567,30 @@ public class Database implements StoreDelegate {
     }
 
     private void scheduleDocumentExpiration(long minimumDelay) {
-        if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
-        storeRef.retain();
-        try {
-            long nextExpiration = store.nextDocumentExpiry();
-            if (nextExpiration > 0) {
-                long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
-                Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
-                cancelPurgeTimer();
-                purgeTimer = new Timer();
-                purgeTimer.schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        if (isOpen())
-                            purgeExpiredDocuments();
-                    }
-                }, delay * 1000);
-            } else
-                Log.v(TAG, "No pending doc expirations");
-        } finally {
-            storeRef.release();
-        }
+            if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
+            storeRef.retain();
+            try {
+                synchronized (lock) {
+                    long nextExpiration = store.nextDocumentExpiry();
+                    if (nextExpiration > 0) {
+                        long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
+                        Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
+                        cancelPurgeTimer();
+                        purgeTimer = new Timer();
+                        purgeTimer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                if (isOpen())
+                                    purgeExpiredDocuments();
+                            }
+                        }, delay * 1000);
+                    } else
+                        Log.v(TAG, "No pending doc expirations");
+                }
+
+            } finally {
+                storeRef.release();
+            }
     }
 
     private void purgeExpiredDocuments() {
