@@ -2527,6 +2527,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         if ("raw".equals(collation)) {
             view.setCollation(View.TDViewCollation.TDViewCollationRaw);
         }
+        view.setDesignDoc(true);
+
         return view;
     }
 
@@ -2535,32 +2537,27 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         synchronized (db) {
 
             // First check if there's a CouchDB view definition we can compile:
-
             String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
 
             View view = db.getExistingView(tdViewName);
+            if (view != null && !view.isDesignDoc())
+                return view;
 
             // Get design document
             RevisionInternal rev = db.getDocument(String.format(Locale.ENGLISH, "_design/%s", designDoc), null, true);
             if (rev == null) {
-                if (view != null)
-                    return view;
                 throw new CouchbaseLiteException(Status.NOT_FOUND);
             }
 
             // get views
             Map<String, Object> views = (Map<String, Object>) rev.getProperties().get("views");
             if (views == null) {
-                if (view != null)
-                    return view;
                 throw new CouchbaseLiteException(Status.NOT_FOUND);
             }
 
             // get view
             Map<String, Object> viewProps = (Map<String, Object>) views.get(viewName);
             if (viewProps == null) {
-                if (view != null)
-                    return view;
                 throw new CouchbaseLiteException(Status.NOT_FOUND);
             }
 

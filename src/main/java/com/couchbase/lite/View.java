@@ -44,6 +44,7 @@ public final class View implements ViewStoreDelegate {
     private String version; // TODO: iOS version store version information in CBL_Shared.
     private static ViewCompiler compiler;
     private ViewStore viewStore;
+    private boolean isDesignDoc = false;
 
     ///////////////////////////////////////////////////////////////////////////
     // Constructor
@@ -356,6 +357,24 @@ public final class View implements ViewStoreDelegate {
             return viewStore.reducedQuery(options);
         else
             return viewStore.regularQuery(options);
+    }
+
+    /**
+     * Gets whether the view is a design doc view.
+     * @return Whether the view is a design doc view.
+     */
+    @InterfaceAudience.Private
+    public boolean isDesignDoc() {
+        return isDesignDoc;
+    }
+
+    /**
+     * Marks the view as a design doc view.
+     * @param designDoc design doc flag.
+     */
+    @InterfaceAudience.Private
+    public void setDesignDoc(boolean designDoc) {
+        isDesignDoc = designDoc;
     }
 
     ///////////////////////////////////////////////////////////////////////////
