@@ -15,17 +15,27 @@ package com.couchbase.lite.support;
 
 import com.couchbase.lite.internal.InterfaceAudience;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -106,6 +116,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
             if (sslSocketFactory != null)
                 builder.sslSocketFactory(sslSocketFactory);
+            else if (isAndriod())
+                builder.sslSocketFactory(new TLSSocketFactory());
 
             if (hostnameVerifier != null)
                 builder.hostnameVerifier(hostnameVerifier);
@@ -212,9 +224,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
                 return new X509Certificate[0];
             }
         };
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(null, new TrustManager[]{trustManager}, null);
-        return sslContext.getSocketFactory();
+        return new TLSSocketFactory(null,
+                new TrustManager[]{trustManager}, null);
     }
 
     private static HostnameVerifier ignoreHostnameVerifier() {
@@ -261,5 +272,78 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
      */
     public void setFollowRedirects(boolean followRedirects) {
         this.followRedirects = followRedirects;
+    }
+
+    private static boolean isAndriod() {
+        return (System.getProperty("java.vm.name").equalsIgnoreCase("Dalvik"));
+    }
+
+    /**
+     * Workaround to enable both TLS1.1 and TLS1.2 for Android API 16 - 19.
+     * When starting to support from API 20, we could remove the workaround.
+     */
+    private static class TLSSocketFactory extends SSLSocketFactory {
+        private SSLSocketFactory delegate;
+
+        public TLSSocketFactory(KeyManager[] keyManagers, TrustManager[] trustManagers, SecureRandom secureRandom) {
+            SSLContext context = null;
+            try {
+                context = SSLContext.getInstance("TLS");
+                context.init(keyManagers, trustManagers, secureRandom);
+                delegate = context.getSocketFactory();
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            } catch (KeyManagementException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public TLSSocketFactory() {
+            this(null, null, null);
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public Socket createSocket(Socket socket, String host, int port, boolean autoClose) throws IOException {
+            return setEnabledProtocols(delegate.createSocket(socket, host, port, autoClose));
+        }
+
+        @Override
+        public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
+            return setEnabledProtocols(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException, UnknownHostException {
+            return setEnabledProtocols(delegate.createSocket(host, port, localHost, localPort));
+        }
+
+        @Override
+        public Socket createSocket(InetAddress address, int port) throws IOException {
+            return setEnabledProtocols(delegate.createSocket(address, port));
+        }
+
+        @Override
+        public Socket createSocket(InetAddress inetAddress, int port, InetAddress localAddress, int localPort) throws IOException {
+            return setEnabledProtocols(delegate.createSocket(inetAddress, port, localAddress, localPort));
+        }
+
+        private Socket setEnabledProtocols(Socket socket) {
+            if(socket != null && (socket instanceof SSLSocket)) {
+                String[] protocols = ((SSLSocket) socket).getEnabledProtocols();
+                if (protocols == null || !Arrays.asList(protocols).contains("TLSv1.2"))
+                    ((SSLSocket)socket).setEnabledProtocols(new String[] {"TLSv1", "TLSv1.1", "TLSv1.2"});
+            }
+            return socket;
+        }
     }
 }
