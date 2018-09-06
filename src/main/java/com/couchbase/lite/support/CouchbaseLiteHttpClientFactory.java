@@ -21,13 +21,11 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.security.GeneralSecurityException;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
+import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -38,6 +36,7 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import okhttp3.ConnectionPool;
@@ -116,8 +115,15 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
 
             if (sslSocketFactory != null)
                 builder.sslSocketFactory(sslSocketFactory);
-            else if (isAndriod())
-                builder.sslSocketFactory(new TLSSocketFactory());
+            else if (isAndriod()) {
+                try {
+                    X509TrustManager tm = defaultTrustManager();
+                    SSLSocketFactory factory = new TLSSocketFactory(null, new TrustManager[] { tm }, null);
+                    builder.sslSocketFactory(factory, tm);
+                } catch (GeneralSecurityException e) {
+                    throw new RuntimeException(e);
+                }
+            }
 
             if (hostnameVerifier != null)
                 builder.hostnameVerifier(hostnameVerifier);
@@ -209,6 +215,15 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         return cookieJar;
     }
 
+    private static X509TrustManager defaultTrustManager() throws GeneralSecurityException {
+        TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        factory.init((KeyStore) null);
+        TrustManager[] trustManagers = factory.getTrustManagers();
+        if (trustManagers.length == 0)
+            throw new IllegalStateException("Cannot find the default trust manager");
+        return (X509TrustManager) trustManagers[0];
+    }
+
     private static SSLSocketFactory selfSignedSSLSocketFactory() throws GeneralSecurityException {
         TrustManager trustManager = new X509TrustManager() {
             public void checkClientTrusted(X509Certificate[] chain, String authType)
@@ -285,20 +300,13 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
     private static class TLSSocketFactory extends SSLSocketFactory {
         private SSLSocketFactory delegate;
 
-        public TLSSocketFactory(KeyManager[] keyManagers, TrustManager[] trustManagers, SecureRandom secureRandom) {
-            SSLContext context = null;
-            try {
-                context = SSLContext.getInstance("TLS");
-                context.init(keyManagers, trustManagers, secureRandom);
-                delegate = context.getSocketFactory();
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
-            } catch (KeyManagementException e) {
-                e.printStackTrace();
-            }
+        public TLSSocketFactory(KeyManager[] keyManagers, TrustManager[] trustManagers, SecureRandom secureRandom) throws GeneralSecurityException {
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(keyManagers, trustManagers, secureRandom);
+            delegate = context.getSocketFactory();
         }
 
-        public TLSSocketFactory() {
+        public TLSSocketFactory() throws GeneralSecurityException {
             this(null, null, null);
         }
 
@@ -338,11 +346,8 @@ public class CouchbaseLiteHttpClientFactory implements HttpClientFactory {
         }
 
         private Socket setEnabledProtocols(Socket socket) {
-            if(socket != null && (socket instanceof SSLSocket)) {
-                String[] protocols = ((SSLSocket) socket).getEnabledProtocols();
-                if (protocols == null || !Arrays.asList(protocols).contains("TLSv1.2"))
-                    ((SSLSocket)socket).setEnabledProtocols(new String[] {"TLSv1", "TLSv1.1", "TLSv1.2"});
-            }
+            if(socket != null && (socket instanceof SSLSocket))
+                ((SSLSocket)socket).setEnabledProtocols(new String[] {"TLSv1", "TLSv1.1", "TLSv1.2"});
             return socket;
         }
     }
