@@ -18,6 +18,7 @@ import com.couchbase.lite.Status;
 import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.internal.InterfaceAudience;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.URLUtils;
 import com.couchbase.lite.util.Utils;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParseException;
@@ -329,9 +330,8 @@ public class ChangeTracker implements Runnable {
             request = builder.build();
 
             try {
-                String maskedRemoteWithoutCredentials = getChangesFeedURL().toString();
-                maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s [%s]", this, usePOST ? "POST" : "GET", maskedRemoteWithoutCredentials);
+                String sanitizedURL = URLUtils.sanitizeURL(getChangesFeedURL());
+                Log.v(Log.TAG_CHANGE_TRACKER, "%s: Making request to %s [%s]", this, usePOST ? "POST" : "GET", sanitizedURL);
                 call = httpClient.newCall(request);
                 Response response = call.execute();
                 try {
@@ -513,9 +513,8 @@ public class ChangeTracker implements Runnable {
         Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker asked to start", this);
         running = true;
         this.error = null;
-        String maskedRemoteWithoutCredentials = databaseURL.toExternalForm();
-        maskedRemoteWithoutCredentials = maskedRemoteWithoutCredentials.replaceAll("://.*:.*@", "://---:---@");
-        thread = new Thread(this, "ChangeTracker-" + maskedRemoteWithoutCredentials);
+        String sanitizedURL = URLUtils.sanitizeURL(databaseURL);
+        thread = new Thread(this, "ChangeTracker-" + sanitizedURL);
         thread.start();
         return true;
     }
@@ -529,6 +528,7 @@ public class ChangeTracker implements Runnable {
         setPaused(false);
 
         if (call != null) {
+            String sanitizedUrl = URLUtils.sanitizeURL(request.url().url());
             Log.d(Log.TAG_CHANGE_TRACKER, "%s: Changed tracker aborting request: %s", this, request);
             call.cancel();
         }
@@ -663,7 +663,7 @@ public class ChangeTracker implements Runnable {
     @Override
     public String toString() {
         if (str == null) {
-            String remoteURL = databaseURL.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
+            String remoteURL = URLUtils.sanitizeURL(databaseURL);
             str = String.format(Locale.ENGLISH, "ChangeTracker{%s, %s, @%s}", remoteURL, mode, Integer.toHexString(hashCode()));
         }
         return str;

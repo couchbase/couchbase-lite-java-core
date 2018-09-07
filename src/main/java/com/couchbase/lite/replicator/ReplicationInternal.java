@@ -388,8 +388,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
             public Thread newThread(Runnable r) {
                 String threadName = "CBLReplicationExecutor";
                 try {
-                    String maskedRemote = ReplicationInternal.this.remote.toExternalForm();
-                    maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                    String maskedRemote = URLUtils.sanitizeURL(ReplicationInternal.this.remote);
                     String type = isPull() ? "pull" : "push";
                     String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
                     threadName = String.format(Locale.ENGLISH, "CBLReplicationExecutor-%s-%s-%s",
@@ -416,8 +415,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                         public Thread newThread(Runnable r) {
                             String threadName = "CBLRequestWorker";
                             try {
-                                String maskedRemote = remote.toExternalForm();
-                                maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                                String maskedRemote = URLUtils.sanitizeURL(remote);
                                 String type = isPull() ? "pull" : "push";
                                 String replicationIdentifier =
                                         Utils.shortenString(remoteCheckpointDocID(), 5);
@@ -674,7 +672,7 @@ abstract class ReplicationInternal implements BlockingQueueListener {
                                          Map<String, ?> body,
                                          boolean dontLog404,
                                          final RemoteRequestCompletion onCompletion) {
-        Log.d(Log.TAG_SYNC, "[sendAsyncRequest()] " + method + " => " + url);
+        Log.d(Log.TAG_SYNC, "Send " + method + " " + URLUtils.sanitizeURL(url));
         RemoteRequestRetry request = new RemoteRequestRetry(
                 RemoteRequestRetry.RemoteRequestType.REMOTE_REQUEST,
                 remoteRequestExecutor,

@@ -27,6 +27,7 @@ import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.support.RevisionUtils;
 import com.couchbase.lite.util.JSONUtils;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.URLUtils;
 import com.couchbase.lite.util.Utils;
 
 import java.net.URL;
@@ -127,8 +128,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
             supportExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
                 @Override
                 public Thread newThread(Runnable r) {
-                    String maskedRemote = remote.toExternalForm();
-                    maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                    String maskedRemote = URLUtils.sanitizeURL(remote);
                     return new Thread(r, "CBLPusherSupportExecutor-" + maskedRemote);
                 }
             });
@@ -787,8 +787,7 @@ public class PusherInternal extends ReplicationInternal implements Database.Chan
         if (str == null) {
             String maskedRemote = "unknown";
             if (remote != null)
-                maskedRemote = remote.toExternalForm();
-            maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                maskedRemote = URLUtils.sanitizeURL(remote);
             String type = isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
             if (replicationIdentifier == null)

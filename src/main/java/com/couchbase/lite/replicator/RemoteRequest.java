@@ -18,6 +18,7 @@ import com.couchbase.lite.auth.Authenticator;
 import com.couchbase.lite.support.HttpClientFactory;
 import com.couchbase.lite.util.CancellableRunnable;
 import com.couchbase.lite.util.Log;
+import com.couchbase.lite.util.URLUtils;
 import com.couchbase.lite.util.Utils;
 
 import java.io.IOException;
@@ -119,7 +120,7 @@ public class RemoteRequest implements CancellableRunnable {
     @Override
     public String toString() {
         if (str == null) {
-            String remoteURL = url.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
+            String remoteURL = URLUtils.sanitizeURL(url);
             str = String.format(Locale.ENGLISH, "%s {%s, %s}", this.getClass().getName(), method, remoteURL);
         }
         return str;

@@ -32,6 +32,7 @@ import com.couchbase.lite.support.SequenceMap;
 import com.couchbase.lite.util.CollectionUtils;
 import com.couchbase.lite.util.Log;
 import com.couchbase.lite.util.URIUtils;
+import com.couchbase.lite.util.URLUtils;
 import com.couchbase.lite.util.Utils;
 
 import java.net.URL;
@@ -1097,8 +1098,7 @@ public class PullerInternal extends ReplicationInternal implements ChangeTracker
         if (str == null || str.contains("unknown")) {
             String maskedRemote = "unknown";
             if (remote != null)
-                maskedRemote = remote.toExternalForm();
-            maskedRemote = maskedRemote.replaceAll("://.*:.*@", "://---:---@");
+                maskedRemote = URLUtils.sanitizeURL(remote);
             String type = isPull() ? "pull" : "push";
             String replicationIdentifier = Utils.shortenString(remoteCheckpointDocID(), 5);
             if (replicationIdentifier == null)

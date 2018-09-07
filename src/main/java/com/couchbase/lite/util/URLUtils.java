@@ -14,6 +14,7 @@
 package com.couchbase.lite.util;
 
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.util.LinkedHashMap;
@@ -47,5 +48,11 @@ public class URLUtils {
         if (tokens == null || tokens.length == 0)
             return null;
         return tokens[0];
+    }
+
+    public static String sanitizeURL(URL url) {
+        if (url == null)
+            return null;
+        return url.toExternalForm().replaceAll("://.*:.*@", "://---:---@");
     }
 }
