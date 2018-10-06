@@ -108,6 +108,8 @@ public class Database implements StoreDelegate {
 
     private Map<String, View> views;
     private Map<String, String> viewDocTypes;
+    private final Object viewLock = new Object();
+
     private Map<String, ReplicationFilter> filters;
     private Map<String, Validator> validations;
 
@@ -128,10 +130,13 @@ public class Database implements StoreDelegate {
     private final Cache<String, Document> docCache;
     private final List<DocumentChange> changesToNotify;
     private boolean postingChangeNotifications;
-    private final Object lockPostingChangeNotifications = new Object();
+    private final Object postingChangeNotificationsLock = new Object();
+
     private final long startTime;
     private Timer purgeTimer;
-    private final Object lock = new Object();
+    private final Object purgeTimerLock = new Object();
+
+
 
     /**
      * Each database can have an associated PersistentCookieStore,
@@ -496,7 +501,7 @@ public class Database implements StoreDelegate {
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
-            synchronized (lock) {
+            synchronized (viewLock) {
                 View view = views != null ? views.get(name) : null;
                 if (view != null)
                     return view;
@@ -568,7 +573,7 @@ public class Database implements StoreDelegate {
         if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
         storeRef.retain();
         try {
-            synchronized (lock) {
+            synchronized (viewLock) {
                 View view = null;
                 if (views != null) {
                     view = views.get(name);
@@ -1463,7 +1468,7 @@ public class Database implements StoreDelegate {
                         listener.databaseClosing();
                 }
 
-                synchronized (lock) {
+                synchronized (viewLock) {
                     if (views != null) {
                         for (View view : views.values())
                             view.close();
@@ -2179,6 +2184,11 @@ public class Database implements StoreDelegate {
         return persistentCookieStore;
     }
 
+    @InterfaceAudience.Private
+    public Object getViewLock() {
+        return viewLock;
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Internal (protected or private) Methods
     ///////////////////////////////////////////////////////////////////////////
@@ -2570,11 +2580,11 @@ public class Database implements StoreDelegate {
             if (!isOpen()) throw new CouchbaseLiteRuntimeException("Database is closed.");
             storeRef.retain();
             try {
-                synchronized (lock) {
-                    long nextExpiration = store.nextDocumentExpiry();
-                    if (nextExpiration > 0) {
-                        long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
-                        Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
+                long nextExpiration = store.nextDocumentExpiry();
+                if (nextExpiration > 0) {
+                    long delay = Math.max((nextExpiration - System.currentTimeMillis()) / 1000 + 1, minimumDelay);
+                    Log.v(TAG, "Scheduling next doc expiration in %d sec", delay);
+                    synchronized(purgeTimerLock) {
                         cancelPurgeTimer();
                         purgeTimer = new Timer();
                         purgeTimer.schedule(new TimerTask() {
@@ -2584,10 +2594,9 @@ public class Database implements StoreDelegate {
                                     purgeExpiredDocuments();
                             }
                         }, delay * 1000);
-                    } else
-                        Log.v(TAG, "No pending doc expirations");
-                }
-
+                    }
+                } else
+                    Log.v(TAG, "No pending doc expirations");
             } finally {
                 storeRef.release();
             }
@@ -2607,9 +2616,11 @@ public class Database implements StoreDelegate {
     }
 
     private void cancelPurgeTimer() {
-        if (purgeTimer != null) {
-            purgeTimer.cancel();
-            purgeTimer = null;
+        synchronized (purgeTimerLock) {
+            if (purgeTimer != null) {
+                purgeTimer.cancel();
+                purgeTimer = null;
+            }
         }
     }
 
@@ -2655,7 +2666,7 @@ public class Database implements StoreDelegate {
     // Database+Insertion
 
     private boolean postChangeNotifications() {
-        synchronized (lockPostingChangeNotifications) {
+        synchronized (postingChangeNotificationsLock) {
             if (postingChangeNotifications)
                 return false;
             postingChangeNotifications = true;
@@ -2705,7 +2716,7 @@ public class Database implements StoreDelegate {
             Log.e(TAG, "Unknown Exception: %s got exception posting change notifications", e, this);
             return false;
         } finally {
-            synchronized (lockPostingChangeNotifications) {
+            synchronized (postingChangeNotificationsLock) {
                 postingChangeNotifications = false;
             }
         }

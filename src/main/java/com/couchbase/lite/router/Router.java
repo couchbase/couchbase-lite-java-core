@@ -2534,7 +2534,7 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
 
     private View compileView(String designDoc, String viewName) throws CouchbaseLiteException {
         // make sure only one view instance per same view.
-        synchronized (db) {
+        synchronized (db.getViewLock()) {
 
             // First check if there's a CouchDB view definition we can compile:
             String tdViewName = String.format(Locale.ENGLISH, "%s/%s", designDoc, viewName);
