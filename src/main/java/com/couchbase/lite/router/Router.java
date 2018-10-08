@@ -1211,7 +1211,11 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
         }
         Map<String, Object> body;
         try {
-            body = getBodyAsDictionary();
+            String contentType = getRequestHeaderContentType();
+            if (contentType != null && contentType.startsWith(CONTENT_TYPE_MULTIPART))
+                body = getMultipartBodyAsDictionary();
+            else
+                body = getBodyAsDictionary();
         } catch (CouchbaseLiteException e) {
             return e.getCBLStatus();
         }
@@ -2395,10 +2399,8 @@ public class Router implements Database.ChangeListener, Database.DatabaseListene
             throws CouchbaseLiteException {
         Map<String, Object> body;
         String contentType = getRequestHeaderContentType();
-        // multipart
         if (contentType != null && contentType.startsWith(CONTENT_TYPE_MULTIPART))
             body = getMultipartBodyAsDictionary();
-            // application/json
         else
             body = getBodyAsDictionary();
         if (body == null)
